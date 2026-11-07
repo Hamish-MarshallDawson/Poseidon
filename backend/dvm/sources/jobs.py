@@ -31,6 +31,11 @@ SPEC = {
 }
 
 
+RECENT_STATICS_DAYS = 30
+DEFAULT_MAX_DB_GB = 60.0    # stop backfilling at this database size (Tiger bills storage; we have $1000 of credit)
+EMPTY_STOP_DAYS = 21        # stop going back after this many consecutive days with no data in any region
+
+
 def needs_fetch(row, day_end: int, now: int, spec: dict, force: bool = False) -> bool:
     if force or row is None or row["status"] != "ok":
         return True
@@ -82,6 +87,9 @@ async def run_window(pool, src: str, region: str, day: date, *, force=False, dat
                                        f"{type(e).__name__}: {e}"[:500])
         log.warning("%s %s %s failed: %s", src, region, day, e)
         return {"src": src, "region": region, "day": day.isoformat(), "error": str(e)[:200]}
+    # GFW identity goes to statics only for recent days: statics has 15-minute chunks, and a year of daily rows would
+    # make hundreds of tiny ones. Older identities stay in the region rows' attrs (name, flag, IMO, type).
+    statics = [s for s in statics if s.ts >= now - RECENT_STATICS_DAYS * DAY_MS]
     async with pool.acquire() as con:
         async with con.transaction():
             n_obs = await schema.write_observations(con, obs)
@@ -98,9 +106,12 @@ async def run_window(pool, src: str, region: str, day: date, *, force=False, dat
 
 
 async def connect(url: str):
+    """Pool plus the new tables. The backend's own tables are created only on a database that lacks them (a fresh
+    local one): on Tiger the backend owns its start-up steps, and several jobs re-running them would contend."""
     pool = await asyncpg.create_pool(url, min_size=1, max_size=4, command_timeout=300)
     async with pool.acquire() as con:
-        await dvm_store.setup(con)    # positions/statics and the rest, exactly as the backend creates them
+        if not await con.fetchval("SELECT to_regclass('public.positions') IS NOT NULL"):
+            await dvm_store.setup(con)
         await schema.setup(con)
     return pool
 
@@ -223,3 +234,80 @@ async def backfill_digitraffic_raw(url: str, data_dir: Path, force=False):
     finally:
         await pool.close()
     return out
+
+
+class BackState:
+    """Day-by-day walk backwards; stops at `until`, after EMPTY_STOP_DAYS empty days, or at the size cap."""
+
+    def __init__(self, newest: date, until: date, empty_stop: int = EMPTY_STOP_DAYS):
+        self.day, self.until, self.empty_stop = newest, until, empty_stop
+        self.empty_run = 0
+        self.stopped: str | None = None
+
+    def record(self, rows_today: int, skipped_all: bool) -> None:
+        if skipped_all:                # already settled from an earlier run: neither data nor proof of absence
+            pass
+        elif rows_today == 0:
+            self.empty_run += 1
+        else:
+            self.empty_run = 0
+        if self.empty_run >= self.empty_stop:
+            self.stopped = f"{self.empty_run} consecutive empty days (provider history ends near {self.day})"
+        self.day -= timedelta(1)
+        if not self.stopped and self.day < self.until:
+            self.stopped = f"reached --until {self.until}"
+
+
+async def backfill_back(url: str, src: str, regions: list[str], *, until: date, max_db_gb: float = DEFAULT_MAX_DB_GB,
+                        data_dir=None, newest: date | None = None) -> dict:
+    """From the newest available day backwards, one day across all regions at a time, until stopped.
+
+    Windows already settled are skipped, so a restart resumes where it left off. Checks the database size before
+    every day and stops at max_db_gb. Interrupt with Ctrl+C at any point; nothing is half-written (one transaction
+    per window).
+    """
+    pool = await connect(url)
+    client = _client(src)
+    st = BackState(newest or utc_today() - timedelta(SPEC[src]["newest"]), until)
+    totals = {"days": 0, "observations": 0, "statics": 0, "errors": 0}
+    try:
+        while not st.stopped:
+            async with pool.acquire() as con:
+                size_gb = await schema.db_size_bytes(con) / 1e9
+            if size_gb >= max_db_gb:
+                st.stopped = f"database is {size_gb:.1f} GB, at the {max_db_gb:.0f} GB cap"
+                break
+            rows, skipped = 0, 0
+            for region in regions:
+                r = await run_window(pool, src, region, st.day, data_dir=data_dir, client=client)
+                skipped += bool(r.get("skipped"))
+                rows += r.get("observations", 0)
+                totals["observations"] += r.get("observations", 0)
+                totals["statics"] += r.get("statics", 0)
+                totals["errors"] += "error" in r
+            totals["days"] += 1
+            log.info("backfill %s %s: %d rows, db %.2f GB", src, st.day, rows, size_gb)
+            st.record(rows, skipped == len(regions))
+    finally:
+        if client:
+            client.close()
+        await pool.close()
+    return {"src": src, "oldest_day": (st.day + timedelta(1)).isoformat(), "stopped": st.stopped, **totals}
+
+
+async def create_readonly_role(url: str, role: str, password: str) -> None:
+    """A login role that can read every table and view, now and later, and write nothing."""
+    con = await asyncpg.connect(url)
+    try:
+        exists = await con.fetchval("SELECT 1 FROM pg_roles WHERE rolname = $1", role)
+        ident = '"' + role.replace('"', '') + '"'
+        pw = password.replace("'", "''")
+        await con.execute(f"{'ALTER' if exists else 'CREATE'} ROLE {ident} LOGIN PASSWORD '{pw}'")
+        db = await con.fetchval("SELECT current_database()")
+        for sql in (f'GRANT CONNECT ON DATABASE "{db}" TO {ident}', f"GRANT USAGE ON SCHEMA public TO {ident}",
+                    f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {ident}",
+                    f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {ident}",
+                    f"ALTER ROLE {ident} SET default_transaction_read_only = on"):
+            await con.execute(sql)
+    finally:
+        await con.close()

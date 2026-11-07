@@ -5,6 +5,9 @@
   poll {gfw,sentinel1} [--once]           fetch the recent windows that may have changed, then sleep
   backfill {gfw,sentinel1} --start D --end D [--force]
   backfill digitraffic                    replay data/raw/digitraffic into the database
+  backfill-back {gfw,sentinel1} [--until D] [--max-db-gb N]
+                                          from today backwards until stopped, history ends, or the size cap
+  readonly-role [--role R]                create a read-only login; its URL goes to ~/.config/hedged-bets/readonly.env
   status                                  freshness per source and row counts
 
 The database is SOURCES_DATABASE_URL (or --db). Tiger Cloud is refused unless --allow-tiger is given, which is
@@ -51,6 +54,24 @@ async def status(url: str) -> dict:
             "statics": [dict(r) for r in sta], "windows": [dict(r) for r in wins], "freshness": fresh}
 
 
+def readonly_role(url: str, role: str) -> dict:
+    """The password is generated here and written only to a 0600 file; it is never printed."""
+    import secrets
+    from urllib.parse import quote, urlsplit, urlunsplit
+
+    password = secrets.token_urlsafe(24)
+    asyncio.run(jobs.create_readonly_role(url, role, password))
+    u = urlsplit(url)
+    host = u.hostname + (f":{u.port}" if u.port else "")
+    ro_url = urlunsplit((u.scheme, f"{quote(role)}:{quote(password)}@{host}", u.path, u.query, ""))
+    path = Path.home() / ".config" / "hedged-bets" / "readonly.env"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
+    path.write_text(f"READONLY_DATABASE_URL={ro_url}\n")
+    return {"role": role, "url_written_to": str(path)}
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(prog="python -m dvm.sources")
     ap.add_argument("--db")
@@ -71,6 +92,13 @@ def main(argv=None) -> None:
     b.add_argument("--start", type=date.fromisoformat)
     b.add_argument("--end", type=date.fromisoformat)
     b.add_argument("--force", action="store_true")
+    bb = sub.add_parser("backfill-back")
+    bb.add_argument("src", choices=["gfw", "sentinel1"])
+    bb.add_argument("--regions", default=",".join(REGIONS))
+    bb.add_argument("--until", type=date.fromisoformat, default=date(2017, 1, 1))
+    bb.add_argument("--max-db-gb", type=float, default=jobs.DEFAULT_MAX_DB_GB)
+    ro = sub.add_parser("readonly-role")
+    ro.add_argument("--role", default="poseidon_ro")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)   # request lines would be noise (and carry params)
@@ -98,6 +126,11 @@ def main(argv=None) -> None:
         out = asyncio.run(jobs.stream_digitraffic(url, args.minutes * 60 if args.minutes else None, args.data_dir))
     elif args.cmd == "poll":
         out = asyncio.run(jobs.poll(url, args.src, regions(), once=args.once, data_dir=args.data_dir))
+    elif args.cmd == "backfill-back":
+        out = asyncio.run(jobs.backfill_back(url, args.src, regions(), until=args.until, max_db_gb=args.max_db_gb,
+                                             data_dir=args.data_dir))
+    elif args.cmd == "readonly-role":
+        out = readonly_role(url, args.role)
     elif args.src == "digitraffic":
         out = asyncio.run(jobs.backfill_digitraffic_raw(url, args.data_dir, force=args.force))
     else:

@@ -10,6 +10,7 @@ Data is CC BY-NC 4.0: the attribution is in common.SOURCES and goes out with eve
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, timedelta
 from typing import Any, Optional
 
@@ -35,6 +36,7 @@ CELL_DEG = 0.01           # HIGH spatial resolution
 LAG_MS = 4 * DAY_MS       # nominal publication delay, used only to estimate available_ts for backfilled days
 LIVE_WINDOW_MS = 8 * DAY_MS   # a day fetched within this long of its end counts as fetched "live"
 PAGE = 1000
+PAUSE_S = 0.3   # between calls: one backfill must never look like a burst to GFW
 
 TYPE_GROUP = {"CARGO": "cargo", "CARRIER": "cargo", "TANKER": "tanker", "BUNKER": "tanker", "PASSENGER": "passenger",
               "FISHING": "fishing", "OTHER_NON_FISHING": "other", "SEISMIC_VESSEL": "other", "SUPPORT": "other",
@@ -139,6 +141,11 @@ def parse_events(body: dict, kind: str, bbox, recv_ts: int, day: date) -> tuple[
             continue
         end = iso_ms(e.get("end"))
         detail = e.get(e.get("type") or "") or {}
+        if kind == "port_visit":   # the three anchorage objects are most of the bytes; keep what identifies the port
+            detail = {k: detail.get(k) for k in ("visitId", "confidence", "durationHrs")} | {
+                f"{p}_port": (detail.get(f"{p}Anchorage") or {}).get("name") for p in ("start", "end")} | {
+                "port_id": (detail.get("startAnchorage") or {}).get("id"),
+                "at_dock": (detail.get("startAnchorage") or {}).get("atDock")}
         hours = detail.get("durationHours") or detail.get("totalTimeHours") or \
             ((end - start) / 3_600_000 if end else None)
         attrs = {"event_id": e.get("id"), "vessel_id": v.get("id"), "name": v.get("name"), "flag": v.get("flag"),
@@ -163,11 +170,25 @@ class Client:
         self.http.close()
 
     def _post(self, path: str, params: dict, body: dict) -> dict:
-        self.calls += 1
-        r = self.http.post(BASE + path, params=params, json=body)
-        if r.status_code >= 400:   # never echo the request (it carries the token); the body is GFW's error text
-            raise RuntimeError(f"GFW {path} HTTP {r.status_code}: {r.text[:200]}")
-        return r.json()
+        """POST with a polite pause, and backoff on 429 and 5xx. Errors carry GFW's text, never the request."""
+        for attempt in range(4):
+            time.sleep(PAUSE_S)
+            self.calls += 1
+            try:
+                r = self.http.post(BASE + path, params=params, json=body)
+            except httpx.TransportError as e:
+                if attempt == 3:
+                    raise RuntimeError(f"GFW {path}: {type(e).__name__}") from None
+                time.sleep(10 * 3 ** attempt)
+                continue
+            if r.status_code == 429 or r.status_code >= 500:
+                if attempt < 3:
+                    time.sleep(10 * 3 ** attempt)   # 10, 30, 90 s
+                    continue
+            if r.status_code >= 400:
+                raise RuntimeError(f"GFW {path} HTTP {r.status_code}: {r.text[:200]}")
+            return r.json()
+        raise RuntimeError(f"GFW {path}: retries exhausted")
 
     def report(self, dataset: str, bbox, day: date, *, vessels: bool, matched: Optional[bool] = None) -> dict:
         q = {"datasets[0]": dataset, "date-range": f"{day.isoformat()},{(day + timedelta(1)).isoformat()}",
