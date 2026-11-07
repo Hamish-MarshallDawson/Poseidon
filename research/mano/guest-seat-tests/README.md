@@ -59,7 +59,7 @@ The gate re-reads the page just before acting and drops the action if the digest
 
 ## T4: live registers
 
-Public searches only, once or twice each, through this machine's connection. We didn't confirm that this was the venue Wi-Fi.
+Public pages only, loaded a handful of times each including retries, through this machine's connection. We didn't confirm that this was the venue Wi-Fi.
 
 | Site | Result | What it means |
 |---|---|---|
