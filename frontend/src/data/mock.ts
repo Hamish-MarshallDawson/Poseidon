@@ -7,11 +7,14 @@
 //     the mock steps aside for good.
 //  2. Forecast: deterministic synthetic scores for ~40 Baltic ships (seeded by mmsi), risk_p/risk_rank on their views,
 //     a watchlist, three open gaps (those ships freeze at their last fix), closed gaps, spoofs, a meeting, outcomes.
+//  3. Ships, when there is no backend (data/synthetic.ts): offline 'always' uses them at once; 'fallback' (the default)
+//     switches to them when the backend has not said hello within FALLBACK_MS, and then stays on them for the session.
 import type { ClientMsg, GapEvent, HistoryRange, Outcome, RiskScore, SpoofEvent, TimelineEvent, VesselView, Watchlist, WatchlistRow } from '../types'
 import type { Frame } from '../store/vessels'
 import { vessels as store } from '../store/vessels'
 import type { DataAdapter, FeedHandlers, FeedStatus } from './adapter'
 import { ReplayLog, type Sample } from './replayLog'
+import { createSyntheticFeed } from './synthetic'
 import { ghostRadius } from '../forecast/geo'
 import { FREEZE_TS } from '../forecast/labels'
 import { wilson } from '../forecast/stats'
@@ -147,7 +150,13 @@ export function mockBaselines(madeAt: number, n: number): { model_version: strin
   })
 }
 
-export function createMockAdapter(live: DataAdapter): DataAdapter {
+const FALLBACK_MS = 6000
+const BACKFILL_MS = 10 * MIN          // synthetic ships come with this much replayable history
+
+export interface MockOptions { offline?: 'always' | 'fallback' | 'never'; ships?: number }
+
+export function createMockAdapter(live: DataAdapter, opts: MockOptions = {}): DataAdapter {
+  let src = live                                    // the feed underneath: the backend, or synthetic ships
   const log = new ReplayLog()
   const latest = new Map<number, VesselView>()     // live state: statics for replay views and the snapshot on 'live'
   let fc: Forecast | null = null
@@ -162,6 +171,7 @@ export function createMockAdapter(live: DataAdapter): DataAdapter {
   let speed = 60
   let clock = 0
   let timer: number | undefined
+  let fallbackTimer: number | undefined
 
   const range = () => ({ from_ts: log.from_ts ?? liveNow, to_ts: log.to_ts ?? liveNow })
 
@@ -226,7 +236,7 @@ export function createMockAdapter(live: DataAdapter): DataAdapter {
     isMock: true,
     start(handlers) {
       h = handlers
-      live.start({
+      const feed: FeedHandlers = {
         onDetail: (m) => handlers.onDetail(fc ? { ...m, vessel: fc.decorate(m.vessel, m.vessel.last_ts) } : m),
         onStatus(s) {
           serverMode = s.mode
@@ -246,11 +256,26 @@ export function createMockAdapter(live: DataAdapter): DataAdapter {
           const out = frame(f.type, f.now_ts, f.vessels, f.removed)
           handlers.onFrame({ ...out, trails: f.trails, coverage: f.coverage })
         },
-      })
+      }
+      const offline = opts.offline ?? 'fallback'
+      const goSynthetic = () => {
+        if (src !== live) return
+        live.stop()
+        const syn = createSyntheticFeed(opts.ships)
+        const now = Date.now()
+        syn.backfill(now - BACKFILL_MS, now, (t, v) => log.record(t, v))
+        src = syn
+        console.info(`[mock] no backend answered: showing ${opts.ships ?? 25_000} synthetic ships (illustrative)`)
+        syn.start(feed)
+      }
+      if (offline === 'always') { goSynthetic(); return }
+      let heard = false
+      live.start({ ...feed, onStatus(s) { if (s.connected) heard = true; feed.onStatus(s) } })
+      if (offline === 'fallback') fallbackTimer = window.setTimeout(() => { if (!heard) goSynthetic() }, FALLBACK_MS)
     },
-    stop() { stopTimer(); live.stop(); h = null },
+    stop() { stopTimer(); window.clearTimeout(fallbackTimer); src.stop(); h = null },
     send(msg) {
-      live.send(msg)
+      src.send(msg)
       if (msg.type === 'replay' && !serverReplay) replay(msg)
     },
     async historyRange(): Promise<HistoryRange> { return range() },
@@ -281,7 +306,7 @@ export function createMockAdapter(live: DataAdapter): DataAdapter {
         ev.push({ kind: 'outcome', id: `out-${o.score_id}`, mmsi: o.mmsi, ts: o.resolved_at, label: o.censored ? 'censored' : o.label })
       }
       // Coverage: the server log (GET /history/range when it exists) with today's real own_stall; else this session.
-      const r = await live.historyRange().then((x) => (x.from_ts ? x : range()), () => range())
+      const r = await src.historyRange().then((x) => (x.from_ts ? x : range()), () => range())
       const spans: [number, number, 'data' | 'own_stall'][] = OWN_STALL.start > r.from_ts && OWN_STALL.end < r.to_ts
         ? [[r.from_ts, OWN_STALL.start, 'data'], [OWN_STALL.start, OWN_STALL.end, 'own_stall'], [OWN_STALL.end, r.to_ts, 'data']]
         : [[r.from_ts, r.to_ts, 'data']]

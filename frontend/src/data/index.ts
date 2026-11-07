@@ -7,12 +7,15 @@ import { createLiveAdapter } from './live'
 import { createMockAdapter } from './mock'
 
 // Picks the data source. VITE_DATA=live uses the backend alone; anything else (default `mock`) wraps the live feed with
-// the labelled mock (session replay + synthetic forecast). Switching to the real backend is this one choice.
+// the labelled mock (session replay + synthetic forecast), which falls back to synthetic ships when no backend answers;
+// `offline` uses synthetic ships at once (VITE_MOCK_SHIPS sets how many, default 25000). Switching to the real backend
+// is this one choice.
 const DATA = import.meta.env.VITE_DATA ?? 'mock'
+const SHIPS = Number(import.meta.env.VITE_MOCK_SHIPS) || undefined
 
 export function createAdapter(opts: AdapterOptions): DataAdapter {
   const live = createLiveAdapter(opts)
-  return DATA === 'live' ? live : createMockAdapter(live)
+  return DATA === 'live' ? live : createMockAdapter(live, { offline: DATA === 'offline' ? 'always' : 'fallback', ships: SHIPS })
 }
 
 // The singleton the UI talks to (send replay/detail, read scores and timeline). Null until useFeed has mounted.
