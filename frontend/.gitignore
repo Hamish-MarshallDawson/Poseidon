@@ -25,3 +25,9 @@ dist-ssr
 
 # App secrets (never commit)
 .env
+
+# basemap build outputs and caches (rebuild with npm run basemap)
+public/basemap/*.pmtiles
+scripts/basemap/.cache/
+scripts/basemap/.venv/
+__pycache__/

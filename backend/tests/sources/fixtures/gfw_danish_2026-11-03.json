@@ -1,0 +1,862 @@
+{
+"events_encounter": {
+"entries": [],
+"total": 0
+},
+"events_gap": {
+"entries": [],
+"total": 0
+},
+"events_loitering": {
+"entries": [
+{
+"start": "2026-02-24T04:59:01.000Z",
+"end": "2026-11-03T23:59:26.000Z",
+"id": "db9837b07632bd30cff1f68be934b0f0",
+"type": "loitering",
+"position": {
+"lat": 54.8799,
+"lon": 13.9905
+},
+"regions": {
+"mpa": [],
+"eez": [
+"5669"
+],
+"rfmo": [
+"ICCAT",
+"ICES",
+"IWC",
+"ACAP",
+"NAMMCO",
+"NASCO"
+],
+"fao": [
+"27.3.d",
+"27",
+"27.3.d.24",
+"27.3"
+],
+"majorFao": [
+"27"
+],
+"eez12Nm": [],
+"highSeas": [],
+"mpaNoTakePartial": [],
+"mpaNoTake": [],
+"ebsa": [],
+"imma": [
+"31NEATLO232424IMMA"
+],
+"dukePaa": [],
+"protectedseas": [
+"AIDEU694",
+"AIHSTREATY38",
+"AIHSTREATY3",
+"AIHSTREATY28",
+"AIDEU723",
+"AIHSMA104",
+"AIHSTREATY36",
+"AIDEU519",
+"AIDEU1"
+],
+"hsp": [],
+"fraGfcmFao": []
+},
+"boundingBox": [
+13.97086,
+54.87783,
+14.01005,
+54.88196
+],
+"distances": {
+"startDistanceFromShoreKm": 39,
+"endDistanceFromShoreKm": 41,
+"startDistanceFromPortKm": 40.05258984375,
+"endDistanceFromPortKm": 42.4924609375
+},
+"vessel": {
+"id": "82242251c-cdb5-3879-913b-60f7843a38fd",
+"name": "SEAFOX 2",
+"ssvid": "235064417",
+"flag": "GBR",
+"type": "other_non_fishing",
+"nextPort": {
+"id": null,
+"flag": null,
+"name": null,
+"portVisitEventId": null
+}
+},
+"loitering": {
+"totalTimeHours": 6067.006944444442,
+"totalDistanceKm": 5.627981860253711,
+"averageSpeedKnots": 0.0005008840640856825,
+"averageDistanceFromShoreKm": 40.99992513953085
+}
+},
+{
+"start": "2026-10-29T02:59:01.000Z",
+"end": "2026-11-03T04:59:11.000Z",
+"id": "b8f39fbca9cf019308fb6602f62968fe",
+"type": "loitering",
+"position": {
+"lat": 54.8972,
+"lon": 13.9764
+},
+"regions": {
+"mpa": [],
+"eez": [
+"5669"
+],
+"rfmo": [
+"ICCAT",
+"NAMMCO",
+"ACAP",
+"IWC",
+"NASCO",
+"ICES"
+],
+"fao": [
+"27.3.d.24",
+"27",
+"27.3.d",
+"27.3"
+],
+"majorFao": [
+"27"
+],
+"eez12Nm": [],
+"highSeas": [],
+"mpaNoTakePartial": [],
+"mpaNoTake": [],
+"ebsa": [],
+"imma": [
+"31NEATLO232424IMMA"
+],
+"dukePaa": [],
+"protectedseas": [
+"AIHSTREATY3",
+"AIDEU694",
+"AIHSTREATY36",
+"AIHSTREATY28",
+"AIHSTREATY38",
+"AIDEU519",
+"AIHSMA104",
+"AIDEU723",
+"AIDEU1"
+],
+"hsp": [],
+"fraGfcmFao": []
+},
+"boundingBox": [
+13.97552,
+54.890298333333334,
+13.977323333333333,
+54.90412166666667
+],
+"distances": {
+"startDistanceFromShoreKm": 41,
+"endDistanceFromShoreKm": 42,
+"startDistanceFromPortKm": 41.86050390625,
+"endDistanceFromPortKm": 42.77916796875
+},
+"vessel": {
+"id": "d8256a925-5995-a328-c527-7888c2424b75",
+"name": "IWS MOONWALKER",
+"ssvid": "210647000",
+"flag": "CYP",
+"type": "other_non_fishing",
+"nextPort": {
+"id": null,
+"flag": null,
+"name": null,
+"portVisitEventId": null
+}
+},
+"loitering": {
+"totalTimeHours": 122.00277777777778,
+"totalDistanceKm": 30.03052131394979,
+"averageSpeedKnots": 0.13290832053286922,
+"averageDistanceFromShoreKm": 42.48310135942705
+}
+},
+{
+"start": "2026-11-01T17:59:09.000Z",
+"end": "2026-11-03T23:59:18.000Z",
+"id": "d0d29a3448b1f1ef787f502e288a3e95",
+"type": "loitering",
+"position": {
+"lat": 54.8773,
+"lon": 13.9504
+},
+"regions": {
+"mpa": [],
+"eez": [
+"5669"
+],
+"rfmo": [
+"NASCO",
+"ACAP",
+"ICES",
+"ICCAT",
+"IWC",
+"NAMMCO"
+],
+"fao": [
+"27",
+"27.3",
+"27.3.d",
+"27.3.d.24"
+],
+"majorFao": [
+"27"
+],
+"eez12Nm": [],
+"highSeas": [],
+"mpaNoTakePartial": [],
+"mpaNoTake": [],
+"ebsa": [],
+"imma": [
+"31NEATLO232424IMMA"
+],
+"dukePaa": [],
+"protectedseas": [
+"AIDEU519",
+"AIDEU1",
+"AIHSTREATY36",
+"AIHSTREATY38",
+"AIDEU694",
+"AIHSMA104",
+"AIDEU723",
+"AIHSTREATY3",
+"AIHSTREATY28"
+],
+"hsp": [],
+"fraGfcmFao": []
+},
+"boundingBox": [
+13.924856666666667,
+54.89538833333334,
+13.975955,
+54.85925833333334
+],
+"distances": {
+"startDistanceFromShoreKm": 39,
+"endDistanceFromShoreKm": 37,
+"startDistanceFromPortKm": 40.126625,
+"endDistanceFromPortKm": 38.2885
+},
+"vessel": {
+"id": "5403e3476-6db6-3e7a-3e47-9bf19d9c6065",
+"name": "MERKUR <GUARDVESSEL>",
+"ssvid": "219167000",
+"flag": "DNK",
+"type": "other_non_fishing",
+"nextPort": {
+"id": null,
+"flag": null,
+"name": null,
+"portVisitEventId": null
+}
+},
+"loitering": {
+"totalTimeHours": 54.002500000000005,
+"totalDistanceKm": 87.78047866836029,
+"averageSpeedKnots": 0.8776939339397462,
+"averageDistanceFromShoreKm": 40.308195786549234
+}
+}
+],
+"total": 11
+},
+"events_port_visit": {
+"entries": [
+{
+"start": "2012-01-01T16:44:04.000Z",
+"end": "2026-11-03T16:29:53.000Z",
+"id": "3c82210283c29cbb93fc977e3789efb1",
+"type": "port_visit",
+"position": {
+"lat": 54.1799,
+"lon": 12.0885
+},
+"regions": {
+"mpa": [],
+"eez": [
+"5669"
+],
+"rfmo": [
+"EIFAAC"
+],
+"fao": [
+"27",
+"27.3",
+"27.3.d.24",
+"27.3.d"
+],
+"majorFao": [
+"27"
+],
+"eez12Nm": [],
+"highSeas": [],
+"mpaNoTakePartial": [],
+"mpaNoTake": [],
+"ebsa": [],
+"imma": [],
+"dukePaa": [],
+"protectedseas": [],
+"hsp": [],
+"fraGfcmFao": []
+},
+"boundingBox": [
+12.092933663203082,
+54.18439236828097,
+12.088508787850813,
+54.17986321388095
+],
+"distances": {
+"startDistanceFromShoreKm": 1,
+"endDistanceFromShoreKm": 0,
+"startDistanceFromPortKm": 0,
+"endDistanceFromPortKm": 0
+},
+"vessel": {
+"id": "666dae3e7-7b33-dab1-dd7f-1934be0623bf",
+"name": "MARKGRAFENHEIDE",
+"ssvid": "211549160",
+"flag": "DEU",
+"type": "passenger",
+"nextPort": null
+},
+"port_visit": {
+"visitId": "ba5c2ac1933f4670e3f89373b5d9e790",
+"confidence": "2",
+"durationHrs": 130079.7636111111,
+"startAnchorage": {
+"anchorageId": "47acf899",
+"atDock": true,
+"distanceFromShoreKm": "1",
+"flag": "DEU",
+"id": "deu-rostock",
+"lat": 54.18439236828097,
+"lon": 12.092933663203082,
+"name": "ROSTOCK",
+"topDestination": "ROSTOCK"
+},
+"intermediateAnchorage": {
+"anchorageId": "47acf89f",
+"atDock": true,
+"distanceFromShoreKm": "0",
+"flag": "DEU",
+"id": "deu-rostock",
+"lat": 54.17986321388095,
+"lon": 12.088508787850813,
+"name": "ROSTOCK",
+"topDestination": "HARBOUR CRUISE"
+},
+"endAnchorage": {
+"anchorageId": "47acf89f",
+"atDock": true,
+"distanceFromShoreKm": "0",
+"flag": "DEU",
+"id": "deu-rostock",
+"lat": 54.17986321388095,
+"lon": 12.088508787850813,
+"name": "ROSTOCK",
+"topDestination": "HARBOUR CRUISE"
+}
+}
+},
+{
+"start": "2012-01-03T22:26:23.000Z",
+"end": "2026-11-03T22:18:37.000Z",
+"id": "68a36f898500c33b458e152a4a998fda",
+"type": "port_visit",
+"position": {
+"lat": 57.6613,
+"lon": 11.8416
+},
+"regions": {
+"mpa": [],
+"eez": [
+"5694"
+],
+"rfmo": [],
+"fao": [
+"27",
+"27.3",
+"27.3.a",
+"27.3.a.20"
+],
+"majorFao": [
+"27"
+],
+"eez12Nm": [],
+"highSeas": [],
+"mpaNoTakePartial": [],
+"mpaNoTake": [],
+"ebsa": [],
+"imma": [],
+"dukePaa": [],
+"protectedseas": [],
+"hsp": [],
+"fraGfcmFao": []
+},
+"boundingBox": [
+11.841633643935676,
+57.66130864585716,
+11.794999692346622,
+57.6157546126384
+],
+"distances": {
+"startDistanceFromShoreKm": 0,
+"endDistanceFromShoreKm": 0,
+"startDistanceFromPortKm": 0,
+"endDistanceFromPortKm": 0
+},
+"vessel": {
+"id": "5a7f79a35-5228-7c10-240d-425c2dc820a2",
+"name": "YLVA",
+"ssvid": "265547230",
+"flag": "SWE",
+"type": "passenger",
+"nextPort": null
+},
+"port_visit": {
+"visitId": "062a62532bf6b5e55ceef29e9081d05d",
+"confidence": "2",
+"durationHrs": 130031.87055555555,
+"startAnchorage": {
+"anchorageId": "464f8d0d",
+"atDock": true,
+"distanceFromShoreKm": "0",
+"flag": "SWE",
+"id": "swe-langedrag",
+"lat": 57.66130864585716,
+"lon": 11.841633643935676,
+"name": "LANGEDRAG",
+"topDestination": "GBG SODRA SKARGARD"
+},
+"intermediateAnchorage": {
+"anchorageId": "464f8d0d",
+"atDock": true,
+"distanceFromShoreKm": "0",
+"flag": "SWE",
+"id": "swe-langedrag",
+"lat": 57.66130864585716,
+"lon": 11.841633643935676,
+"name": "LANGEDRAG",
+"topDestination": "GBG SODRA SKARGARD"
+},
+"endAnchorage": {
+"anchorageId": "464f925d",
+"atDock": true,
+"distanceFromShoreKm": "0",
+"flag": "SWE",
+"id": "swe-swe-68",
+"lat": 57.6157546126384,
+"lon": 11.794999692346622,
+"name": "SWE-68",
+"topDestination": "GBG SODRA SKARGARD"
+}
+}
+},
+{
+"start": "2012-08-23T04:12:30.000Z",
+"end": "2026-11-03T19:45:29.000Z",
+"id": "68c731f2644620fa29767b0b11abf15d",
+"type": "port_visit",
+"position": {
+"lat": 55.6796,
+"lon": 12.5995
+},
+"regions": {
+"mpa": [],
+"eez": [
+"5674"
+],
+"rfmo": [
+"IWC",
+"NAMMCO",
+"NASCO",
+"ACAP",
+"ICES"
+],
+"fao": [
+"27.3.b, c",
+"27",
+"27.3",
+"27.3.b.23"
+],
+"majorFao": [
+"27"
+],
+"eez12Nm": [],
+"highSeas": [],
+"mpaNoTakePartial": [],
+"mpaNoTake": [],
+"ebsa": [],
+"imma": [],
+"dukePaa": [],
+"protectedseas": [
+"AIHSTREATY36",
+"AIHSTREATY28",
+"AIHSTREATY3",
+"AIHSTREATY38"
+],
+"hsp": [],
+"fraGfcmFao": []
+},
+"boundingBox": [
+12.599454752547972,
+55.679638451888714,
+12.612690892689244,
+55.69577778790086
+],
+"distances": {
+"startDistanceFromShoreKm": 0,
+"endDistanceFromShoreKm": 0,
+"startDistanceFromPortKm": 0,
+"endDistanceFromPortKm": 0
+},
+"vessel": {
+"id": "ee2ece893-3457-e711-750a-db30b1bbf761",
+"name": "SVINEDRENGEN",
+"ssvid": "219006387",
+"flag": "DNK",
+"type": "passenger",
+"nextPort": null
+},
+"port_visit": {
+"visitId": "2045ab4b8ab23d399f9e30aaa2c6e184",
+"confidence": "2",
+"durationHrs": 124455.54972222222,
+"startAnchorage": {
+"anchorageId": "46525325",
+"atDock": true,
+"distanceFromShoreKm": "0",
+"flag": "DNK",
+"id": "dnk-copenhagen",
+"lat": 55.679638451888714,
+"lon": 12.599454752547972,
+"name": "COPENHAGEN",
+"topDestination": "TWCB"
+},
+"intermediateAnchorage": {
+"anchorageId": "46525325",
+"atDock": true,
+"distanceFromShoreKm": "0",
+"flag": "DNK",
+"id": "dnk-copenhagen",
+"lat": 55.679638451888714,
+"lon": 12.599454752547972,
+"name": "COPENHAGEN",
+"topDestination": "TWCB"
+},
+"endAnchorage": {
+"anchorageId": "465252d1",
+"atDock": true,
+"distanceFromShoreKm": "0",
+"flag": "DNK",
+"id": "dnk-copenhagen",
+"lat": 55.69577778790086,
+"lon": 12.612690892689244,
+"name": "COPENHAGEN",
+"topDestination": "BG"
+}
+}
+}
+],
+"total": 2164
+},
+"presence_cells": {
+"total": 1,
+"limit": null,
+"offset": null,
+"nextOffset": null,
+"metadata": {},
+"entries": [
+{
+"public-global-presence:v5.0": [
+{
+"date": "2026-11-03",
+"hours": 1,
+"lat": 57.63,
+"lon": 10.7,
+"vesselIDs": 1
+},
+{
+"date": "2026-11-03",
+"hours": 7,
+"lat": 57.45,
+"lon": 11.91,
+"vesselIDs": 2
+},
+{
+"date": "2026-11-03",
+"hours": 3,
+"lat": 57.37,
+"lon": 11.53,
+"vesselIDs": 3
+},
+{
+"date": "2026-11-03",
+"hours": 1,
+"lat": 57.86,
+"lon": 10.16,
+"vesselIDs": 1
+}
+]
+}
+]
+},
+"presence_vessels": {
+"total": 1,
+"limit": null,
+"offset": null,
+"nextOffset": null,
+"metadata": {},
+"entries": [
+{
+"public-global-presence:v5.0": [
+{
+"callsign": "LHZJ",
+"dataset": "public-global-vessel-identity:v5.0",
+"date": "2026-11-03",
+"entryTimestamp": "2026-11-03T00:00:00Z",
+"exitTimestamp": "2026-11-03T23:00:00Z",
+"firstTransmissionDate": "2018-03-19T10:17:11Z",
+"flag": "NOR",
+"geartype": "PASSENGER",
+"hours": 24,
+"imo": "",
+"lastTransmissionDate": "2026-11-05T23:58:31Z",
+"mmsi": "257101820",
+"shipName": "FRU SAND",
+"speed": 0.0017616421876785655,
+"vesselId": "5e9e2f9ff-f29a-a407-419c-e97f70b1bb14",
+"vesselType": "PASSENGER"
+},
+{
+"callsign": "XPB4268",
+"dataset": "public-global-vessel-identity:v5.0",
+"date": "2026-11-03",
+"entryTimestamp": "2026-11-03T00:00:00Z",
+"exitTimestamp": "2026-11-03T23:00:00Z",
+"firstTransmissionDate": "2025-09-17T08:42:52Z",
+"flag": "DNK",
+"geartype": "FIXED_GEAR",
+"hours": 24,
+"imo": "",
+"lastTransmissionDate": "2026-11-05T23:59:41Z",
+"mmsi": "219002307",
+"shipName": "INGE HG88",
+"speed": 1.291642369521368,
+"vesselId": "38bf1aefd-dd0e-9441-3225-1be16caa5a89",
+"vesselType": "FISHING"
+},
+{
+"callsign": "OU3102",
+"dataset": "public-global-vessel-identity:v5.0",
+"date": "2026-11-03",
+"entryTimestamp": "2026-11-03T00:00:00Z",
+"exitTimestamp": "2026-11-03T23:00:00Z",
+"firstTransmissionDate": "2024-05-18T07:26:30Z",
+"flag": "DNK",
+"geartype": "TRAWLERS",
+"hours": 24,
+"imo": "",
+"lastTransmissionDate": "2026-11-05T23:59:12Z",
+"mmsi": "219012459",
+"shipName": "HM 67 LOTTI",
+"speed": 0.0005416666778425375,
+"vesselId": "cdca9c2b2-2f96-afb2-e67e-976ee9505b4e",
+"vesselType": "FISHING"
+},
+{
+"callsign": "DKRC",
+"dataset": "public-global-vessel-identity:v5.0",
+"date": "2026-11-03",
+"entryTimestamp": "2026-11-03T00:00:00Z",
+"exitTimestamp": "2026-11-03T23:00:00Z",
+"firstTransmissionDate": "2025-01-20T11:58:57Z",
+"flag": "DEU",
+"geartype": "OTHER_NON_FISHING",
+"hours": 24,
+"imo": "9755567",
+"lastTransmissionDate": "2026-11-05T23:58:46Z",
+"mmsi": "211116660",
+"shipName": "OSK RENDSBURG",
+"speed": 0.17072583424548307,
+"vesselId": "544f72634-4a4c-68bf-a669-7fbdaf7c43a5",
+"vesselType": "OTHER_NON_FISHING"
+}
+]
+}
+]
+},
+"sar_cells_matched": {
+"total": 1,
+"limit": null,
+"offset": null,
+"nextOffset": null,
+"metadata": {},
+"entries": [
+{
+"public-global-sar-presence:v5.0": [
+{
+"date": "2026-11-03",
+"detections": 1,
+"lat": 54.9,
+"lon": 13.98,
+"vesselIDs": 1
+},
+{
+"date": "2026-11-03",
+"detections": 1,
+"lat": 55.21,
+"lon": 13.31,
+"vesselIDs": 1
+},
+{
+"date": "2026-11-03",
+"detections": 1,
+"lat": 54.81,
+"lon": 13.02,
+"vesselIDs": 1
+},
+{
+"date": "2026-11-03",
+"detections": 1,
+"lat": 54.91,
+"lon": 13.44,
+"vesselIDs": 1
+}
+]
+}
+]
+},
+"sar_cells_unmatched": {
+"total": 1,
+"limit": null,
+"offset": null,
+"nextOffset": null,
+"metadata": {},
+"entries": [
+{
+"public-global-sar-presence:v5.0": [
+{
+"date": "2026-11-03",
+"detections": 1,
+"lat": 54.79,
+"lon": 13.59,
+"vesselIDs": 1
+},
+{
+"date": "2026-11-03",
+"detections": 1,
+"lat": 54.91,
+"lon": 13.99,
+"vesselIDs": 1
+},
+{
+"date": "2026-11-03",
+"detections": 1,
+"lat": 54.87,
+"lon": 13.9,
+"vesselIDs": 1
+},
+{
+"date": "2026-11-03",
+"detections": 1,
+"lat": 54.84,
+"lon": 13.16,
+"vesselIDs": 1
+}
+]
+}
+]
+},
+"sar_vessels": {
+"total": 1,
+"limit": null,
+"offset": null,
+"nextOffset": null,
+"metadata": {},
+"entries": [
+{
+"public-global-sar-presence:v5.0": [
+{
+"callsign": "5LZH5",
+"dataset": "public-global-vessel-identity:v5.0",
+"date": "2026-11-03",
+"detections": 1,
+"entryTimestamp": "2026-11-03T05:15:39Z",
+"exitTimestamp": "2026-11-03T05:15:39Z",
+"firstTransmissionDate": "2025-11-10T06:40:39Z",
+"flag": "LBR",
+"geartype": "TANKER",
+"imo": "9459230",
+"lastTransmissionDate": "2026-11-05T16:00:35Z",
+"mmsi": "636025818",
+"shipName": "YUME",
+"vesselId": "f5b7510db-b1c3-75f3-84b3-32ebbd4e46d4",
+"vesselType": "OTHER_NON_FISHING"
+},
+{
+"callsign": "V7B3214",
+"dataset": "public-global-vessel-identity:v5.0",
+"date": "2026-11-03",
+"detections": 1,
+"entryTimestamp": "2026-11-03T05:16:04Z",
+"exitTimestamp": "2026-11-03T05:16:04Z",
+"firstTransmissionDate": "2026-07-01T10:28:51Z",
+"flag": "MHL",
+"geartype": "CARGO",
+"imo": "1050351",
+"lastTransmissionDate": "2026-11-05T23:59:22Z",
+"mmsi": "538012697",
+"shipName": "JEWEL LUBAN",
+"vesselId": "905162cec-cd99-ce61-12e9-520b7a5c159a",
+"vesselType": "CARGO"
+},
+{
+"callsign": "LAWN8",
+"dataset": "public-global-vessel-identity:v5.0",
+"date": "2026-11-03",
+"detections": 1,
+"entryTimestamp": "2026-11-03T05:16:04Z",
+"exitTimestamp": "2026-11-03T05:16:04Z",
+"firstTransmissionDate": "2026-01-09T09:24:15Z",
+"flag": "NOR",
+"geartype": "CARGO",
+"imo": "1052177",
+"lastTransmissionDate": "2026-11-05T23:59:49Z",
+"mmsi": "259325000",
+"shipName": "WILSON ECO IV",
+"vesselId": "7f78356e2-2b0b-165a-6643-f15747d46da8",
+"vesselType": "CARGO"
+},
+{
+"callsign": "CQCX",
+"dataset": "public-global-vessel-identity:v5.0",
+"date": "2026-11-03",
+"detections": 1,
+"entryTimestamp": "2026-11-03T05:16:04Z",
+"exitTimestamp": "2026-11-03T05:16:04Z",
+"firstTransmissionDate": "2015-09-15T12:07:12Z",
+"flag": "PRT",
+"geartype": "CARGO",
+"imo": "9727596",
+"lastTransmissionDate": "2026-11-05T23:58:52Z",
+"mmsi": "255805774",
+"shipName": "GEBE OLDENDORFF",
+"vesselId": "fc091a5dc-c3ed-85b1-324d-bd3643deef16",
+"vesselType": "CARGO"
+}
+]
+}
+]
+}
+}

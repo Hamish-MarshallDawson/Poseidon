@@ -1,8 +1,57 @@
+@import './tokens/tokens.css';
+
 html, body, #root {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #0b0f14;
+  background: var(--dvm-bg-app);
+}
+
+body {
+  color: var(--dvm-text-primary);
+  font-family: var(--dvm-font-ui);
+  font-size: var(--dvm-size-body);
+  line-height: var(--dvm-line-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible { outline: 2px solid var(--dvm-accent-default); outline-offset: 2px; }
+
+/* Type scale: one class per DVM Text size role. Data is mono; place names are Caslon (italic for water). */
+.t-caption { font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
+.t-label { font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.t-data { font-family: var(--dvm-font-data); font-size: var(--dvm-size-data); line-height: var(--dvm-line-data); }
+.t-body { font-size: var(--dvm-size-body); line-height: var(--dvm-line-body); }
+.t-heading { font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); font-weight: 600; }
+.t-title { font-size: var(--dvm-size-title); line-height: var(--dvm-line-title); font-weight: 600; }
+.t-display { font-size: var(--dvm-size-display); line-height: var(--dvm-line-display); font-weight: 600; }
+.t-place { font-family: var(--dvm-font-place); }
+.t-water { font-family: var(--dvm-font-place); font-style: italic; }
+.t-muted { color: var(--dvm-text-muted); }
+.t-secondary { color: var(--dvm-text-secondary); }
+
+.dvm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Theme crossfade (src/theme/theme.ts): the old page fades out over the new one. Clicks pass through. */
+::view-transition { pointer-events: none; }
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 300ms; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* Reduced motion, from the system or the Display menu: no animation anywhere. */
+[data-motion='reduce'] *,
+[data-motion='reduce'] *::before,
+[data-motion='reduce'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }
 
 /* Sized, not positioned: maplibre-gl.css loads later and sets .maplibregl-map to position: relative. */
@@ -16,11 +65,14 @@ html, body, #root {
   top: 12px;
   left: 12px;
   z-index: 1;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.65);
-  color: #e5e7eb;
-  font: 13px system-ui, sans-serif;
+  padding: 4px 10px;
+  border: 1px solid var(--dvm-border-default);
+  border-radius: 2px;
+  background: var(--dvm-bg-panel);
+  color: var(--dvm-text-secondary);
+  font-family: var(--dvm-font-data);
+  font-size: var(--dvm-size-data);
+  line-height: var(--dvm-line-data);
   pointer-events: none;
 }
 
@@ -29,39 +81,49 @@ html, body, #root {
   width: 8px;
   height: 8px;
   margin-right: 6px;
+  box-sizing: border-box;
   border-radius: 50%;
   vertical-align: middle;
 }
+.dot.on { background: var(--dvm-accent-default); }
+.dot.off { border: 1px solid var(--dvm-text-muted); }
 
 .status .link {
   pointer-events: auto;
   padding: 0;
   border: 0;
   background: none;
-  color: #93c5fd;
+  color: var(--dvm-accent-default);
   font: inherit;
+  text-decoration: underline;
   cursor: pointer;
 }
 
+/* Login gate, from the specimen's login card. */
 .gate {
-  display: flex;
+  display: grid;
   height: 100%;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  color: #e5e7eb;
-  font: 15px system-ui, sans-serif;
+  place-items: center;
+  padding: 16px;
+  box-sizing: border-box;
 }
+.gate__card {
+  display: grid;
+  gap: 16px;
+  width: min(320px, 100%);
+  padding: 28px 28px 24px;
+}
+.gate h1 { margin: 0; font-size: var(--dvm-size-title); line-height: var(--dvm-line-title); font-weight: 600; }
+.gate__lede { margin: 0; color: var(--dvm-text-secondary); }
+.gate .dvm-btn { min-height: 36px; font-size: var(--dvm-size-body); }
+.gate__foot { margin: 0; font-family: var(--dvm-font-data); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); color: var(--dvm-text-muted); }
+.gate .error { margin: 0; color: var(--dvm-text-primary); border-left: 2px solid var(--dvm-ship-sanctioned); padding-left: 8px; }
 
-.gate h1 { margin: 0; font-size: 22px; font-weight: 600; }
-.gate button { padding: 8px 16px; font: inherit; cursor: pointer; }
-.gate .error { color: #fca5a5; }
-
-.dot.on { background: #22c55e; }
-.dot.off { background: #ef4444; }
-
-.ship-popup { font: 13px system-ui, sans-serif; color: #111827; }
+/* MapLibre popup on panel colours, so text stays readable in every theme. */
+.maplibregl-popup-content { background: var(--dvm-bg-panel); border: 1px solid var(--dvm-border-default); border-radius: var(--dvm-radius-panel); }
+.maplibregl-popup-tip { border-top-color: var(--dvm-border-default) !important; border-bottom-color: var(--dvm-border-default) !important; }
+.maplibregl-popup-close-button { color: var(--dvm-text-secondary); }
+.ship-popup { font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); color: var(--dvm-text-primary); }
 .ship-popup dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 0; }
-.ship-popup dt { color: #6b7280; }
-.ship-popup dd { margin: 0; }
+.ship-popup dt { color: var(--dvm-text-muted); }
+.ship-popup dd { margin: 0; font-family: var(--dvm-font-data); }

@@ -1,0 +1,5 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="12" height="32" viewBox="0 0 12 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Ship hull">
+<path id="silhouette" d="M6 0.25C9.5 1.25 11.5 4.5 11.5 9.5V28.5C11.5 30.5 10.5 31.5 8.5 31.5H3.5C1.5 31.5 0.5 30.5 0.5 28.5V9.5C0.5 4.5 2.5 1.25 6 0.25ZM6 3C8.25 3.75 9.25 5.75 9.25 9.5V27.5C9.25 28.5 8.75 29 7.75 29H4.25C3.25 29 2.75 28.5 2.75 27.5V9.5C2.75 5.75 3.75 3.75 6 3ZM6 4.3C7.5 4.9 8 6.5 8 9.5V26.8C8 27.4667 7.66667 27.8 7 27.8H5C4.33333 27.8 4 27.4667 4 26.8V9.5C4 6.5 4.5 4.9 6 4.3Z" fill-rule="evenodd" clip-rule="evenodd" fill="#EEE9DC"/>
+</g>
+</svg>
