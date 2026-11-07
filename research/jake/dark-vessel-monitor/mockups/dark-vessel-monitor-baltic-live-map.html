@@ -1,0 +1,363 @@
+<!doctype html><html lang='en'><head>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"><meta charset='utf-8'><title>Shadow fleet monitor: live Baltic map</title><style></style>
+<style>
+body{margin:0;background:#000}
+a{color:#f2f4f7}a:hover{color:#ffffff}
+.app{position:relative;width:100%;min-height:900px;height:100vh;overflow:hidden;background:#000;font-family:Inter,system-ui,sans-serif;color:#f2f4f7}
+.map{position:absolute;top:0;right:0;bottom:0;left:0}
+.panel{position:absolute;box-sizing:border-box;background:rgba(5,7,10,0.82);border:1px solid rgba(255,255,255,0.16);border-radius:4px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.p-brand{left:24px;top:24px;width:330px}
+.p-events{left:24px;top:192px;width:330px}
+.p-watch{right:24px;top:300px;width:340px}
+.p-card{left:calc(50% + 66px);top:262px;width:268px}
+.p-bar{left:24px;right:24px;bottom:24px}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.btn{font-family:Inter,system-ui,sans-serif;font-size:12px;font-weight:500;color:#f2f4f7;background:transparent;border:1px solid rgba(255,255,255,0.28);border-radius:3px;padding:0 12px;min-height:32px;cursor:pointer}
+.btn:hover{border-color:rgba(255,255,255,0.6)}
+.btn-alert{border-color:#ff5a5f;color:#ff8a8d}
+.toggle{display:flex;align-items:center;gap:8px;font-size:12px;color:#c3c9d3;cursor:pointer;min-height:28px}
+.toggle input{accent-color:#f2f4f7;width:14px;height:14px;margin:0}
+@media (max-width: 960px){
+.app{height:auto;min-height:0;display:flex;flex-direction:column;gap:12px;padding-bottom:12px}
+.map{position:relative;height:440px}
+.panel{position:relative;left:auto;right:auto;top:auto;bottom:auto;width:auto;margin:0 12px}
+}
+</style>
+</head><body>
+
+<div class="app">
+
+<div class="map">
+<svg viewBox="0 0 1440 960" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" role="img" aria-label="Line map of the Baltic Sea with live ship positions, one ship that has gone dark in the Gulf of Finland, a spoofing ship and a ship-to-ship meeting east of Gotland">
+<defs>
+<path id="sea" d="M14,884 L70,936 L98,942 L147,913 L203,878 L238,845 L266,910 L294,942 L385,910 L455,864 L525,832 L581,828 L602,884 L651,884 L693,858 L700,812 L763,806 L777,715 L770,611 L770,546 L812,474 L882,448 L924,533 L987,546 L1008,481 L1001,390 L938,364 L945,312 L945,260 L1001,228 L1032,228 L1099,208 L1183,214 L1253,228 L1288,195 L1330,169 L1421,162 L1372,136 L1316,78 L1302,109 L1225,98 L1120,104 L1050,130 L980,156 L910,176 L861,130 L805,104 L798,0 L518,0 L574,91 L623,169 L581,234 L546,299 L476,338 L469,429 L455,520 L448,585 L413,650 L392,656 L301,676 L245,754 L210,728 L189,670 L182,676 L178,715 L168,767 L175,812 L133,858 L70,845 L84,878 Z"></path>
+<clipPath id="seaClip"><use href="#sea"></use></clipPath>
+<pattern id="landHatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#ffffff" stroke-opacity="0.07" stroke-width="1"></line></pattern>
+</defs>
+<rect x="0" y="0" width="1440" height="960" fill="#1a2029"></rect>
+<rect x="0" y="0" width="1440" height="960" fill="url(#landHatch)"></rect>
+<use href="#sea" fill="#010204"></use>
+<g stroke="#ffffff" stroke-opacity="0.07" stroke-width="1" clip-path="url(#seaClip)">
+<line x1="0" y1="26" x2="1440" y2="26"></line>
+<line x1="0" y1="156" x2="1440" y2="156"></line>
+<line x1="0" y1="286" x2="1440" y2="286"></line>
+<line x1="0" y1="416" x2="1440" y2="416"></line>
+<line x1="0" y1="546" x2="1440" y2="546"></line>
+<line x1="0" y1="676" x2="1440" y2="676"></line>
+<line x1="0" y1="806" x2="1440" y2="806"></line>
+<line x1="0" y1="936" x2="1440" y2="936"></line>
+<line x1="350" y1="0" x2="350" y2="960"></line>
+<line x1="700" y1="0" x2="700" y2="960"></line>
+<line x1="1050" y1="0" x2="1050" y2="960"></line>
+<line x1="1400" y1="0" x2="1400" y2="960"></line>
+</g>
+<path d="M14,884 L70,936 L98,942 L147,913 L203,878 L238,845 L266,910 L294,942 L385,910 L455,864 L525,832 L581,828 L602,884 L651,884 L693,858 L700,812 L763,806 L777,715 L770,611 L770,546 L812,474 L882,448 L924,533 L987,546 L1008,481 L1001,390 L938,364 L945,312 L945,260 L1001,228 L1032,228 L1099,208 L1183,214 L1253,228 L1288,195 L1330,169 L1421,162 L1372,136 L1316,78 L1302,109 L1225,98 L1120,104 L1050,130 L980,156 L910,176 L861,130 L805,104 L798,0 L518,0 L574,91 L623,169 L581,234 L546,299 L476,338 L469,429 L455,520 L448,585 L413,650 L392,656 L301,676 L245,754 L210,728 L189,670 L182,676 L178,715 L168,767 L175,812 L133,858 L70,845 L84,878 Z" fill="none" stroke="#dfe4ec" stroke-opacity="0.08" stroke-width="6" stroke-linejoin="round"></path>
+<use href="#sea" fill="none" stroke="#e8ecf2" stroke-opacity="0.85" stroke-width="1.3" stroke-linejoin="round"></use>
+<g fill="#1a2029" stroke="#e8ecf2" stroke-opacity="0.85" stroke-width="1.3" stroke-linejoin="round">
+<path d="M570,559 L623,494 L627,422 L588,442 L567,494 L574,533 Z"></path>
+<path d="M448,650 L462,585 L497,500 L486,500 L451,578 L444,643 Z"></path>
+<ellipse cx="343" cy="786" rx="15" ry="17"></ellipse>
+<path d="M826,377 L875,338 L924,351 L903,396 L840,422 Z"></path>
+<path d="M868,325 L847,292 L903,280 L910,312 Z"></path>
+<ellipse cx="700" cy="130" rx="30" ry="20"></ellipse>
+</g>
+<path d="M190,705 C300,760 500,735 640,640 C720,585 740,470 860,330 C940,240 1060,200 1360,168" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="1" stroke-dasharray="2 6"></path>
+<g font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#ffffff" fill-opacity="0.34" letter-spacing="8">
+<text x="380" y="420">SWEDEN</text>
+<text x="880" y="58">FINLAND</text>
+<text x="1086" y="290">ESTONIA</text>
+<text x="830" y="760">LITHUANIA</text>
+<text x="30" y="800">DENMARK</text>
+</g>
+<g class="mono" font-family="JetBrains Mono, monospace" font-size="11" fill="#9aa3b2" letter-spacing="1">
+<text x="8" y="150">60°N</text>
+<text x="8" y="280">59°N</text>
+<text x="8" y="410">58°N</text>
+<text x="8" y="540">57°N</text>
+<text x="8" y="670">56°N</text>
+<text x="356" y="18">15°E</text>
+<text x="706" y="18">20°E</text>
+<text x="1056" y="18">25°E</text>
+</g>
+<g font-family="JetBrains Mono, monospace" font-size="10" fill="#9aa3b2" letter-spacing="1.5">
+<text x="1236" y="70">PRIMORSK</text>
+<circle cx="1302" cy="109" r="2.5" fill="#9aa3b2"></circle>
+<text x="1236" y="252">UST-LUGA</text>
+<circle cx="1283" cy="197" r="2.5" fill="#9aa3b2"></circle>
+<text x="1000" y="118">HELSINKI</text>
+<circle cx="1050" cy="131" r="2.5" fill="#9aa3b2"></circle>
+<text x="1004" y="250">TALLINN</text>
+<circle cx="1032" cy="229" r="2.5" fill="#9aa3b2"></circle>
+<text x="1330" y="196">ST PETERSBURG</text>
+<text x="470" y="236">STOCKHOLM</text>
+<circle cx="565" cy="243" r="2.5" fill="#9aa3b2"></circle>
+<text x="998" y="572">RIGA</text>
+<circle cx="987" cy="552" r="2.5" fill="#9aa3b2"></circle>
+<text x="84" y="712">COPENHAGEN</text>
+</g>
+<g font-family="Inter, sans-serif" font-size="12" fill="#ffffff" fill-opacity="0.22" letter-spacing="6">
+<text x="520" y="660">BALTIC SEA</text>
+<text x="1086" y="166" font-size="9" letter-spacing="4">GULF OF FINLAND</text>
+<text x="580" y="480" font-size="9" letter-spacing="3">GOTLAND</text>
+</g>
+<g stroke="#9aa3b2" stroke-opacity="0.35" stroke-width="1" fill="none">
+<line x1="985" y1="196" x2="1012" y2="190"></line>
+<line x1="1020" y1="188" x2="1046" y2="182"></line>
+<line x1="1112" y1="200" x2="1140" y2="200"></line>
+<line x1="1160" y1="194" x2="1190" y2="190"></line>
+<line x1="1214" y1="200" x2="1240" y2="198"></line>
+<line x1="1240" y1="190" x2="1268" y2="186"></line>
+<line x1="930" y1="276" x2="960" y2="262"></line>
+<line x1="720" y1="490" x2="735" y2="460"></line>
+<line x1="760" y1="545" x2="760" y2="520"></line>
+<line x1="590" y1="712" x2="600" y2="700"></line>
+<line x1="470" y1="770" x2="500" y2="760"></line>
+<line x1="350" y1="758" x2="380" y2="770"></line>
+<line x1="230" y1="724" x2="260" y2="720"></line>
+</g>
+<g fill="#9aa3b2">
+<circle cx="1012" cy="190" r="2.6"></circle>
+<circle cx="1046" cy="182" r="2.6"></circle>
+<circle cx="1080" cy="196" r="2.6"></circle>
+<circle cx="1100" cy="176" r="2.6"></circle>
+<circle cx="1118" cy="186" r="2.6"></circle>
+<circle cx="1140" cy="200" r="2.6"></circle>
+<circle cx="1170" cy="206" r="2.6"></circle>
+<circle cx="1190" cy="190" r="2.6"></circle>
+<circle cx="1210" cy="180" r="2.6"></circle>
+<circle cx="1240" cy="198" r="2.6"></circle>
+<circle cx="1268" cy="186" r="2.6"></circle>
+<circle cx="1300" cy="176" r="2.6"></circle>
+<circle cx="1362" cy="160" r="2.6"></circle>
+<circle cx="1040" cy="160" r="2.6"></circle>
+<circle cx="1060" cy="214" r="2.6"></circle>
+<circle cx="960" cy="262" r="2.6"></circle>
+<circle cx="990" cy="240" r="2.6"></circle>
+<circle cx="920" cy="300" r="2.6"></circle>
+<circle cx="700" cy="420" r="2.6"></circle>
+<circle cx="735" cy="460" r="2.6"></circle>
+<circle cx="760" cy="520" r="2.6"></circle>
+<circle cx="800" cy="560" r="2.6"></circle>
+<circle cx="690" cy="580" r="2.6"></circle>
+<circle cx="650" cy="620" r="2.6"></circle>
+<circle cx="820" cy="470" r="2.6"></circle>
+<circle cx="860" cy="410" r="2.6"></circle>
+<circle cx="530" cy="460" r="2.6"></circle>
+<circle cx="520" cy="540" r="2.6"></circle>
+<circle cx="560" cy="740" r="2.6"></circle>
+<circle cx="500" cy="760" r="2.6"></circle>
+<circle cx="440" cy="780" r="2.6"></circle>
+<circle cx="380" cy="770" r="2.6"></circle>
+<circle cx="320" cy="740" r="2.6"></circle>
+<circle cx="260" cy="720" r="2.6"></circle>
+<circle cx="640" cy="760" r="2.6"></circle>
+<circle cx="700" cy="790" r="2.6"></circle>
+<circle cx="200" cy="722" r="2.6"></circle>
+<circle cx="186" cy="692" r="2.6"></circle>
+<circle cx="160" cy="800" r="2.6"></circle>
+<circle cx="120" cy="830" r="2.6"></circle>
+<circle cx="960" cy="500" r="2.6"></circle>
+<circle cx="990" cy="470" r="2.6"></circle>
+<circle cx="610" cy="262" r="2.6"></circle>
+<circle cx="640" cy="300" r="2.6"></circle>
+<circle cx="650" cy="60" r="2.6"></circle>
+<circle cx="700" cy="92" r="2.6"></circle>
+<circle cx="600" cy="40" r="2.6"></circle>
+</g>
+<g fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="1">
+<rect x="1182" y="195" width="6" height="6"></rect>
+<rect x="1262" y="167" width="6" height="6"></rect>
+<rect x="697" y="502" width="6" height="6"></rect>
+<rect x="902" y="283" width="6" height="6"></rect>
+</g>
+<g>
+<polyline points="1040,201 1100,190 1155,176" fill="none" stroke="#ff5a5f" stroke-width="1.4" stroke-dasharray="4 4"></polyline>
+<circle cx="1155" cy="176" r="58" fill="#ff5a5f" fill-opacity="0.04" stroke="#ff5a5f" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="3 5"></circle>
+<circle cx="1155" cy="176" r="34" fill="none" stroke="#ff5a5f" stroke-opacity="0.7" stroke-width="1" stroke-dasharray="3 4"></circle>
+<circle cx="1155" cy="176" r="6" fill="#000000" stroke="#ff5a5f" stroke-width="1.6"></circle>
+<line x1="1155" y1="176" x2="1054" y2="292" stroke="#ff5a5f" stroke-opacity="0.6" stroke-width="1"></line>
+<text x="1092" y="134"font-family="JetBrains Mono, monospace" font-size="11" fill="#ff8a8d" letter-spacing="1">C · DARK 47 MIN</text>
+</g>
+<g fill="none" stroke="#ffb020" stroke-width="1.1" stroke-dasharray="2 3">
+<circle cx="1222" cy="156" r="8"></circle>
+<circle cx="1227" cy="160" r="8"></circle>
+<circle cx="1218" cy="161" r="8"></circle>
+</g>
+<circle cx="1222" cy="158" r="3.2" fill="#ffb020"></circle>
+<text x="1240" y="140" font-family="JetBrains Mono, monospace" font-size="11" fill="#ffc35a" letter-spacing="1">D · SPOOFING</text>
+<circle cx="672" cy="468" r="17" fill="none" stroke="#ffb020" stroke-opacity="0.8" stroke-width="1"></circle>
+<circle cx="668" cy="466" r="3.2" fill="#ffb020"></circle>
+<circle cx="676" cy="471" r="3.2" fill="#ffb020"></circle>
+<text x="596" y="436" font-family="JetBrains Mono, monospace" font-size="11" fill="#ffc35a" letter-spacing="1">E + F · MEETING</text>
+<circle cx="1330" cy="182" r="4" fill="#ff5a5f"></circle>
+<circle cx="1330" cy="182" r="9" fill="none" stroke="#ff5a5f" stroke-opacity="0.5"></circle>
+<text x="1342" y="230" font-family="JetBrains Mono, monospace" font-size="11" fill="#ff8a8d">A</text>
+<circle cx="980" cy="250" r="4" fill="#ffb020"></circle>
+<text x="968" y="274" font-family="JetBrains Mono, monospace" font-size="11" fill="#ffc35a">H</text>
+<circle cx="760" cy="380" r="4" fill="#ffb020"></circle>
+<text x="770" y="376" font-family="JetBrains Mono, monospace" font-size="11" fill="#ffc35a">K</text>
+<g transform="translate(1180,620)" font-family="JetBrains Mono, monospace" font-size="10" fill="#7d8696">
+<line x1="0" y1="0" x2="70" y2="0" stroke="#9aa3b2" stroke-width="1"></line>
+<line x1="0" y1="-4" x2="0" y2="4" stroke="#9aa3b2" stroke-width="1"></line>
+<line x1="70" y1="-4" x2="70" y2="4" stroke="#9aa3b2" stroke-width="1"></line>
+<text x="0" y="18">50 KM</text>
+</g>
+</svg>
+</div>
+
+<section class="panel p-brand" aria-label="Product and feed status" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div class="mono" style="font-size: 14px; font-weight: 600; letter-spacing: 2px">SHADOW FLEET MONITOR</div>
+<div style="font-size: 12px; color: #9aa3b2">Baltic Sea · live</div>
+</div>
+</div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #3ddc97; display: inline-block"></span>
+<span class="mono" style="font-size: 11px; letter-spacing: 1px">LIVE · AISSTREAM</span>
+</div>
+<span class="mono" style="font-size: 11px; color: #9aa3b2">Backup: Digitraffic (standby)</span>
+</div>
+<div class="mono" style="font-size: 10px; color: #9aa3b2; letter-spacing: 1px; border: 1px dashed rgba(255,255,255,0.22); border-radius: 3px; padding: 4px 8px; align-self: flex-start">ILLUSTRATIVE DATA · MOCKUP</div>
+</section>
+
+<section class="panel p-events" aria-label="Event feed" style="padding: 14px 18px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1)">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600">Events</h2>
+<span class="mono" style="font-size: 11px; color: #9aa3b2">Last 2 h</span>
+</div>
+<div style="display: grid; grid-template-columns: 44px 56px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; line-height: 1.45">
+<span class="mono" style="color: #9aa3b2">14:02</span><span class="mono" style="color: #ff8a8d; font-weight: 600">DARK</span><span>Vessel C stopped transmitting. 14 ships within 20 km still heard.</span>
+</div>
+<div style="display: grid; grid-template-columns: 44px 56px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; line-height: 1.45">
+<span class="mono" style="color: #9aa3b2">13:48</span><span class="mono" style="color: #ffc35a; font-weight: 600">SPOOF</span><span>Vessel D circling while reporting "at anchor". Implied speed 61 kn.</span>
+</div>
+<div style="display: grid; grid-template-columns: 44px 56px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; line-height: 1.45">
+<span class="mono" style="color: #9aa3b2">13:31</span><span class="mono" style="color: #ffc35a; font-weight: 600">MEET</span><span>Vessels E and F alongside for 74 min, east of Gotland.</span>
+</div>
+<div style="display: grid; grid-template-columns: 44px 56px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px; line-height: 1.45">
+<span class="mono" style="color: #9aa3b2">13:12</span><span class="mono" style="color: #ffc35a; font-weight: 600">ID</span><span>Vessel A flag does not match its MMSI country code.</span>
+</div>
+<div style="display: grid; grid-template-columns: 44px 56px minmax(0, 1fr); gap: 10px; padding: 10px 0; font-size: 12px; line-height: 1.45">
+<span class="mono" style="color: #9aa3b2">12:57</span><span class="mono" style="color: #c3c9d3; font-weight: 600">BACK</span><span>Vessel G reappeared after 5 h 10 min. Draught up 3.1 m.</span>
+</div>
+</section>
+
+<section class="panel p-watch" aria-label="Watchlist: likely to go dark in the next 6 hours" style="padding: 14px 18px; display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1)">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600">Likely to go dark · next 6 h</h2>
+<span class="mono" style="font-size: 11px; color: #9aa3b2">Forecast model · updated 14:05</span>
+</div>
+<div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) 44px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06)">
+<span class="mono" style="font-size: 11px; color: #9aa3b2">01</span>
+<div style="display: flex; flex-direction: column; gap: 5px">
+<div style="font-size: 13px; font-weight: 500">Vessel A <span style="color: #9aa3b2; font-weight: 400">· Crude tanker</span></div>
+<div style="height: 3px; background: rgba(255,255,255,0.08)"><div style="width: 71%; height: 3px; background: #ff5a5f"></div></div>
+<div class="mono" style="font-size: 10px; color: #9aa3b2; letter-spacing: 0.5px">SANCTIONED · FLAG MISMATCH · GAP HISTORY</div>
+</div>
+<span class="mono" style="font-size: 14px; font-weight: 600; color: #ff8a8d; text-align: right">71%</span>
+</div>
+<div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) 44px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06)">
+<span class="mono" style="font-size: 11px; color: #9aa3b2">02</span>
+<div style="display: flex; flex-direction: column; gap: 5px">
+<div style="font-size: 13px; font-weight: 500">Vessel D <span style="color: #9aa3b2; font-weight: 400">· LPG carrier</span></div>
+<div style="height: 3px; background: rgba(255,255,255,0.08)"><div style="width: 64%; height: 3px; background: #ff5a5f"></div></div>
+<div class="mono" style="font-size: 10px; color: #9aa3b2; letter-spacing: 0.5px">SPOOFING NOW · LOITERING</div>
+</div>
+<span class="mono" style="font-size: 14px; font-weight: 600; color: #ff8a8d; text-align: right">64%</span>
+</div>
+<div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) 44px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06)">
+<span class="mono" style="font-size: 11px; color: #9aa3b2">03</span>
+<div style="display: flex; flex-direction: column; gap: 5px">
+<div style="font-size: 13px; font-weight: 500">Vessel H <span style="color: #9aa3b2; font-weight: 400">· Product tanker</span></div>
+<div style="height: 3px; background: rgba(255,255,255,0.08)"><div style="width: 52%; height: 3px; background: #ffb020"></div></div>
+<div class="mono" style="font-size: 10px; color: #9aa3b2; letter-spacing: 0.5px">BOUND FOR UST-LUGA · NO DESTINATION</div>
+</div>
+<span class="mono" style="font-size: 14px; font-weight: 600; color: #ffc35a; text-align: right">52%</span>
+</div>
+<div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) 44px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06)">
+<span class="mono" style="font-size: 11px; color: #9aa3b2">04</span>
+<div style="display: flex; flex-direction: column; gap: 5px">
+<div style="font-size: 13px; font-weight: 500">Vessel E <span style="color: #9aa3b2; font-weight: 400">· Crude tanker</span></div>
+<div style="height: 3px; background: rgba(255,255,255,0.08)"><div style="width: 47%; height: 3px; background: #ffb020"></div></div>
+<div class="mono" style="font-size: 10px; color: #9aa3b2; letter-spacing: 0.5px">SHIP-TO-SHIP MEETING</div>
+</div>
+<span class="mono" style="font-size: 14px; font-weight: 600; color: #ffc35a; text-align: right">47%</span>
+</div>
+<div style="display: grid; grid-template-columns: 18px minmax(0, 1fr) 44px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06)">
+<span class="mono" style="font-size: 11px; color: #9aa3b2">05</span>
+<div style="display: flex; flex-direction: column; gap: 5px">
+<div style="font-size: 13px; font-weight: 500">Vessel K <span style="color: #9aa3b2; font-weight: 400">· Product tanker</span></div>
+<div style="height: 3px; background: rgba(255,255,255,0.08)"><div style="width: 38%; height: 3px; background: #ffb020"></div></div>
+<div class="mono" style="font-size: 10px; color: #9aa3b2; letter-spacing: 0.5px">SLOWING IN OPEN WATER</div>
+</div>
+<span class="mono" style="font-size: 14px; font-weight: 600; color: #ffc35a; text-align: right">38%</span>
+</div>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 10px">
+<span class="mono" style="font-size: 11px; color: #9aa3b2">Backtest top 10: 7 hit · baseline 3</span>
+<button class="btn" type="button">All 40</button>
+</div>
+</section>
+
+<section class="panel p-card" aria-label="Selected vessel: Vessel C" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; border-color: rgba(255,90,95,0.55)">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 14px; font-weight: 600">Vessel C</div>
+<div style="font-size: 12px; color: #9aa3b2">Crude tanker · IMO 9••••••</div>
+</div>
+<span class="mono" style="font-size: 11px; font-weight: 600; color: #ff8a8d; border: 1px solid #ff5a5f; border-radius: 3px; padding: 3px 6px; letter-spacing: 1px">DARK</span>
+</div>
+<div class="mono" style="font-size: 22px; font-weight: 500; letter-spacing: 1px; color: #ff8a8d">00:47:12</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; font-size: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Last speed</span><span class="mono">11.4 kn</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Last heading</span><span class="mono">074°</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Ships heard nearby</span><span class="mono">14 within 20 km</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Could be within</span><span class="mono">16.6 km</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Sanctions</span><span class="mono" style="color: #ff8a8d">EU list</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Past dark gaps</span><span class="mono">4 in 30 days</span></div>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button class="btn" type="button">Fly to</button>
+<button class="btn" type="button">Track history</button>
+<button class="btn btn-alert" type="button">Flag for review</button>
+</div>
+</section>
+
+<section class="panel p-bar" aria-label="Live stats, timeline and layers" style="padding: 12px 18px; display: flex; align-items: center; gap: 28px; flex-wrap: wrap">
+<div style="display: flex; gap: 24px; flex-wrap: wrap">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; color: #9aa3b2">Ships tracked</span><span class="mono" style="font-size: 18px; font-weight: 500">2,184</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; color: #9aa3b2">Messages / s</span><span class="mono" style="font-size: 18px; font-weight: 500">412</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; color: #9aa3b2">Dark now</span><span class="mono" style="font-size: 18px; font-weight: 500; color: #ff8a8d">3</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 11px; color: #9aa3b2">Spoofing</span><span class="mono" style="font-size: 18px; font-weight: 500; color: #ffc35a">2</span></div>
+</div>
+<div style="flex: 1 1 360px; min-width: 260px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<span class="mono" style="font-size: 10px; color: #9aa3b2">12:00</span>
+<div style="display: flex; gap: 8px; align-items: center">
+<button class="btn" type="button" aria-label="Replay the last two hours">Replay</button>
+<span class="mono" style="font-size: 11px; font-weight: 600; letter-spacing: 1px; color: #000; background: #f2f4f7; border-radius: 3px; padding: 3px 8px">LIVE</span>
+</div>
+<span class="mono" style="font-size: 10px; color: #9aa3b2">14:07</span>
+</div>
+<div style="position: relative; height: 18px">
+<div style="position: absolute; left: 0; right: 0; top: 8px; height: 1px; background: rgba(255,255,255,0.25)"></div>
+<div style="position: absolute; left: 47%; top: 2px; width: 1px; height: 13px; background: #c3c9d3"></div>
+<div style="position: absolute; left: 59%; top: 2px; width: 1px; height: 13px; background: #ffb020"></div>
+<div style="position: absolute; left: 73%; top: 2px; width: 1px; height: 13px; background: #ffb020"></div>
+<div style="position: absolute; left: 86%; top: 2px; width: 1px; height: 13px; background: #ffb020"></div>
+<div style="position: absolute; left: 97%; top: 0px; width: 2px; height: 17px; background: #ff5a5f"></div>
+<div style="position: absolute; right: 0; top: 4px; width: 9px; height: 9px; border-radius: 50%; background: #f2f4f7"></div>
+</div>
+</div>
+<fieldset style="border: 0; margin: 0; padding: 0; display: flex; gap: 16px; flex-wrap: wrap">
+<legend style="position: absolute; width: 1px; height: 1px; overflow: hidden">Map layers</legend>
+<label class="toggle"><input type="checkbox" checked="">Trails</label>
+<label class="toggle"><input type="checkbox">Coverage</label>
+<label class="toggle"><input type="checkbox" checked="">Radar (5+ days old)</label>
+<label class="toggle"><input type="checkbox" checked="">Sanctions</label>
+</fieldset>
+</section>
+
+</div>
+</body></html>

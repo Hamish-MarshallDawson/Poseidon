@@ -1,0 +1,176 @@
+<!doctype html><html lang='en'><head>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"><meta charset='utf-8'><title>Energy flow monitor: Strait of Hormuz</title><style></style>
+<style>
+body{margin:0;background:#000}
+a{color:#f2f4f7}a:hover{color:#ffffff}
+.app{position:relative;width:100%;min-height:900px;height:100vh;overflow:hidden;background:#000;font-family:Inter,system-ui,sans-serif;color:#f2f4f7}
+.map{position:absolute;top:0;right:0;bottom:0;left:0}
+.panel{position:absolute;box-sizing:border-box;background:rgba(5,7,10,0.84);border:1px solid rgba(255,255,255,0.16);border-radius:4px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.p-title{left:24px;bottom:24px;width:330px}
+.p-flow{right:24px;top:24px;width:360px}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+@media (max-width: 960px){
+.app{height:auto;min-height:0;display:flex;flex-direction:column;gap:12px;padding-bottom:12px}
+.map{position:relative;height:440px}
+.panel{position:relative;left:auto;right:auto;top:auto;bottom:auto;width:auto;margin:0 12px}
+}
+</style>
+</head><body>
+
+<div class="app">
+
+<div class="map">
+<svg viewBox="0 0 1440 960" preserveAspectRatio="xMidYMid slice" width="100%" height="100%" role="img" aria-label="Line map of the Persian Gulf, Strait of Hormuz and Gulf of Oman showing oil terminals, zones of GPS interference, false tracks created by jamming, verified laden tankers leaving the Gulf, an inferred dark crossing and loaded tankers waiting off Fujairah">
+<defs>
+<path id="seaH" d="M111,80 L155,74 L233,68 L299,135 L366,203 L432,332 L565,394 L709,480 L809,504 L897,474 L975,421 L1030,437 L1086,492 L1138,610 L1219,621 L1330,640 L1440,652 L1440,960 L1341,960 L1230,861 L1025,769 L981,674 L972,615 L986,553 L986,517 L964,541 L936,590 L864,656 L765,754 L609,793 L499,812 L454,763 L454,701 L447,653 L449,578 L416,547 L382,615 L371,701 L366,726 L299,603 L288,513 L295,487 L239,443 L188,381 L116,271 L61,185 L44,148 L78,105 Z"></path>
+<clipPath id="seaClipH"><use href="#seaH"></use></clipPath>
+<pattern id="landHatchH" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#ffffff" stroke-opacity="0.07" stroke-width="1"></line></pattern>
+<radialGradient id="jam"><stop offset="0%" stop-color="#ff5a5f" stop-opacity="0.22"></stop><stop offset="100%" stop-color="#ff5a5f" stop-opacity="0"></stop></radialGradient>
+</defs>
+<rect x="0" y="0" width="1440" height="960" fill="#1a2029"></rect>
+<rect x="0" y="0" width="1440" height="960" fill="url(#landHatchH)"></rect>
+<use href="#seaH" fill="#010204"></use>
+<g stroke="#ffffff" stroke-opacity="0.07" stroke-width="1" clip-path="url(#seaClipH)">
+<line x1="0" y1="200" x2="1440" y2="200"></line>
+<line x1="0" y1="446" x2="1440" y2="446"></line>
+<line x1="0" y1="692" x2="1440" y2="692"></line>
+<line x1="277" y1="0" x2="277" y2="960"></line>
+<line x1="831" y1="0" x2="831" y2="960"></line>
+<line x1="1385" y1="0" x2="1385" y2="960"></line>
+</g>
+<use href="#seaH" fill="none" stroke="#dfe4ec" stroke-opacity="0.08" stroke-width="6" stroke-linejoin="round"></use>
+<use href="#seaH" fill="none" stroke="#e8ecf2" stroke-opacity="0.85" stroke-width="1.3" stroke-linejoin="round"></use>
+<g fill="#1a2029" stroke="#e8ecf2" stroke-opacity="0.85" stroke-width="1.3">
+<ellipse cx="338" cy="560" rx="10" ry="16"></ellipse>
+<ellipse cx="312" cy="167" rx="6" ry="8"></ellipse>
+<ellipse cx="931" cy="470" rx="46" ry="11" transform="rotate(-25 931 470)"></ellipse>
+</g>
+<g font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#ffffff" fill-opacity="0.34" letter-spacing="8">
+<text x="640" y="230">IRAN</text>
+<text x="40" y="420">SAUDI ARABIA</text>
+<text x="660" y="880">UAE</text>
+<text x="1110" y="900">OMAN</text>
+<text x="40" y="60">IRAQ</text>
+</g>
+<g font-family="Inter, sans-serif" font-size="12" fill="#ffffff" fill-opacity="0.22" letter-spacing="6">
+<text x="470" y="560">PERSIAN GULF</text>
+<text x="1110" y="720">GULF OF OMAN</text>
+<text x="1000" y="500" font-size="9" letter-spacing="3">STRAIT OF HORMUZ</text>
+</g>
+<circle cx="860" cy="610" r="130" fill="url(#jam)"></circle>
+<circle cx="985" cy="470" r="100" fill="url(#jam)"></circle>
+<circle cx="330" cy="200" r="80" fill="url(#jam)"></circle>
+<text x="760" y="520" font-family="JetBrains Mono, monospace" font-size="10" fill="#ff8a8d" letter-spacing="1.5">GNSS INTERFERENCE</text>
+<g fill="none" stroke="#ff5a5f" stroke-opacity="0.45" stroke-width="1" stroke-dasharray="2 4">
+<line x1="905" y1="560" x2="760" y2="300"></line>
+<line x1="880" y1="575" x2="660" y2="830"></line>
+<line x1="1000" y1="520" x2="1180" y2="380"></line>
+</g>
+<g fill="#ff5a5f" fill-opacity="0.6">
+<circle cx="800" cy="780" r="2"></circle><circle cx="812" cy="776" r="2"></circle><circle cx="822" cy="784" r="2"></circle><circle cx="826" cy="796" r="2"></circle><circle cx="820" cy="808" r="2"></circle><circle cx="808" cy="812" r="2"></circle><circle cx="796" cy="806" r="2"></circle><circle cx="792" cy="794" r="2"></circle>
+</g>
+<text x="700" y="836" font-family="JetBrains Mono, monospace" font-size="10" fill="#ff8a8d" letter-spacing="1">FALSE POSITIONS ON LAND · REMOVED</text>
+<path d="M420,470 C560,500 720,520 880,520 C930,520 970,500 1000,480 C1040,500 1080,560 1140,640 C1190,700 1260,760 1330,820" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1" stroke-dasharray="2 6"></path>
+<g fill="#f2f4f7">
+<path d="M1062,566 l8,4 l-8,4 z"></path>
+<path d="M1112,620 l8,4 l-8,4 z"></path>
+<path d="M1160,672 l8,4 l-8,4 z"></path>
+<path d="M1210,724 l8,4 l-8,4 z"></path>
+<path d="M1262,776 l8,4 l-8,4 z"></path>
+<path d="M700,510 l8,4 l-8,4 z"></path>
+<path d="M560,486 l8,4 l-8,4 z"></path>
+</g>
+<g fill="#9aa3b2">
+<circle cx="640" cy="520" r="2.6"></circle><circle cx="780" cy="530" r="2.6"></circle><circle cx="850" cy="540" r="2.6"></circle>
+<circle cx="1090" cy="600" r="2.6"></circle><circle cx="1240" cy="760" r="2.6"></circle><circle cx="500" cy="470" r="2.6"></circle>
+<circle cx="380" cy="420" r="2.6"></circle><circle cx="200" cy="300" r="2.6"></circle><circle cx="420" cy="660" r="2.6"></circle>
+</g>
+<polyline points="920,520 1000,500 1060,560 1046,662" fill="none" stroke="#ff5a5f" stroke-width="1.4" stroke-dasharray="5 4"></polyline>
+<circle cx="920" cy="520" r="5" fill="#010204" stroke="#ff5a5f" stroke-width="1.5"></circle>
+<path d="M1040,656 l10,5 l-10,5 z" fill="#ff5a5f"></path>
+<text x="1060" y="684" font-family="JetBrains Mono, monospace" font-size="10" fill="#ff8a8d" letter-spacing="1">DARK CROSSING (INFERRED)</text>
+<text x="1060" y="698" font-family="JetBrains Mono, monospace" font-size="10" fill="#9aa3b2">vanished 21:10 · reappeared 05:40, laden</text>
+<g fill="#ffb020">
+<circle cx="1018" cy="716" r="3"></circle><circle cx="1030" cy="708" r="3"></circle><circle cx="1026" cy="724" r="3"></circle><circle cx="1040" cy="718" r="3"></circle><circle cx="1036" cy="734" r="3"></circle><circle cx="1050" cy="728" r="3"></circle><circle cx="1046" cy="744" r="3"></circle>
+</g>
+<circle cx="1034" cy="726" r="28" fill="none" stroke="#ffb020" stroke-opacity="0.6" stroke-width="1"></circle>
+<text x="1072" y="752" font-family="JetBrains Mono, monospace" font-size="10" fill="#ffc35a" letter-spacing="1">LOADED · WAITING 4+ DAYS</text>
+<g fill="none" stroke="#c3c9d3" stroke-width="1.2">
+<rect x="291" y="483" width="8" height="8" transform="rotate(45 295 487)"></rect>
+<rect x="308" y="163" width="8" height="8" transform="rotate(45 312 167)"></rect>
+<rect x="140" y="109" width="8" height="8" transform="rotate(45 144 113)"></rect>
+<rect x="445" y="574" width="8" height="8" transform="rotate(45 449 578)"></rect>
+<rect x="977" y="670" width="8" height="8" transform="rotate(45 981 674)"></rect>
+<rect x="1134" y="606" width="8" height="8" transform="rotate(45 1138 610)"></rect>
+</g>
+<g font-family="JetBrains Mono, monospace" font-size="10" fill="#c3c9d3" letter-spacing="1.5">
+<text x="170" y="478">RAS TANURA</text>
+<text x="324" y="160">KHARG ISLAND</text>
+<text x="160" y="104">BASRA TERMINAL</text>
+<text x="462" y="582">RAS LAFFAN</text>
+<text x="880" y="664">FUJAIRAH</text>
+<text x="1150" y="600">JASK</text>
+<text x="950" y="404">BANDAR ABBAS</text>
+</g>
+<g transform="translate(560,900)" font-family="JetBrains Mono, monospace" font-size="10" fill="#9aa3b2">
+<line x1="0" y1="0" x2="55" y2="0" stroke="#9aa3b2" stroke-width="1"></line>
+<line x1="0" y1="-4" x2="0" y2="4" stroke="#9aa3b2" stroke-width="1"></line>
+<line x1="55" y1="-4" x2="55" y2="4" stroke="#9aa3b2" stroke-width="1"></line>
+<text x="0" y="18">50 KM</text>
+</g>
+</svg>
+</div>
+
+<section class="panel p-title" aria-label="View title and legend" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div class="mono" style="font-size: 14px; font-weight: 600; letter-spacing: 2px">ENERGY FLOW MONITOR</div>
+<div style="font-size: 12px; color: #9aa3b2">Strait of Hormuz · last 24 h</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; font-size: 12px; color: #c3c9d3">
+<div style="display: flex; align-items: center; gap: 10px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3,3 l8,4 l-8,4 z" fill="#f2f4f7"></path></svg>Laden tanker leaving, verified</div>
+<div style="display: flex; align-items: center; gap: 10px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><line x1="1" y1="7" x2="13" y2="7" stroke="#ff5a5f" stroke-width="1.6" stroke-dasharray="3 2"></line></svg>Dark crossing, inferred</div>
+<div style="display: flex; align-items: center; gap: 10px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" fill="#ff5a5f" fill-opacity="0.3"></circle></svg>GPS interference (positions unreliable)</div>
+<div style="display: flex; align-items: center; gap: 10px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="3" fill="#ffb020"></circle></svg>Loaded tanker waiting</div>
+<div style="display: flex; align-items: center; gap: 10px"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="3" y="3" width="8" height="8" fill="none" stroke="#c3c9d3" stroke-width="1.2" transform="rotate(45 7 7)"></rect></svg>Export terminal</div>
+</div>
+<div class="mono" style="font-size: 10px; color: #9aa3b2; letter-spacing: 1px; border: 1px dashed rgba(255,255,255,0.22); border-radius: 3px; padding: 4px 8px; align-self: flex-start">ILLUSTRATIVE DATA · MOCKUP</div>
+</section>
+
+<section class="panel p-flow" aria-label="Oil leaving the Gulf" style="padding: 16px 18px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 style="margin: 0; font-size: 13px; font-weight: 600">Oil leaving the Gulf by sea</h2>
+<span class="mono" style="font-size: 11px; color: #9aa3b2">Estimate, million barrels per day</span>
+</div>
+<div style="display: flex; align-items: baseline; gap: 12px">
+<span class="mono" style="font-size: 34px; font-weight: 500">6.8</span>
+<span class="mono" style="font-size: 12px; color: #9aa3b2">vs 20 pre-crisis</span>
+</div>
+<svg width="100%" height="120" viewBox="0 0 320 120" preserveAspectRatio="none" role="img" aria-label="Fourteen-day bar chart: our corrected estimate runs consistently above the raw AIS count, both far below the pre-crisis level">
+<line x1="0" y1="10" x2="320" y2="10" stroke="#9aa3b2" stroke-width="1" stroke-dasharray="3 3"></line>
+<line x1="0" y1="110" x2="320" y2="110" stroke="#ffffff" stroke-opacity="0.2" stroke-width="1"></line>
+<g fill="#4b5361">
+<rect x="4" y="88" width="9" height="22"></rect><rect x="27" y="86" width="9" height="24"></rect><rect x="50" y="90" width="9" height="20"></rect><rect x="73" y="84" width="9" height="26"></rect><rect x="96" y="87" width="9" height="23"></rect><rect x="119" y="85" width="9" height="25"></rect><rect x="142" y="82" width="9" height="28"></rect><rect x="165" y="86" width="9" height="24"></rect><rect x="188" y="83" width="9" height="27"></rect><rect x="211" y="80" width="9" height="30"></rect><rect x="234" y="82" width="9" height="28"></rect><rect x="257" y="79" width="9" height="31"></rect><rect x="280" y="81" width="9" height="29"></rect><rect x="303" y="78" width="9" height="32"></rect>
+</g>
+<g fill="#f2f4f7">
+<rect x="13" y="80" width="9" height="30"></rect><rect x="36" y="77" width="9" height="33"></rect><rect x="59" y="82" width="9" height="28"></rect><rect x="82" y="75" width="9" height="35"></rect><rect x="105" y="78" width="9" height="32"></rect><rect x="128" y="76" width="9" height="34"></rect><rect x="151" y="72" width="9" height="38"></rect><rect x="174" y="77" width="9" height="33"></rect><rect x="197" y="74" width="9" height="36"></rect><rect x="220" y="71" width="9" height="39"></rect><rect x="243" y="73" width="9" height="37"></rect><rect x="266" y="70" width="9" height="40"></rect><rect x="289" y="72" width="9" height="38"></rect><rect x="312" y="76" width="8" height="34"></rect>
+</g>
+</svg>
+<div style="display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #9aa3b2">
+<span><span style="display: inline-block; width: 8px; height: 8px; background: #4b5361; margin-right: 6px"></span>Raw AIS</span>
+<span><span style="display: inline-block; width: 8px; height: 8px; background: #f2f4f7; margin-right: 6px"></span>Our estimate</span>
+<span><span style="display: inline-block; width: 12px; border-top: 1px dashed #9aa3b2; margin-right: 6px; vertical-align: middle"></span>Pre-crisis</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px; font-size: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Laden tankers out</span><span class="mono" style="font-size: 16px">9 verified</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Dark crossings</span><span class="mono" style="font-size: 16px; color: #ff8a8d">+4 est.</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">False transits removed</span><span class="mono" style="font-size: 16px">31</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #9aa3b2">Loaded, waiting</span><span class="mono" style="font-size: 16px; color: #ffc35a">23</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px">
+<span style="font-size: 11px; color: #9aa3b2">Signal to price model</span>
+<span style="font-size: 13px">Supply out <span class="mono" style="color: #ff8a8d">−12%</span> week on week, mostly via dark crossings.</span>
+</div>
+</section>
+
+</div>
+</body></html>
