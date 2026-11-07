@@ -1,6 +1,6 @@
 # Timeline agent report (#40, scrub bar, replay, forecast overlay)
 
-PR: see the PR for branch `40-timeline` (title "#40 timeline: …"). Not merged. Built by FrontEndLead's timeline agent (commit `bd75dcf`, rebased onto main), then verified and fixed by Aiden's agent on Linux (2 commits on top).
+PR: https://github.com/Hamish-MarshallDawson/Hedged-Bets-hacktheburgh/pull/56 (branch `40-timeline`). Not merged. Built by FrontEndLead's timeline agent (`09228e0`), then verified and fixed by Aiden's agent on Linux (main merged in, 3 commits on top).
 
 ## What's built
 
