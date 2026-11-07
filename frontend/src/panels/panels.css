@@ -47,7 +47,11 @@
   font: 600 var(--dvm-size-label) / var(--dvm-line-label) var(--dvm-font-data);
   letter-spacing: 0.96px;
 }
-.status-line.is-replay { border: 2px solid var(--dvm-text-primary); }
+/* Replay status line (68:17214): 1 px border/default, 6/10 padding, caption chip, data-size text. */
+/* Ends before the centred REPLAY tab (about 300 wide), as in 68:16538: 16 + 2 + 20 + 524 = 562 < 720 - 150 - 8. */
+.status-line.is-replay { padding: 6px 10px; max-width: calc(50vw - 196px); }
+.status-line.is-replay .sl-replay { font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); letter-spacing: 0.6px; }
+.status-line.is-replay .sl-text { font-size: var(--dvm-size-data); line-height: var(--dvm-line-data); }
 
 /* Top-right: watchlist chip, Layers, log out (66:21915) */
 .top-right { position: fixed; top: 16px; right: 16px; display: flex; gap: 8px; align-items: center; }
@@ -102,7 +106,8 @@
 .layers .dvm-row { padding-inline: 16px; }
 
 /* Watchlist drop-in (56:4359): edge text/muted so it separates from the map without a shadow. */
-.watchlist-wrap { position: fixed; top: 60px; right: 60px; transform-origin: top right; }
+/* Frame 6 (67:14713): x 1064, y 56, so right 16; it drops in over the zoom buttons. */
+.watchlist-wrap { position: fixed; top: 56px; right: 16px; z-index: 1; transform-origin: top right; }
 .watchlist {
   width: 360px;
   max-height: calc(100vh - 160px);
@@ -113,6 +118,7 @@
 }
 .wl-header { display: flex; flex-direction: column; gap: 2px; padding: 14px 12px 10px; }
 .wl-titlerow { display: flex; align-items: center; gap: 8px; }
+.wl-titlerow .dvm-btn { border-color: var(--dvm-text-muted); }
 .wl-titlerow h2 { flex: 1; margin: 0; font-weight: 600; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); }
 .wl-explain { margin: 0; color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
 .wl-meta { margin: 0; color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
@@ -155,7 +161,8 @@
 .wl-p b { font: 600 var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); white-space: nowrap; }
 .wl-bar { position: relative; flex: none; width: 216px; height: 4px; }
 .wl-bar::before { content: ''; position: absolute; left: 0; right: 0; top: 1.5px; height: 1px; background: var(--dvm-text-muted); }
-.wl-bar i { position: absolute; inset: 0; background: var(--dvm-text-muted); transform-origin: left; }
+/* :where() keeps this default below .risk-N, which colours the fill by band. */
+:where(.wl-bar i) { position: absolute; inset: 0; background: var(--dvm-text-muted); transform-origin: left; }
 .is-noais .wl-p b { color: var(--dvm-text-muted); }
 .wl-note {
   display: -webkit-box;
@@ -314,3 +321,20 @@
   font-size: var(--dvm-size-label);
   line-height: var(--dvm-line-label);
 }
+
+/* MapLibre attribution: always one quiet line along the bottom-right edge (y 886-900 at 900 high), below the scale
+   and the scrub bar (both end 16 px up), so nothing covers it. Compact mode's toggle button is hidden; the text shows. */
+.dvm-map .maplibregl-ctrl-bottom-right > .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  margin: 0;
+  padding: 0 6px;
+  min-height: 0;
+  border-radius: 0;
+  background: var(--dvm-bg-panel);
+  color: var(--dvm-text-muted);
+  font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-ui);
+  white-space: nowrap;
+}
+.dvm-map .maplibregl-ctrl.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-inner { display: block; }
+.dvm-map .maplibregl-ctrl.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button,
+.dvm-map .maplibregl-ctrl.maplibregl-ctrl-attrib::after { display: none; }
+.dvm-map .maplibregl-ctrl.maplibregl-ctrl-attrib a { color: var(--dvm-text-secondary); }

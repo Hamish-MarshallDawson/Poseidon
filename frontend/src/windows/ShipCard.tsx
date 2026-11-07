@@ -67,13 +67,12 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
     <div className={`sc ${noAis ? 'is-noais' : ''}`}>
       <div className="sc-head">
         <h3 className="sc-name">{v.name ?? `MMSI ${fmtMmsi(v.mmsi)}`}</h3>
-        {replay && <span className="sc-asof">AS OF {utcTime(now)}</span>}
-        <span className={`sc-chip ${noAis ? 'noais' : ''}`}>{noAis ? 'No AIS' : 'AIS heard'}</span>
+        <span className={`sc-chip ${noAis ? 'noais' : ''}`}>{noAis ? 'No AIS' : 'AIS heard'}{replay && ` · as of ${utcTime(now, false)}`}</span>
       </div>
       <p className="sc-sub">{subline(v, statics?.flag_iso2 ?? v.flag, statics?.length_m ?? v.length_m)}</p>
       <div className="sc-timer">
         <span className="sc-clock">{hms(now - v.last_ts)}</span>
-        <span className="sc-caption">since last AIS ({utcTime(v.last_ts)})</span>
+        <span className="sc-caption">since last AIS ({utcTime(v.last_ts)}){replay && ` · shown time ${utcTime(now)}`}</span>
       </div>
       <div className="sc-grid">
         <Field label="Last speed" value={v.sog_kn !== null ? `${v.sog_kn.toFixed(1)} kn` : '—'} />

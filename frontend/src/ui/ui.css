@@ -1,4 +1,4 @@
-/* Base components. Tokens only; transitions animate colour on hover (cheap, not in the map's frame loop). */
+/* Base components. Tokens only; hover colours switch instantly (only transform and opacity animate). */
 
 .dvm-btn,
 .dvm-icon-btn,
@@ -22,7 +22,6 @@
   font-size: var(--dvm-size-label);
   line-height: var(--dvm-line-label);
   font-weight: 500;
-  transition: background-color 120ms, border-color 120ms, color 120ms;
 }
 .dvm-btn--filled { background: var(--dvm-accent-default); border-color: var(--dvm-accent-default); color: var(--dvm-text-on-accent); }
 .dvm-btn--filled:hover { background: color-mix(in srgb, var(--dvm-accent-default) 86%, var(--dvm-text-primary)); }
@@ -45,7 +44,6 @@
   border-radius: 2px;
   background: var(--dvm-bg-panel);
   color: var(--dvm-text-primary);
-  transition: background-color 120ms, border-color 120ms;
 }
 .dvm-icon-btn:hover { border-color: var(--dvm-border-strong); }
 .dvm-icon-btn[aria-pressed='true'],
@@ -111,7 +109,6 @@
   box-sizing: border-box;
   border: 1px solid var(--dvm-text-primary);
   background: transparent;
-  transition: background-color 120ms;
 }
 .dvm-lamp[data-state='on'] i { background: var(--dvm-text-primary); }
 .dvm-lamp[data-state='na'] { color: var(--dvm-text-muted); }
