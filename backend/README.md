@@ -45,10 +45,16 @@ Tiger Cloud runs TimescaleDB 2.31 on PostgreSQL 18. Everything below is created 
 **What we use**
 
 - **Hypertables** `positions` and `statics`, partitioned on `time timestamptz` (= `ts`, as Tiger's docs recommend). `ts` and `recv_ts` stay epoch milliseconds per 06.
-- **Continuous aggregate `coverage_1m`**: per 1-minute bucket and 0.1-degree cell, `ships = count(DISTINCT mmsi)` and `msgs = count(*)`. Real-time aggregation is on (`materialized_only = false`), so the latest minute is correct without waiting for a refresh. `count(DISTINCT)` is allowed in a 2.31 continuous aggregate.
+- **Continuous aggregate `coverage_1m`**: per 1-minute bucket, 0.1-degree cell and AIS class (`cls`, `A` or `B`), `ships = count(DISTINCT mmsi)` and `msgs = count(*)`. Real-time aggregation is on (`materialized_only = false`), so the latest minute is correct without waiting for a refresh. `count(DISTINCT)` is allowed in a 2.31 continuous aggregate.
 - **Refresh policy** on `coverage_1m`: every 1 minute, over the window from 2 hours ago to 1 minute ago.
+- **Continuous aggregate `coverage_1h`**: the same counts per hour, for the hour-of-day `expected_vessels` baseline (06 section 2.9). Built on `positions`, not on `coverage_1m`, because distinct ships per hour can't be added up from per-minute distinct counts. Refreshed every 15 minutes; no retention.
+- **Detector, forecast and evaluation tables** (06 sections 2.4, 2.7, 2.10), written with `store.append(con, table, rows)`. All three refuse `UPDATE` and `DELETE` with a trigger, so a forecast stays exactly as it was made:
+  - `gaps`: one row per gap version, key `(id, version)`; the latest version wins. Indexed on `(mmsi, start_ts)` and `detected_at`.
+  - `scores`: a hypertable on `time` (= `made_at`) with 1-hour chunks, unique on `(id, time)`, indexed on `(mmsi, time DESC)` and `(time, p DESC)` for the top-K watchlist.
+  - `outcomes`: one row per score, key `score_id`, indexed on `made_at`.
+- **`mmsi` is the only vessel ID** (Jake, 7 Nov): no identity table; a ship's name is the latest `statics` row for its MMSI.
 - **Columnstore** on both hypertables (15-minute chunks, provisional), with a policy that compresses chunks older than 1 hour.
-- **`GET /coverage`** returns `{"cells": [{cell_id, bucket_ts, ships, msgs}]}` for the last `minutes` (default 10, capped at 120), optionally `?bbox=[[lon1,lat1],[lon2,lat2]]`. It takes the same Auth0 access token as `/ws`, as `Authorization: Bearer <token>`, and returns 401 without a valid one. It is open when Auth0 is not configured.
+- **`GET /coverage`** returns `{"cells": [{cell_id, bucket_ts, ships, msgs}]}` for Class A only (what the gap detector uses), for the last `minutes` (default 10, capped at 120), optionally `?bbox=[[lon1,lat1],[lon2,lat2]]`. It takes the same Auth0 access token as `/ws`, as `Authorization: Bearer <token>`, and returns 401 without a valid one. It is open when Auth0 is not configured.
 
 **Why**
 
@@ -79,13 +85,14 @@ The gap is modest at this size (about 2.6x) because the raw query is already a s
 
 The policy has not compressed any chunk on the live database yet (see below), so there is no ratio on live data. The probe copy was dropped afterwards. `statics` uses the same settings.
 
-**Chunks: 15 minutes, provisional.** `CHUNK_INTERVAL` in `dvm/store.py` is 15 minutes for now, so the 1-hour compression policy has closed chunks to compress during the hackathon. Jake may change it once the data model settles. Existing chunks can't be resized, so a change moves the tables with `python -m dvm.rechunk`. It copies into new hypertables while ingest runs, then waits for the backend to be stopped with Ctrl+C. It copies the last few minutes, swaps names only if the row counts match, and keeps the old tables as `*_old` until `python -m dvm.rechunk --drop-old`. The restarted backend recreates `coverage_1m` and the columnstore policy. Set `CHUNK_INTERVAL` first, because start-up applies it with `set_chunk_time_interval`.
+**Chunks: 15 minutes, provisional.** `CHUNK_INTERVAL` in `dvm/store.py` is 15 minutes for now, so the 1-hour compression policy has closed chunks to compress during the hackathon. Jake may change it once the data model settles. Existing chunks can't be resized, so a change moves the tables with `python -m dvm.rechunk`. It copies into new hypertables while ingest runs, then waits for the backend to be stopped with Ctrl+C. It copies the last few minutes, swaps names only if the row counts match, and keeps the old tables as `*_old` until `python -m dvm.rechunk --drop-old`. The restarted backend recreates `coverage_1m`, `coverage_1h` and the columnstore policy. Set `CHUNK_INTERVAL` first, because start-up applies it with `set_chunk_time_interval`.
 
 **Gotchas**
 
 - A continuous aggregate can't be created inside a transaction block, and asyncpg sends a multi-statement string as one. So `SETUP` runs one statement per `execute()`.
 - `add_columnstore_policy` is a procedure in 2.31: `CALL`, not `SELECT`.
 - The columnstore `ALTER TABLE ... SET` runs only while columnstore is still off (a catalog check in a `DO` block), because changing it once chunks are compressed is refused. To change `segmentby` or `orderby` later, do it by hand.
+- Start-up drops a `coverage_1m` without a `cls` column (the first version) and rebuilds it from `positions`, so its history is kept. Each `SETUP` step has a 15-minute timeout for such a rebuild.
 - Only the base tables must succeed at start-up. A failing extra (columnstore, policy, aggregate) is logged as a warning and never stops positions being written.
 
 If the database is unreachable, ingest and the map carry on: rows are buffered (capped) and retried, and the JSONL log keeps everything. `/coverage` returns 503 until the connection is up.

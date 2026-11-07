@@ -4,9 +4,10 @@ Hypertables can't change the size of existing chunks, so this copies into new hy
 1. While the backend runs: create `<table>_new` with CHUNK_INTERVAL chunks and copy every row received more
    than 2 minutes ago.
 2. It then waits until the backend is stopped (stop it with Ctrl+C, never a kill: dvm/limits.py), copies the rest,
-   refuses to go on unless the row counts match, drops coverage_1m (it is tied to the old table), and swaps names.
+   refuses to go on unless the row counts match, drops coverage_1m and coverage_1h (they are tied to the old
+   table), and swaps names.
    The old tables stay as `<table>_old`.
-3. Start the backend again: its setup recreates coverage_1m and the columnstore policy on the new tables.
+3. Start the backend again: its setup recreates coverage_1m, coverage_1h and the columnstore policy on the new tables.
 4. `python -m dvm.rechunk --drop-old` drops `<table>_old` once the new tables hold at least as many rows.
 
 Set CHUNK_INTERVAL in dvm/store.py first, so the restarted backend keeps the new size.
@@ -70,14 +71,15 @@ async def migrate(con) -> None:
         raise SystemExit(f"Refusing to swap: row counts differ, old {old} new {new}. Nothing renamed; "
                          "the backend can be restarted on the old tables.")
 
-    await con.execute("DROP MATERIALIZED VIEW IF EXISTS coverage_1m")   # recreated by the backend's setup
+    for view in ("coverage_1m", "coverage_1h"):   # recreated by the backend's setup
+        await con.execute(f"DROP MATERIALIZED VIEW IF EXISTS {view}")
     for t in TABLES:
         await con.execute(f"ALTER TABLE {t} RENAME TO {t}_old")
         await con.execute(f"ALTER INDEX IF EXISTS {t}_mmsi_time RENAME TO {t}_mmsi_time_old")
         await con.execute(f"ALTER TABLE {t}_new RENAME TO {t}")
         await con.execute(f"ALTER INDEX {t}_mmsi_time_new RENAME TO {t}_mmsi_time")
     print(f"Swapped. Rows: {new}. Copy and swap took {time.monotonic() - paused:.1f} s after the stop.")
-    print("Start the backend again now (it recreates coverage_1m and the columnstore policy), "
+    print("Start the backend again now (it recreates coverage_1m, coverage_1h and the columnstore policy), "
           "then run `python -m dvm.rechunk --drop-old`.")
 
 
