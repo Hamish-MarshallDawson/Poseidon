@@ -73,7 +73,7 @@ These tests need `--replay`.
 
 These are `xfail(strict=True)` tests. They pass while the gap exists and fail once someone fixes it, at which point the marker should be removed.
 
-1. **One malformed message can stop ingest.** A field of the wrong JSON type, such as `Sog` as a string, raises inside `normalise`. `Hub.consume` in `app.py` has no try/except, so ingest would stop. AISStream sends typed JSON, so this is unlikely live, but a try/except per message is the cheap fix.
+1. **One malformed message could stop ingest (fixed in `Hub.consume`).** A field of the wrong JSON type, such as `Sog` as a string, raises inside `normalise`. `Hub.consume` now catches it per message, skips it, counts it in `/health` (`aisstream.bad_messages`, `last_bad`) and logs at most once every 10 s. The xfail stays because `normalise` itself still raises.
 2. **0/0 positions are accepted.** `DATA-MODEL-IMPLICATIONS.md` proposes filtering them.
 3. **The placeholder IMO 1234567 passes as clean**, because its check digit is valid.
 4. **Messages over about 55 s late get an event time exactly 60 s wrong**, and they aren't flagged `late`. This is the `rebuild_ts` shortcut in 06 section 1.3.

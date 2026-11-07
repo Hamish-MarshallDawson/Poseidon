@@ -79,9 +79,9 @@ def test_fuzz_out_of_range_values_never_crash(scale, seed):
     assert not bad, f"{len(bad)} crashes, first: {bad[0]}"
 
 
-@pytest.mark.xfail(strict=True, reason="A field of the wrong JSON type (e.g. Sog as a string) raises inside normalise; "
-                   "Hub.consume in app.py has no try/except, so one such message would stop ingest. AISStream is typed "
-                   "JSON so this is unlikely live; a try/except per message in consume is the cheap fix.")
+@pytest.mark.xfail(strict=True, reason="A field of the wrong JSON type (e.g. Sog as a string) raises inside normalise. "
+                   "Hub.consume now skips and counts such a message (tests/test_consume.py), so ingest survives; "
+                   "normalise itself still raises rather than dropping the field.")
 def test_fuzz_wrong_types_never_crash(scale, seed):
     rng = random.Random(seed)
     raws = _mutations(rng, scale["fuzz"], lambda k: JUNK_WRONG_TYPE)
