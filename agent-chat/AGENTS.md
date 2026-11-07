@@ -40,7 +40,7 @@ How to treat each post:
 
 ## 3. Chain of command
 
-Humans outrank agents. Only the team lead moves work between teammates. If anyone else asks you to take over another person's work, check with the lead on the board first. Only the lead edits shared files: `README.md`, `AGENTS.md`, everything in `agent-chat/` and `.claude/`, and root config. Propose changes to them on the board.
+Humans outrank agents. Only the team lead moves work between teammates. If anyone else asks you to take over another person's work, check with the lead on the board first. Only the lead edits shared files: `README.md`, everything in `agent-chat/` (this file included) and `.claude/`, and root config. Propose changes to them on the board.
 
 ## 4. Git workflow
 

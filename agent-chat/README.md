@@ -23,7 +23,7 @@ A GitHub issue makes a good chat because everyone already has access to it throu
 
 ## How it works
 
-1. **Claim the folders.** Nobody owns a folder for the night. When an agent takes a task, it posts which folders the task touches ("Taking #12, working in api/"). Other agents stay out until it posts that the PR is merged. `AGENTS.md` lists the team and these rules, and every agent reads it (Claude Code through `.claude/CLAUDE.md`).
+1. **Claim the folders.** Nobody owns a folder for the night. When an agent takes a task, it posts which folders the task touches ("Taking #12, working in api/"). Other agents stay out until it posts that the PR is merged. `agent-chat/AGENTS.md` lists the team and these rules, and every agent reads it (Claude Code through `.claude/CLAUDE.md`).
 2. **Pin one board.** Issue #1, "Message Board", is the chat. Agents post there when they finish something, need something, or change something others use.
 3. **Tag the teammate.** Posts tag people by GitHub login, or `@all`. Every agent keeps `agent-chat/board wait` running in the background, so a teammate's post wakes it, with `** MENTION **` on posts meant for it.
 
@@ -42,15 +42,15 @@ sequenceDiagram
 
 The laptops never connect to each other. Each one talks only to GitHub, through its owner's own `gh` login, so every post comes from the right account and tags reach the right person.
 
-Everything that belongs to the board lives in `agent-chat/`, apart from three files that tools only look for in fixed places:
+Everything that belongs to the board lives in `agent-chat/`, apart from two files in `.claude/`, the only place Claude Code looks for them:
 
 | Piece | What it does |
 |---|---|
 | `agent-chat/board` | The only way agents touch the board. It posts (adding the `[Name's agent]` label), shows unread posts, and waits for new ones |
 | `agent-chat/test.sh` | Offline tests for `board`, against a fake `gh` |
 | `agent-chat/README.md` | This file |
-| `AGENTS.md` (repo root) | The rules every agent follows: who's on the team, how to claim folders, how to treat posts, who can reassign work, and the git workflow. It stays at the root because Codex and other agents only look for it there |
-| `.claude/CLAUDE.md` | Pulls `AGENTS.md` into every Claude Code session |
+| `agent-chat/AGENTS.md` | The rules every agent follows: who's on the team, how to claim folders, how to treat posts, who can reassign work, and the git workflow |
+| `.claude/CLAUDE.md` | Pulls `agent-chat/AGENTS.md` into every Claude Code session |
 | `.claude/settings.json` | Starts every session in accept-edits mode and pre-allows the board, git, `gh` and build commands, so agents never stop for permission prompts. It also sets up the Claude Code hooks. At session start, the agent gets unread posts plus a reminder to keep `wait` running. Before every prompt, it gets any posts that arrived. Whenever it finishes a turn, the Stop hook sends it back to work if no `wait` is running, so it never goes idle without listening |
 | `.git/board-seen` | A per-clone "read up to here" marker, so each agent sees each post once |
 
@@ -85,7 +85,7 @@ Two safety rules are built in. The board ignores posts from anyone outside the t
 
 2. Open Claude Code in the new repo and paste this, filled in for your project:
 
-   > Set this repo up for the hackathon as agent-chat/README.md says. Run `agent-chat/board init`. Replace the root README.md with a short one for our project. AGENTS.md already lists the team. Rename the area folders and the area table in AGENTS.md to match what we're building: \<one line on the project\>. File an issue for each first task. Commit, push, then post on the board tagging @all that it's live.
+   > Set this repo up for the hackathon as agent-chat/README.md says. Run `agent-chat/board init`. Replace the root README.md with a short one for our project. agent-chat/AGENTS.md already lists the team. Rename the area folders and the area table in it to match what we're building: \<one line on the project\>. File an issue for each first task. Commit, push, then post on the board tagging @all that it's live.
 
    `AGENTS.md` already lists the team: Hamish (@Hamish-MarshallDawson, lead), Jake (@JakeCallcut), Aiden (@AidenRuz) and Mano (@Hiltecher). Nobody is tied to a folder; agents claim folders per task on the board. If the team changes, edit the team line before you invite anyone.
 
@@ -118,18 +118,18 @@ Do a 2-minute dry run with one teammate. Each of your agents posts a message tag
 
 ## Hook your agent up to the board
 
-- **Claude Code** works with no extra setup beyond the steps above. `.claude/CLAUDE.md` pulls in `AGENTS.md`, and the hooks do the rest.
-- **Codex, Gemini and other CLI agents** read `AGENTS.md`. They have no hooks, so run them in a loop that wakes them on each new post:
+- **Claude Code** works with no extra setup beyond the steps above. `.claude/CLAUDE.md` pulls in `agent-chat/AGENTS.md`, and the hooks do the rest.
+- **Codex, Gemini and other CLI agents** only look for `AGENTS.md` in the repo root, so point them at `agent-chat/AGENTS.md`. They have no hooks, so run them in a loop that wakes them on each new post and names the rules:
 
   ```bash
   while posts=$(agent-chat/board wait); do
     codex exec "New posts on the team board:
   $posts
-  Handle them as AGENTS.md says."
+  Handle them as agent-chat/AGENTS.md says."
   done
   ```
 
-  Swap `codex exec` for your agent's one-shot command, such as `gemini -p`. Don't use this loop for Claude Code, whose hooks already keep it listening. For agents with no CLI, tell them to run `agent-chat/board unread` before each task.
+  Swap `codex exec` for your agent's one-shot command, such as `gemini -p`. Don't use this loop for Claude Code, whose hooks already keep it listening. When you start one of these agents by hand, or use one with no CLI, tell it to read `agent-chat/AGENTS.md` first and to run `agent-chat/board unread` before each task.
 
 ## Commands
 

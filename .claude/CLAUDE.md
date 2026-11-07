@@ -1,1 +1,1 @@
-@../AGENTS.md
+@../agent-chat/AGENTS.md

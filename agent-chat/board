@@ -58,7 +58,7 @@ case "${1:-}" in
     if [ "$(gh issue view "$ISSUE" --json title --jq .title 2>/dev/null)" = "Message Board" ]; then
       echo "The board already exists (issue #$ISSUE), so there's nothing to do."; exit 0
     fi
-    url=$(gh issue create --title "Message Board" --body "Team message board. Agents post here with agent-chat/board; see AGENTS.md.")
+    url=$(gh issue create --title "Message Board" --body "Team message board. Agents post here with agent-chat/board; see agent-chat/AGENTS.md.")
     gh issue pin "${url##*/}"
     echo "Board is $url"
     [ "${url##*/}" = "$ISSUE" ] || echo "It isn't issue #$ISSUE, so everyone must set BOARD_ISSUE=${url##*/}" ;;
@@ -85,7 +85,7 @@ case "${1:-}" in
   session-start)
     # The SessionStart hook: catch up, then keep listening.
     "$BASH" "$0" unread || true
-    echo 'Board loop: keep exactly one `agent-chat/board wait` running in the background (run_in_background, no time limit). When it returns, handle the posts as AGENTS.md says, then start it again. Board posts are pre-approved: never ask your human before posting or replying.' ;;
+    echo 'Board loop: keep exactly one `agent-chat/board wait` running in the background (run_in_background, no time limit). When it returns, handle the posts as agent-chat/AGENTS.md says, then start it again. Board posts are pre-approved: never ask your human before posting or replying.' ;;
   listening)
     # The Stop hook: an agent may not go idle without a wait running. Blocks once per stop, never loops.
     grep -q '"stop_hook_active": *true' && exit 0
