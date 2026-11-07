@@ -34,6 +34,7 @@ Set in `.env` (Vite reads `.env`, not `.env.example`). Keep the dev server on po
 - If a `seq` number is skipped, it closes the socket and reconnects to get a fresh snapshot.
 - On close, it reconnects with backoff: 1 s, doubling to a 15 s maximum.
 - Ships are one GeoJSON source drawn as a `circle` layer. The source is updated once per snapshot or delta.
+- Clicking a ship opens a popup with name, MMSI, IMO, ship type, speed, course, destination and last-seen time. The destination and numeric ship type come from a `detail` request to the server. The cursor turns into a pointer over ships.
 - The status line (top left) shows connection state, the number of ships shown, and messages per second.
 
 Types follow the backend contract in `src/types.ts`.

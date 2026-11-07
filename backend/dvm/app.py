@@ -171,7 +171,15 @@ async def ws(websocket: WebSocket) -> None:
                           "spoofs": [], "watchlist": {"snapshot_ts": now, "entries": []}, "coverage": [],
                           "stats": hub.stats()})
         while True:
-            await websocket.receive_text()   # shortcut: client messages (subscribe, replay, detail) are ignored until needed
+            # shortcut: only `detail` is handled; `subscribe` and `replay` are ignored until needed.
+            try:
+                msg = json.loads(await websocket.receive_text())
+                mmsi = msg.get("mmsi") if msg.get("type") == "detail" else None
+            except (ValueError, AttributeError):
+                continue
+            if mmsi in hub.live.pos:
+                async with c.lock:
+                    await c.send(hub.live.detail(mmsi))
     except (WebSocketDisconnect, asyncio.TimeoutError, RuntimeError):
         pass
     finally:
