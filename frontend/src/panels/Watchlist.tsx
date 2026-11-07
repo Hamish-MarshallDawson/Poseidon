@@ -10,6 +10,7 @@ import { useNow, useWatchlist } from '../windows/hooks'
 import { EvidenceStrip } from '../windows/ShipCard'
 import { DECISION_LABEL, TYPE_LABEL, fmtInt, minutes, pct, reasonText, riskBand, utcTime, wilson } from '../windows/format'
 import type { WatchlistRow } from '../types'
+import { MAX_SHIPS, briefing, clearSelected, runBriefing, toggleSelected } from '../briefing/store'
 
 // Watchlist summon chip (Figma 66:21907) and the 360-wide drop-in panel (R2/Forecast/Watchlist panel 56:4359).
 // Rows are virtualised: two fixed row heights (normal and "No AIS now"), measured once from the first rendered row.
@@ -109,6 +110,7 @@ function WatchlistPanel() {
   const wl = useWatchlist()
   const now = useNow()
   const entries = useMemo(() => wl?.entries ?? [], [wl])
+  const picked = briefing.use((b) => b.selected)
   const listRef = useRef<HTMLDivElement>(null)
   const [scroll, setScroll] = useState({ top: 0, height: 432 })
   const [heights, setHeights] = useState({ row: 150, noais: 170 })
@@ -167,13 +169,25 @@ function WatchlistPanel() {
           {entries.slice(first, last).map((e, i) => {
             const kind = isNoAis(e) ? 'noais' : 'row'
             return (
-              <div role="listitem" key={e.mmsi}>
+              <div role="listitem" key={e.mmsi} className="wl-item">
+                <input type="checkbox" className="wl-pick" aria-label={`Select ${e.name ?? e.mmsi} for an AI briefing`}
+                  checked={picked.includes(e.mmsi)} disabled={!picked.includes(e.mmsi) && picked.length >= MAX_SHIPS}
+                  style={{ top: offsets[first + i] + 8 }} onChange={() => toggleSelected(e.mmsi)} />
                 <Row e={e} now={now} y={offsets[first + i]} measure={measured[kind] ? undefined : measure(kind)} />
               </div>
             )
           })}
         </div>
       </div>
+      {picked.length > 0 && (
+        <div className="wl-brief">
+          <span>{picked.length} selected{picked.length >= MAX_SHIPS ? ' (most)' : ''}</span>
+          <span className="wl-brief-actions">
+            <Button className="btn-small" onClick={clearSelected}>Clear</Button>
+            <Button className="btn-small" variant="filled" onClick={() => runBriefing(picked)}>Brief {picked.length} {picked.length === 1 ? 'ship' : 'ships'}</Button>
+          </span>
+        </div>
+      )}
       <TestSummary />
     </div>
   )
