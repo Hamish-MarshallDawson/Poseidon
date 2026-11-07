@@ -1,0 +1,46 @@
+"""POST /briefing and POST /briefing/speech. Mount with: app.include_router(make_router(hub, require_login))."""
+from __future__ import annotations
+
+import time
+
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel, Field
+
+from dvm.briefing import gather, gemini, voice
+
+
+class BriefingRequest(BaseModel):
+    mmsis: list[int] = Field(min_length=1, max_length=gather.MAX_SHIPS)
+
+
+class SpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=voice.MAX_CHARS)
+
+
+def make_router(hub, require_login) -> APIRouter:
+    """`hub` has .live (a dvm.live.Live); `require_login` is app.py's dependency. Passed in so this module never imports app."""
+    router = APIRouter(dependencies=[Depends(require_login)])
+
+    @router.post("/briefing")
+    async def briefing(req: BriefingRequest) -> dict:
+        now = int(time.time() * 1000)
+        try:
+            facts = gather.gather(hub.live, req.mmsis, now)
+        except KeyError as e:
+            raise HTTPException(404, f"ship {e.args[0]} is not in the live picture")
+        try:
+            summary = await gemini.summarise(facts)
+        except gemini.BriefingError as e:
+            raise HTTPException(e.status, str(e))
+        return {"generated_at": now, "model": gemini.MODEL, "mmsis": [s["vessel"]["mmsi"] for s in facts["ships"]],
+                "facts": facts, "summary": summary.model_dump(), "voice_available": voice.available()}
+
+    @router.post("/briefing/speech")
+    async def speech(req: SpeechRequest) -> Response:
+        try:
+            audio = await voice.speak(req.text)
+        except gemini.BriefingError as e:
+            raise HTTPException(e.status, str(e))
+        return Response(audio, media_type="audio/mpeg")
+
+    return router
