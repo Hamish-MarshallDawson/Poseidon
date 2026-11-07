@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react'
 import { Marker, type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl'
 import { adapter } from '../data/index'
 import { useMapLayer } from '../map/context'
 import { ui } from '../store/ui'
 import { vessels } from '../store/vessels'
+import { onTokensChange, readToken } from '../theme/tokens'
 import { shownNow } from '../timeline/replay'
 import { fmtDuration } from '../timeline/format'
 import type { GapEvent, Outcome } from '../types'
@@ -18,13 +20,17 @@ import './forecast.css'
 export function ForecastOverlay() {
   const on = ui.use((s) => s.layers.forecast)
   const checkOpen = forecastUi.use((s) => s.checkOpen)
-  useMapLayer((map) => (on ? setup(map) : undefined), [on])
+  // Colours are baked into paint and canvas images, so a theme, signals or text-size change rebuilds the layers.
+  const [modes, setModes] = useState(0)
+  useEffect(() => onTokensChange(() => setModes((n) => n + 1)), [])
+  useMapLayer((map) => (on ? setup(map) : undefined), [on, modes])
   return checkOpen ? <ForecastCheck /> : null
 }
 
 const H = 3_600_000
 const EMPTY = { type: 'FeatureCollection' as const, features: [] }
-const tok = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--dvm-${name}`).trim() || '#888'
+const tok = (name: string) => readToken(name) || '#888'
+const IMAGES = ['fc-hatch-dark', 'fc-hatch-grey', 'fc-cross-dark', 'fc-cross-grey', 'fc-out-hit', 'fc-out-miss', 'fc-out-censored', 'fc-chip-1', 'fc-chip-2', 'fc-chip-3', 'fc-chip-4']
 
 // Small canvas images (2x) for the map: hatch patterns, crosses, outcome squares, tag chips with a risk stripe.
 function image(w: number, h: number, draw: (c: CanvasRenderingContext2D) => void): ImageData {
@@ -84,9 +90,9 @@ function setup(map: MapLibreMap): () => void {
   map.addLayer({ id: 'fc-tags', type: 'symbol', source: 'fc-tags',
     layout: {
       'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-anchor': 'bottom-left',
-      'text-offset': [1, -1], 'text-allow-overlap': true, 'text-padding': 0,
+      'text-offset': [1, -1], 'text-allow-overlap': true, 'text-padding': 0, 'text-max-width': 40,
       'icon-image': ['concat', 'fc-chip-', ['to-string', ['get', 'band']]], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 1, 8],
-      'icon-anchor': 'bottom-left', 'icon-offset': [11, -11], 'icon-allow-overlap': true, 'symbol-sort-key': ['get', 'rank'],
+      'icon-allow-overlap': true, 'symbol-sort-key': ['get', 'rank'],
     },
     paint: { 'text-color': ink, 'text-halo-color': tok('bg-panel'), 'text-halo-width': 1 },
   })
@@ -126,9 +132,11 @@ function setup(map: MapLibreMap): () => void {
     for (const g of gaps) {
       let l = labels.get(g.id)
       if (!l) {
-        const el = document.createElement('div')
+        // MapLibre owns the marker element's inline opacity, so the label (and its hidden state) is a child of it.
+        const wrap = document.createElement('div')
+        const el = wrap.appendChild(document.createElement('div'))
         el.className = `fc-gap-label ${kindOf(g)}`
-        l = { m: new Marker({ element: el, anchor: 'left', offset: [14, 0] }).setLngLat([g.last_lon, g.last_lat]).addTo(map), el }
+        l = { m: new Marker({ element: wrap, anchor: 'left', offset: [14, 0] }).setLngLat([g.last_lon, g.last_lat]).addTo(map), el }
         labels.set(g.id, l)
       }
       const r = ghostRadius(g, t)
@@ -142,15 +150,23 @@ function setup(map: MapLibreMap): () => void {
     }
   }
   const kindOf = (g: GapEvent) => (g.coverage_flag === 'deliberate_candidate' ? 'dark' : 'grey')
+  // Each rAF, but setData (a worker re-tile) only when a visible ghost grew by half a pixel or the visible set changed:
+  // at 1x a 10 kn ghost grows a pixel a minute at z8, so sub-pixel updates are invisible and cost ~10 fps at 25k ships.
   let raf = 0
+  let drawn = new Map<string, number>()
   const tick = () => {
     raf = requestAnimationFrame(tick)
-    if (!gaps.length || document.hidden) return
+    if (document.hidden) return
+    if (!gaps.length) { if (drawn.size) { drawn = new Map(); map.getSource<GeoJSONSource>('fc-ghost')?.setData(EMPTY) } return }
     const t = shownNow()
     const b = map.getBounds()
-    const features = gaps.map((g) => ({ g, r: ghostRadius(g, t) }))
+    const vis = gaps.map((g) => ({ g, r: ghostRadius(g, t) }))
       .filter(({ g, r }) => { const d = r / 111_320 * 2; return g.last_lat + d > b.getSouth() && g.last_lat - d < b.getNorth() && g.last_lon + d * 2 > b.getWest() && g.last_lon - d * 2 < b.getEast() })
-      .map(({ g, r }) => ({ type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id }, geometry: { type: 'Polygon' as const, coordinates: [circle(g.last_lon, g.last_lat, r)] } }))
+    const mpp = (40_075_016 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / (512 * 2 ** map.getZoom())   // metres per CSS px
+    const same = vis.length === drawn.size && vis.every(({ g, r }) => { const r0 = drawn.get(g.id); return r0 !== undefined && Math.abs(r - r0) < mpp / 2 })
+    if (same) return
+    drawn = new Map(vis.map(({ g, r }) => [g.id, r]))
+    const features = vis.map(({ g, r }) => ({ type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id }, geometry: { type: 'Polygon' as const, coordinates: [circle(g.last_lon, g.last_lat, r)] } }))
     map.getSource<GeoJSONSource>('fc-ghost')?.setData({ type: 'FeatureCollection', features })
   }
   raf = requestAnimationFrame(tick)
@@ -192,5 +208,6 @@ function setup(map: MapLibreMap): () => void {
     if (!map.style) return                                   // style already torn down by a swap
     for (const id of ['fc-tags', 'fc-out', 'fc-ghost-cross', 'fc-ghost-edge', 'fc-ghost-hatch', 'fc-ghost-fill']) if (map.getLayer(id)) map.removeLayer(id)
     for (const id of ['fc-ghost', 'fc-ghost-pt', 'fc-tags', 'fc-out']) if (map.getSource(id)) map.removeSource(id)
+    for (const id of IMAGES) if (map.hasImage(id)) map.removeImage(id)
   }
 }

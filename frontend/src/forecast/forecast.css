@@ -1,5 +1,3 @@
-@import '../timeline/tokens-fallback.css';
-
 /* Gap label chip (R2/Forecast/Gap label): bg/panel, a 3 px stripe in ship/dark (or text/muted in a coverage hole). */
 .fc-gap-label {
   max-width: 280px; padding: 4px 8px 5px 10px; box-sizing: border-box; pointer-events: none;

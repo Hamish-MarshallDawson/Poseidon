@@ -88,12 +88,16 @@ export function ScrubBar() {
   }, [])
 
   // Pointer: click seeks; drag scrubs locally with a trailing seek after 150 ms rest and a final seek on release.
-  const drag = useRef<{ id: number; rest?: number } | null>(null)
+  // Gap spans cover long stretches of the line (an open gap runs to now), so a drag may start on one: moving scrubs,
+  // a press without movement is a click on that gap. Point markers are small and keep their own click.
+  const drag = useRef<{ id: number; rest?: number; x0: number; moved: boolean; gap: HTMLElement | null } | null>(null)
   const onPointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('.tl-marker')) return
+    const hit = (e.target as HTMLElement).closest<HTMLElement>('.tl-marker')
+    if (e.button !== 0 || (hit && !hit.classList.contains('tl-gap'))) return
+    if (hit) e.preventDefault()                               // no focus ring jump; the click is replayed on release
     trackRef.current!.setPointerCapture(e.pointerId)
-    drag.current = { id: e.pointerId }
-    ui.set((s) => ({ time: { ...s.time, dragging: true, dragT: xToT(e.clientX) } }))
+    drag.current = { id: e.pointerId, x0: e.clientX, moved: !hit, gap: hit }
+    if (!hit) ui.set((s) => ({ time: { ...s.time, dragging: true, dragT: xToT(e.clientX) } }))
   }
   const onPointerMove = (e: React.PointerEvent) => {
     const t = xToT(e.clientX)
@@ -104,6 +108,11 @@ export function ScrubBar() {
     }
     const d = drag.current
     if (!d || d.id !== e.pointerId) return
+    if (!d.moved) {
+      if (Math.abs(e.clientX - d.x0) < 3) return
+      d.moved = true
+      ui.set((s) => ({ time: { ...s.time, dragging: true } }))
+    }
     ui.set((s) => ({ time: { ...s.time, dragT: t } }))
     window.clearTimeout(d.rest)
     d.rest = window.setTimeout(() => replay.seek(t), 150)
@@ -113,6 +122,7 @@ export function ScrubBar() {
     if (!d || d.id !== e.pointerId) return
     window.clearTimeout(d.rest)
     drag.current = null
+    if (!d.moved) { if (commit) d.gap?.click(); return }      // a press on a gap span: that gap's own action
     const t = xToT(e.clientX)
     ui.set((s) => ({ time: { ...s.time, dragging: false } }))
     if (commit) replay.seek(t)
@@ -154,6 +164,8 @@ export function ScrubBar() {
       const s = ui.get()
       const [small, big] = stepsFor(spanOf(viewRef.current))
       const shown = s.time.dragT ?? (s.feed.mode === 'live' ? Date.now() : shownNow())
+      // Steps belong to the focused slider; elsewhere arrows pan the map and Home/End scroll lists.
+      if (!onSlider && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
       switch (e.key) {
         case ' ': replay.toggle(); break
         case 'l': case 'L': replay.live(); break
@@ -256,7 +268,10 @@ function Markers({ view, width }: { view: View; width: number }) {
     }
     const t0 = window.setTimeout(load, 300)
     const id = window.setInterval(load, 15_000)
-    return () => { dead = true; window.clearTimeout(t0); window.clearInterval(id) }
+    // A snapshot (first data, a seek, back to live) can bring new events: reload soon after it, coalesced.
+    let soon: number | undefined
+    const off = vessels.subscribe((_c, _r, f) => { if (f.type === 'snapshot') { window.clearTimeout(soon); soon = window.setTimeout(load, 300) } })
+    return () => { dead = true; off(); window.clearTimeout(t0); window.clearTimeout(soon); window.clearInterval(id) }
   }, [rangeKey])
 
   if (!width) return null

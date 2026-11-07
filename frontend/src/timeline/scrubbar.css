@@ -1,5 +1,3 @@
-@import './tokens-fallback.css';
-
 /* Simplified floating scrub bar (R2/Timeline/Bar in the map-first dashboard): centred at the bottom, 960 x 48 at 1440. */
 .tl-bar {
   --tl-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
