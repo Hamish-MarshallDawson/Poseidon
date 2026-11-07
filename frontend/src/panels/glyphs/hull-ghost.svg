@@ -1,0 +1,8 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="12" height="32" viewBox="0 0 12 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="hull">
+<mask id="stroke0_0_55" fill="white">
+<path d="M6 0.5C8.75 2 10.5 5 10.5 9V30C10.5 31 10 31.5 9 31.5H3C2 31.5 1.5 31 1.5 30V9C1.5 5 3.25 2 6 0.5ZM5.4 6H6.6V23H5.4V6ZM2.5 24.5H9.5V25.7H2.5V24.5Z" fill-rule="evenodd" clip-rule="evenodd"/>
+</mask>
+<path id="silhouette" d="M6 0.5C8.75 2 10.5 5 10.5 9V30C10.5 31 10 31.5 9 31.5H3C2 31.5 1.5 31 1.5 30V9C1.5 5 3.25 2 6 0.5ZM5.4 6H6.6V23H5.4V6ZM2.5 24.5H9.5V25.7H2.5V24.5Z" stroke-width="2" stroke="#F26AA0" mask="url(#stroke0_0_55)"/>
+</g>
+</svg>

@@ -1,0 +1,172 @@
+/* Ship windows (Figma 66:21898) and leader lines. Only transform and opacity animate; the springs write them. */
+.dvm-overlay {
+  --dvm-font-ui: 'Barlow Semi Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --dvm-font-data: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;                 /* the map stays usable between overlay pieces */
+  font-family: var(--dvm-font-ui);
+  color: var(--dvm-text-primary);
+}
+:where(.dvm-overlay > *) { pointer-events: auto; }
+:where(.dvm-overlay button) { font: inherit; color: inherit; cursor: pointer; }
+.dvm-overlay :focus-visible { outline: 2px solid var(--dvm-accent-default); outline-offset: 2px; }
+
+.leader {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  overflow: visible;
+}
+.leader line { stroke: var(--dvm-ship-selected); stroke-width: 1px; }
+.leader circle { fill: var(--dvm-ship-selected); }
+
+.sw-layer { position: fixed; inset: 0; z-index: 20; pointer-events: none; isolation: isolate; }
+.sw {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--dvm-bg-panel);
+  border: 1px solid var(--dvm-border-default);
+  pointer-events: auto;
+  will-change: transform, opacity;
+  contain: layout paint;
+}
+/* Lifted while dragging: 2 px border/strong (outline adds the second px without moving the layout). */
+.sw[data-lifted] { border-color: var(--dvm-border-strong); outline: 1px solid var(--dvm-border-strong); outline-offset: 0; }
+.sw[data-lifted] .sw-bar { background: var(--dvm-accent-subtle); cursor: grabbing; }
+
+.sw-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px 6px 8px;
+  background: var(--dvm-bg-raised);
+  border-bottom: 1px solid var(--dvm-border-subtle);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.sw-pill { width: 173px; }
+.sw-pill .sw-bar { border-bottom: 0; background: transparent; cursor: default; }
+.sw-handle { flex: none; display: block; }
+.badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  background: var(--dvm-ship-selected);
+  color: var(--dvm-text-on-accent);
+  font: 600 var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data);
+}
+.sw-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; white-space: nowrap; }
+.sw-name { font-weight: 600; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.sw-type { color: var(--dvm-text-secondary); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
+.sw-pillname {
+  width: 56px;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--dvm-size-label);
+  line-height: var(--dvm-line-label);
+}
+.sw-btn {
+  flex: none;
+  padding: 2px 6px;
+  border: 0;
+  background: none;
+  color: var(--dvm-text-secondary);
+  font: var(--dvm-size-body) / var(--dvm-line-body) var(--dvm-font-data);
+}
+.sw-btn:hover { color: var(--dvm-text-primary); }
+
+/* Ship card (R2/Forecast/Ship card 56:4598): 320 wide, bg/panel, no border of its own. */
+.sc { width: 320px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--dvm-bg-panel); }
+.sc-head { display: flex; align-items: center; gap: 8px; }
+.sc-name { flex: 1; margin: 0; min-width: 0; font-weight: 600; font-size: var(--dvm-size-title); line-height: var(--dvm-line-title); overflow-wrap: anywhere; }
+.sc-chip, .sc-asof {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--dvm-border-default);
+  border-radius: 2px;
+  color: var(--dvm-text-secondary);
+  font: 500 var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.sc-chip.noais { border-color: var(--dvm-ship-dark); color: var(--dvm-ship-dark); }
+.sc-asof { border-color: var(--dvm-text-primary); color: var(--dvm-text-primary); }
+.sc-sub { margin: 0; color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.sc-timer { display: flex; flex-direction: column; font-family: var(--dvm-font-data); }
+.sc-clock { font-size: var(--dvm-size-display); line-height: var(--dvm-line-display); font-variant-numeric: tabular-nums; }
+.is-noais .sc-clock { color: var(--dvm-ship-dark); }
+.sc-caption { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
+.sc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.sc-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sc-label { color: var(--dvm-text-muted); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.sc-value { font: var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); }
+.sc-forecast {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border-radius: 2px;
+  background: var(--dvm-bg-raised);
+  font-size: var(--dvm-size-label);
+  line-height: var(--dvm-line-label);
+}
+.sc-forecast b { font-weight: 600; }
+.sc-forecast span { color: var(--dvm-text-secondary); }
+.sc-actions { display: flex; gap: 8px; }
+
+/* Evidence strip (17:32): source, confidence pips, last heard. */
+.ev {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--dvm-border-subtle);
+  border-radius: 2px;
+  background: var(--dvm-bg-raised);
+  font-family: var(--dvm-font-data);
+  white-space: nowrap;
+}
+.ev-src { color: var(--dvm-text-muted); font-size: 10px; line-height: 14px; letter-spacing: 0.4px; }
+.ev-div { width: 1px; height: 14px; background: var(--dvm-border-subtle); }
+.ev-pips { display: flex; gap: 3px; }
+.ev-pips i { width: 14px; height: 4px; box-sizing: border-box; border: 1px solid var(--dvm-text-muted); }
+.ev-pips i.on { border: 0; background: var(--dvm-text-secondary); }
+.ev-conf { color: var(--dvm-text-secondary); font-weight: 600; font-size: 11px; line-height: 14px; letter-spacing: 0.5px; }
+.ev-ts { font-size: 12px; line-height: 16px; }
+
+/* Buttons shared by cards and panels (local stand-in for src/ui/Button until the tokens branch merges). */
+.btn {
+  padding: 6px 12px;
+  border: 1px solid var(--dvm-text-muted);
+  border-radius: 2px;
+  background: none;
+  font-weight: 500;
+  font-size: var(--dvm-size-label);
+  line-height: var(--dvm-line-label);
+  white-space: nowrap;
+}
+.btn:hover { background: var(--dvm-bg-raised); }
+.btn-accent { border-color: var(--dvm-accent-default); background: var(--dvm-accent-default); color: var(--dvm-text-on-accent); }
+.btn-accent:hover { background: var(--dvm-accent-default); filter: brightness(1.08); }
+.btn-accent[aria-pressed='true'] { background: none; color: var(--dvm-accent-default); }
+.btn-small { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; }
+kbd { color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sw { will-change: auto; }
+}
