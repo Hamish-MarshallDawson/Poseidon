@@ -28,23 +28,20 @@ export function openShipWindow(mmsi: number, at?: { x: number; y: number }): voi
   const { windows } = ui.get()
   const existing = windows.find((w) => w.mmsi === mmsi)
   requestDetail(mmsi)
+  const open = windows.filter((w) => !w.minimised && w.mmsi !== mmsi)
+  // A 5th open window (new or restored) minimises the one used least recently, so it moves to a pill instead of vanishing.
+  const oldest = open.length >= MAX_OPEN ? open.reduce((a, b) => (b.z < a.z ? b : a)) : null
+  const next = oldest ? windows.map((w) => (w === oldest ? { ...w, minimised: true } : w)) : windows
   if (existing) {
     // Already open: bring it forward and restore it, never open a second one.
     return void ui.set({
-      windows: windows.map((w) => (w.mmsi === mmsi ? { ...w, minimised: false, z: topZ(windows) + 1 } : w)),
+      windows: next.map((w) => (w.mmsi === mmsi ? { ...w, minimised: false, z: topZ(windows) + 1 } : w)),
       frontMmsi: mmsi,
     })
   }
   const ship = at ?? shipScreenPoint(mmsi) ?? { x: innerWidth / 2 - WINDOW_W, y: innerHeight / 2 }
-  const open = windows.filter((w) => !w.minimised)
-  const pos = placeWindow(ship, open, innerWidth, innerHeight)
+  const pos = placeWindow(ship, open.filter((w) => w !== oldest), innerWidth, innerHeight)
   openOrigins.set(mmsi, ship)
-  let next = windows
-  if (open.length >= MAX_OPEN) {
-    // A 5th window minimises the one used least recently, so it moves to a pill instead of vanishing.
-    const oldest = open.reduce((a, b) => (b.z < a.z ? b : a))
-    next = windows.map((w) => (w === oldest ? { ...w, minimised: true } : w))
-  }
   const win: ShipWindow = { mmsi, letter: nextWindowLetter(windows), minimised: false, ...pos, z: topZ(windows) + 1 }
   ui.set({ windows: [...next, win], frontMmsi: mmsi })
 }

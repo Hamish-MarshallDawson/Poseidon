@@ -1,7 +1,5 @@
 /* Ship windows (Figma 66:21898) and leader lines. Only transform and opacity animate; the springs write them. */
 .dvm-overlay {
-  --dvm-font-ui: 'Barlow Semi Condensed', 'Arial Narrow', system-ui, sans-serif;
-  --dvm-font-data: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   position: fixed;
   inset: 0;
   z-index: 10;
@@ -51,7 +49,7 @@
   user-select: none;
   touch-action: none;
 }
-.sw-pill { width: 173px; }
+.sw-pill { width: 173px; box-sizing: border-box; }
 .sw-pill .sw-bar { border-bottom: 0; background: transparent; cursor: default; }
 .sw-handle { flex: none; display: block; }
 .badge {
@@ -74,6 +72,7 @@
   background: none;
   overflow: hidden;
   white-space: nowrap;
+  text-overflow: ellipsis;
   text-align: left;
   font-weight: 600;
   font-size: var(--dvm-size-label);
@@ -149,23 +148,9 @@
 .ev-conf { color: var(--dvm-text-secondary); font-weight: 600; font-size: 11px; line-height: 14px; letter-spacing: 0.5px; }
 .ev-ts { font-size: 12px; line-height: 16px; }
 
-/* Buttons shared by cards and panels (local stand-in for src/ui/Button until the tokens branch merges). */
-.btn {
-  padding: 6px 12px;
-  border: 1px solid var(--dvm-text-muted);
-  border-radius: 2px;
-  background: none;
-  font-weight: 500;
-  font-size: var(--dvm-size-label);
-  line-height: var(--dvm-line-label);
-  white-space: nowrap;
-}
-.btn:hover { background: var(--dvm-bg-raised); }
-.btn-accent { border-color: var(--dvm-accent-default); background: var(--dvm-accent-default); color: var(--dvm-text-on-accent); }
-.btn-accent:hover { background: var(--dvm-accent-default); filter: brightness(1.08); }
-.btn-accent[aria-pressed='true'] { background: none; color: var(--dvm-accent-default); }
-.btn-small { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; }
-kbd { color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
+/* Compact button variant for panel headers and the focus bar (on top of src/ui Button). */
+.dvm-btn.btn-small { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; }
+.dvm-overlay kbd { color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
 
 @media (prefers-reduced-motion: reduce) {
   .sw { will-change: auto; }

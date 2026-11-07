@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { ui } from '../store/ui'
+import { Button } from '../ui'
 import { details } from './detail'
 import { useGap, useNow, useVessel, useWatchlist } from './hooks'
 import { DECISION_LABEL, TYPE_LABEL, fmtMmsi, hms, utcTime } from './format'
@@ -100,10 +101,10 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
       </div>
       <EvidenceStrip ts={v.last_ts} now={now} />
       <div className="sc-actions">
-        <button type="button" className="btn" onClick={onFocus}>Track history</button>
-        <button type="button" className="btn btn-accent" aria-pressed={inReview} onClick={() => setInReview((x) => !x)}>
+        <Button onClick={onFocus}>Track history</Button>
+        <Button variant={inReview ? 'outline' : 'filled'} aria-pressed={inReview} onClick={() => setInReview((x) => !x)}>
           {inReview ? 'Added to review' : 'Add to review'}
-        </button>
+        </Button>
       </div>
     </div>
   )

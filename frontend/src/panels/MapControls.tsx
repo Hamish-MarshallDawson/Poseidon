@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ui, type UIState } from '../store/ui'
+import { Switch } from '../ui'
 import { useMapInstance } from '../map/context'
 import { reducedMotion, usePresence } from '../motion'
 import { fmtInt } from '../windows/format'
@@ -32,12 +33,8 @@ function LayersPanel() {
       </div>
       <span className="kicker ly-head">Map</span>
       {LAYERS.map(({ key, label, note }) => (
-        <button key={key} type="button" role="switch" aria-checked={layers[key]} className="ly-switch"
-          onClick={() => ui.set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } }))}>
-          <span className={`lamp ${layers[key] ? 'on' : ''}`} aria-hidden />
-          <span className="ly-text"><span className="ly-label">{label}</span><span className="ly-note">{note}</span></span>
-          <span className="ly-state">{layers[key] ? 'on' : 'off'}</span>
-        </button>
+        <Switch key={key} checked={layers[key]} label={label} hint={note}
+          onChange={(on) => ui.set((s) => ({ layers: { ...s.layers, [key]: on } }))} />
       ))}
     </div>
   )
@@ -76,7 +73,7 @@ function ScaleBar() {
 export function MapControls({ onLogout }: { onLogout?: () => void }) {
   const map = useMapInstance()
   const layersOpen = ui.use((s) => s.layersOpen)
-  const pop = usePresence(layersOpen, { y: -8, opacity: 0 })
+  const { mounted, attach } = usePresence(layersOpen, { y: -8, opacity: 0 })
   const zoom = (by: number) => map?.easeTo({ zoom: map.getZoom() + by, duration: reducedMotion() ? 0 : 250 })
   return (
     <>
@@ -88,7 +85,7 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
         </button>
         {onLogout && <button type="button" className="chip chip-quiet" onClick={onLogout}>Log out</button>}
       </div>
-      {pop.mounted && <div className="layers-wrap" ref={pop.attach}><LayersPanel /></div>}
+      {mounted && <div className="layers-wrap" ref={attach}><LayersPanel /></div>}
       <div className="zoom" role="group" aria-label="Zoom">
         <button type="button" aria-label="Zoom in" onClick={() => zoom(1)}>+</button>
         <button type="button" aria-label="Zoom out" onClick={() => zoom(-1)}>−</button>

@@ -1,5 +1,7 @@
-import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ui } from '../store/ui'
+import { onTokensChange } from '../theme/tokens'
+import { Button, Kbd } from '../ui'
 import { vessels } from '../store/vessels'
 import { mapStore } from '../map/context'
 import { reducedMotion, usePresence } from '../motion'
@@ -73,7 +75,7 @@ const Row = memo(function Row({ e, now, y, measure }: { e: WatchlistRow; now: nu
           </span>
         )}
         <span className="wl-reasons">{reasonText(e.reason_codes)}</span>
-        {v && <EvidenceStrip ts={v.last_ts} now={now} />}
+        <span className="wl-ev">{v && <EvidenceStrip ts={v.last_ts} now={now} />}</span>
       </span>
     </button>
   )
@@ -130,6 +132,7 @@ function WatchlistPanel() {
 
   // Each kind's height is measured once from its first rendered row (text size modes change it).
   const [measured, setMeasured] = useState({ row: false, noais: false })
+  useEffect(() => onTokensChange(() => setMeasured({ row: false, noais: false })), [])
   const measure = (kind: 'row' | 'noais') => (el: HTMLElement | null) => {
     if (!el) return
     const h = el.offsetHeight
@@ -154,7 +157,7 @@ function WatchlistPanel() {
       <div className="wl-header">
         <div className="wl-titlerow">
           <h2 id="wl-title">Ranked for review · next 6 h</h2>
-          <button type="button" className="btn btn-small" onClick={() => ui.set({ watchlistOpen: false })}>Close <kbd>Esc</kbd></button>
+          <Button variant="ghost" className="btn-small" onClick={() => ui.set({ watchlistOpen: false })}>Close <Kbd>Esc</Kbd></Button>
         </div>
         <p className="wl-explain">Chance a ship goes silent with reception normal nearby, within 6 h. Behaviour only: list matches show as reasons, never as inputs.</p>
         <p className="wl-meta">{wl ? `Forecast ${utcTime(wl.snapshot_ts, false)} · ${fmtInt(entries.length)} ships ranked` : 'No forecast received yet'}</p>
@@ -178,6 +181,6 @@ function WatchlistPanel() {
 
 export function Watchlist() {
   const open = ui.use((s) => s.watchlistOpen)
-  const p = usePresence(open, { y: -12, opacity: 0 })
-  return p.mounted ? <div className="watchlist-wrap" ref={p.attach}><WatchlistPanel /></div> : null
+  const { mounted, attach } = usePresence(open, { y: -12, opacity: 0 })
+  return mounted ? <div className="watchlist-wrap" ref={attach}><WatchlistPanel /></div> : null
 }

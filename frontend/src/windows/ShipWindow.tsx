@@ -89,6 +89,7 @@ const ShipWindowView = memo(function ShipWindowView({ w, slot, exiting, onExited
       aria-modal="false"
       aria-labelledby={titleId}
       data-mmsi={w.mmsi}
+      inert={exiting || undefined}
       style={{ zIndex: w.z }}
       onPointerDownCapture={() => bringToFront(w.mmsi)}
       onFocusCapture={() => bringToFront(w.mmsi)}

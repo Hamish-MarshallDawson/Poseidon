@@ -8,7 +8,6 @@ import { FocusBar } from '../panels/FocusBar'
 import { WindowLayer } from './ShipWindow'
 import { LeaderLines } from './Leader'
 import { clampWindows, closeShipWindow } from './open'
-import './tokens-fallback.css'
 import '../panels/panels.css'
 import './windows.css'
 

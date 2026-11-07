@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button, Kbd } from '../ui'
 import { ui, type FocusRelation } from '../store/ui'
 import { useVessel } from '../windows/hooks'
 import { TYPE_LABEL, fmtMmsi } from '../windows/format'
@@ -47,9 +48,9 @@ export function FocusBar() {
         {related.length === 0 && <span className="fb-none">No related ships shown</span>}
         {[...counts].map(([reason, n]) => <span key={reason} className="reason-chip">{REASON_LABEL[reason]} {n}</span>)}
       </span>
-      <button type="button" className="btn btn-small" onClick={() => ui.set({ focusMmsi: null, focusRelated: [] })}>
-        Leave focus <kbd>Esc</kbd>
-      </button>
+      <Button className="btn-small" onClick={() => ui.set({ focusMmsi: null, focusRelated: [] })}>
+        Leave focus <Kbd>Esc</Kbd>
+      </Button>
     </div>
   )
 }

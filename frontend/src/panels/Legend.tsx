@@ -24,7 +24,7 @@ import noReceiver from './glyphs/no-receiver.svg'
 
 // One masked symbol at its Figma position inside the 48 × 40 water tile.
 function G({ src, color, s }: { src: string; color: string; s: CSSProperties }) {
-  return <i className="g" style={{ ...s, background: `var(${color})`, maskImage: `url(${src})`, WebkitMaskImage: `url(${src})` }} />
+  return <i className="g" style={{ ...s, background: `var(${color})`, maskImage: `url("${src}")`, WebkitMaskImage: `url("${src}")` }} />
 }
 const HULL = { left: 17, top: 3, width: 12, height: 32 }
 const MARK = { left: 17, top: 3, width: 12, height: 32 }
@@ -79,7 +79,7 @@ function LegendPanel() {
             <G src={cross} color="--dvm-ship-dark" s={{ left: 17.3, top: 13.3, width: 11.4, height: 11.4 }} />
           </Tile>
         </Entry>
-        <Entry label="Chance, next 6 h">
+        <Entry label={'Chance, next 6\u00a0h'}>
           <Tile><span className="g-tag"><i className="risk-3" />3</span></Tile>
         </Entry>
         <Entry label="Stacked ships">
@@ -104,7 +104,7 @@ function LegendPanel() {
 
 export function Legend() {
   const open = ui.use((s) => s.legendOpen)
-  const p = usePresence(open, { y: 12, opacity: 0 })
+  const { mounted, attach } = usePresence(open, { y: 12, opacity: 0 })
   return (
     <>
       <button type="button" className={`legend-toggle ${open ? 'on' : ''}`} aria-expanded={open} aria-controls="legend-panel"
@@ -113,7 +113,7 @@ export function Legend() {
         Legend
         <span className="lamp" aria-hidden />
       </button>
-      {p.mounted && <div className="legend-wrap" ref={p.attach}><LegendPanel /></div>}
+      {mounted && <div className="legend-wrap" ref={attach}><LegendPanel /></div>}
     </>
   )
 }

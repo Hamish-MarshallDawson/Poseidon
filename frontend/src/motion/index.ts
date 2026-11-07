@@ -1,3 +1,4 @@
+import { themeStore } from '../theme/theme'
 import { useCallback, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 
 // The shared animation system: hand-rolled springs on one requestAnimationFrame loop. Only transform
@@ -11,10 +12,10 @@ export const springs = {
   settle: { stiffness: 700, damping: 40 },   // the lift and settle around a drag
 } satisfies Record<string, SpringConfig>
 
-// prefers-reduced-motion: every spring jumps straight to its target.
-const reduceQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null
+// Reduced motion: every spring jumps straight to its target. The theme store resolves the user's Display-menu pick
+// over the system prefers-reduced-motion setting, so both turn it on.
 export function reducedMotion(): boolean {
-  return reduceQuery?.matches ?? false
+  return themeStore.get().reducedMotion
 }
 
 // One rAF loop for every spring, drag and overlay. A tick returns true to keep running.
