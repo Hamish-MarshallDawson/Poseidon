@@ -16,6 +16,10 @@ Then open http://localhost:5173.
 
 Other scripts: `npm run build` (type-checks, then builds to `dist/`), `npm run preview`, `npm run lint`.
 
+**Smoke test** (`npm run smoke`): logs in through Auth0 with a test user, then fails on a "Worker failed to load" console error, no MapLibre worker, no basemap tiles, or no live ships. It needs the dev server and backend running, plus `AUTH0_TEST_EMAIL` and `AUTH0_TEST_PASSWORD` in the environment. It drives a headed installed Edge (`SMOKE_BROWSER` to change it), because headless Chromium here has no WebGL2.
+
+**MapLibre worker:** `src/App.tsx` calls `setWorkerUrl` with the worker file imported as `?url`. Without it, Vite's dependency pre-bundling moves MapLibre into `node_modules/.vite/deps`, where its relative worker URL breaks: the map goes black with "Worker failed to load". If it happens anyway, restart with `npm run dev -- --force`.
+
 ## Environment variables
 
 Set in `.env` (Vite reads `.env`, not `.env.example`). Keep the dev server on port 5173: it is the callback, logout and web origin URL registered in Auth0.

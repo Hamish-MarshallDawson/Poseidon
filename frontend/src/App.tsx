@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { Map as MapLibreMap, Popup, type GeoJSONSource } from 'maplibre-gl'
+import { Map as MapLibreMap, Popup, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+// MapLibre 6 finds its worker at ./maplibre-gl-worker.mjs next to its own module. Once Vite pre-bundles it into
+// node_modules/.vite/deps that file isn't there ("Worker failed to load", a black map), so point at it explicitly.
+// The worker is self-contained, so the ?url asset works in dev and in production builds.
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+
+setWorkerUrl(maplibreWorkerUrl)
 import type { ServerMsg, VesselView } from './types'
 import { applyMessage, toFeatureCollection } from './vessels'
 import { popupContent, type StaticDetail } from './popup'
