@@ -1,0 +1,5 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Ship overlay">
+<path id="silhouette" d="M2 14V2H14M66 2H78V14M78 66V78H66M14 78H2V66" stroke-width="4" stroke="#86C9E8"/>
+</g>
+</svg>

@@ -1,6 +1,7 @@
+/* Bottom right, above the scale bar: the top-right corner holds the watchlist chip and the Layers button. */
 .dvm-theme-menu {
   position: fixed;
-  top: 16px;
+  bottom: 48px;
   right: 16px;
   z-index: 20;
 }
@@ -9,7 +10,7 @@
 
 .dvm-theme-menu__panel {
   position: absolute;
-  top: calc(100% + 8px);
+  bottom: calc(100% + 8px);
   right: 0;
   width: 260px;
   max-height: calc(100vh - 80px);
@@ -18,7 +19,7 @@
   animation: dvm-drop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes dvm-drop-in {
-  from { opacity: 0; transform: translateY(-6px); }
+  from { opacity: 0; transform: translateY(6px); }
 }
 
 .dvm-theme-menu__group {

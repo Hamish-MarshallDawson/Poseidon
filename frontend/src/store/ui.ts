@@ -23,6 +23,8 @@ export interface UIState {
   // focus mode (windows/ sets focusMmsi; map/ computes related and dims the rest)
   focusMmsi: number | null
   focusRelated: FocusRelation[]
+  // stack list (map/ writes when a chip of 9+ ships is clicked; windows/ may render it, map/ has a fallback popover)
+  stack: { mmsis: number[]; x: number; y: number } | null   // mmsis in z-order; x/y = chip centre in CSS px
   // drop-ins
   legendOpen: boolean
   watchlistOpen: boolean
@@ -47,6 +49,7 @@ export const ui = createStore<UIState>({
   hoverMmsi: null,
   focusMmsi: null,
   focusRelated: [],
+  stack: null,
   legendOpen: false,
   watchlistOpen: false,
   layersOpen: false,
