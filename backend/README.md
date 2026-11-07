@@ -100,6 +100,23 @@ The policy has not compressed any chunk on the live database yet (see below), so
 
 If the database is unreachable, ingest and the map carry on: rows are buffered (capped) and retried, and the JSONL log keeps everything. `/coverage` returns 503 until the connection is up.
 
+## Replay and history (scrub bar)
+
+Per-client replay over `/ws` (06 section 4.3), built from the Tiger `positions` and `statics` hypertables (`dvm/replay.py`). A client in replay gets no live broadcasts; everything it receives is as of the replay clock.
+
+| Client sends | Server answers |
+|---|---|
+| `{"type":"replay","action":"seek","t":<ms>}` | `status`, then a `snapshot` whose `now_ts` is `t` (clamped to the stored range): the last position of every ship heard in the 30 min before `t`, with its latest known name and type. About 5 s for the whole world (27,000 ships). |
+| `{"type":"replay","action":"play"}` | `status` (`paused: false`), then a `delta` every wall-clock second whose `now_ts` moves on by `speed` seconds. It pauses itself at the newest stored time. |
+| `{"type":"replay","action":"pause"}` | `status` (`paused: true`); deltas stop. |
+| `{"type":"replay","action":"speed","speed":60}` | `status` with the new speed (1 to 600, default 60). |
+| `{"type":"replay","action":"live"}` | `status` (`mode: "live"`), then the live `snapshot`; live deltas resume. |
+
+- `status` carries `mode`, `speed`, `paused` (an addition to 06), `now_ts`, `sources` and `replay: {from_ts, to_ts}`.
+- Sending play, pause or speed while live first seeks to the newest stored time.
+- `detail` during replay answers from the replay state.
+- **`GET /history/range`** returns `{"from_ts", "to_ts"}` (epoch ms, null when empty): the first and last stored position. It needs the same Bearer token as `/coverage`.
+
 ## Measured
 
 World-wide, 7 Nov 2026 around 16:55 UTC: about 90 messages a second, 7,300 ships after 3 minutes, queue depth 0, nothing dropped. One process keeps up easily, so the default box is the whole world.
