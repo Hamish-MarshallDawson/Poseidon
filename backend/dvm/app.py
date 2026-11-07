@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocke
 from fastapi.middleware.cors import CORSMiddleware
 
 from dvm import auth, config, coverage, limits
+from dvm.briefing.routes import make_router as briefing_router
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import Live
 from dvm.models import Envelope
@@ -192,6 +193,17 @@ async def get_coverage(minutes: int = coverage.DEFAULT_MINUTES, bbox: str | None
     if pool is None:
         raise HTTPException(503, "Tiger Data is not connected")
     return {"cells": await coverage.coverage(pool, minutes, box)}
+
+
+class _CurrentHub:
+    """The hub is built in lifespan, after routers are mounted: routers get this and read the live one per request."""
+
+    @property
+    def live(self) -> Live:
+        return hub.live
+
+
+app.include_router(briefing_router(_CurrentHub(), require_login))   # POST /briefing, POST /briefing/speech
 
 
 @app.websocket("/ws")

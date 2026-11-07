@@ -37,6 +37,7 @@ The backend reads the root `.env`. An optional `backend/.env` is loaded first an
 | `HOST`, `PORT` | Default `127.0.0.1`, `8000`. |
 | `FRONTEND_ORIGINS` | CORS origins, default `http://localhost:5173`. |
 | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, `AUTH0_ISSUER` | Auth0 tenant domain, API identifier, issuer (default `https://<domain>/`). With domain and audience set, `/ws` needs a valid token; empty means no login (local dev only, logged as a warning). |
+| `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | AI briefing (`dvm/briefing`): `POST /briefing` `{"mmsis": [...]}` summarises ships in the live picture (404 if one isn't, 503 without the Gemini key); `POST /briefing/speech` `{"text"}` returns MP3 (503 without the ElevenLabs key). Both take the same Bearer token as `/coverage`. Keep the voice ID set: empty is not the default. |
 
 ## Tiger Data
 
