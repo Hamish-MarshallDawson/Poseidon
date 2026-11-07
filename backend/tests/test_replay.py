@@ -114,3 +114,75 @@ def test_ships_silent_too_long_drop_out_of_replay():
         assert 244000002 in removed            # last heard at T0 + 30 s, then silent past the stale window
         assert 230000001 not in removed        # heard again before the window ran out
     asyncio.run(main())
+
+
+class FakePool:
+    def __init__(self):
+        self.out = self.peak = 0
+
+    async def acquire(self):
+        self.out += 1
+        self.peak = max(self.peak, self.out)
+        await asyncio.sleep(0.01)
+        return object()
+
+    async def release(self, con):
+        self.out -= 1
+
+
+def test_replay_queries_take_turns_on_one_connection():
+    """The store's writer needs the pool's other connection: replay must never hold both."""
+    async def main():
+        pool = FakePool()
+
+        async def query():
+            async with replay.TigerHistory(pool)._con():
+                await asyncio.sleep(0.01)
+        await asyncio.gather(*(query() for _ in range(5)))
+        return pool.peak
+    assert asyncio.run(main()) == 1
+
+
+class BrokenHistory(FakeHistory):
+    async def between(self, a, b):
+        raise ConnectionError("Tiger went away")
+
+
+def test_playback_error_pauses_and_tells_the_client():
+    async def main():
+        s, sent = session(BrokenHistory(DATA))
+        await s.seek(T0)
+        await s.play()
+        await asyncio.sleep(0.05)
+        assert s.playing is False
+        assert sent[-1]["type"] == "status" and sent[-1]["paused"] is True
+    asyncio.run(main())
+
+
+def test_failed_first_seek_leaves_the_client_live(monkeypatch):
+    from dvm import app as app_mod
+
+    class NoRange(FakeHistory):
+        async def range(self):
+            raise ConnectionError("Tiger went away")
+
+    class FakeHub:
+        store = type("S", (), {"pool": object()})()
+
+        def sources(self):
+            return []
+
+    class C:
+        replay, lock = None, asyncio.Lock()
+
+        async def send(self, m):
+            pass
+
+    monkeypatch.setattr(app_mod, "hub", FakeHub(), raising=False)
+    monkeypatch.setattr(replay, "TigerHistory", lambda pool: NoRange(DATA))
+    c = C()
+    try:
+        asyncio.run(app_mod.handle_replay(c, {"type": "replay", "action": "seek", "t": T0}))
+    except ConnectionError:
+        pass
+    assert c.replay is None   # still gets live deltas instead of a frozen map

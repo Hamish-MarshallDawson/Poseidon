@@ -35,21 +35,57 @@ def _ms(dt: datetime | None) -> int | None:
     return None if dt is None else int(dt.timestamp() * 1000)
 
 
+# The store's pool has two connections and its writer needs one every second. A world seek takes seconds, so replay
+# queries from every client share one connection per pool, one at a time, and never starve live writes.
+_DB_TURNS: dict = {}   # pool -> semaphore; one pool per process (asyncpg pools take no weak references)
+
+
+def _db_turn(pool) -> asyncio.Semaphore:
+    if pool not in _DB_TURNS:
+        _DB_TURNS[pool] = asyncio.Semaphore(1)
+    return _DB_TURNS[pool]
+
+
+class _Turn:
+    """`async with self.pool.acquire()` for replay: waits for the replay turn first, then a connection."""
+
+    def __init__(self, pool):
+        self.pool, self.con = pool, None
+
+    async def __aenter__(self):
+        await _db_turn(self.pool).acquire()
+        try:
+            self.con = await self.pool.acquire()
+        except BaseException:
+            _db_turn(self.pool).release()
+            raise
+        return self.con
+
+    async def __aexit__(self, *exc):
+        try:
+            await self.pool.release(self.con)
+        finally:
+            _db_turn(self.pool).release()
+
+
 class TigerHistory:
     """The only SQL replay needs."""
 
     def __init__(self, pool):
         self.pool = pool
 
+    def _con(self) -> _Turn:
+        return _Turn(self.pool)
+
     async def range(self) -> tuple[int | None, int | None]:
-        async with self.pool.acquire() as con:
+        async with self._con() as con:
             row = await con.fetchrow("SELECT (SELECT time FROM positions ORDER BY time LIMIT 1) AS t0, "
                                      "(SELECT time FROM positions ORDER BY time DESC LIMIT 1) AS t1")
         return _ms(row["t0"]), _ms(row["t1"])
 
     async def latest_positions(self, t: int, window_s: int) -> list[dict]:
         """The last position of every ship heard in (t - window, t]."""
-        async with self.pool.acquire() as con:
+        async with self._con() as con:
             rows = await con.fetch(f"SELECT DISTINCT ON (mmsi) {POS_COLS} FROM positions WHERE time > $1 AND time <= $2 "
                                    "ORDER BY mmsi, time DESC", _dt(t - window_s * 1000), _dt(t))
         return [dict(r) for r in rows]
@@ -67,13 +103,13 @@ class TigerHistory:
         sql = ("WITH ships AS (SELECT DISTINCT mmsi FROM positions WHERE time > $1 AND time <= $2) "
                f"SELECT s.mmsi, {', '.join(pick(f) for f in STATIC_FIELDS)} FROM statics s JOIN ships USING (mmsi) "
                "WHERE s.time <= $2 AND s.time > $2 - interval '24 hours' GROUP BY s.mmsi")
-        async with self.pool.acquire() as con:
+        async with self._con() as con:
             rows = await con.fetch(sql, _dt(t - window_s * 1000), _dt(t))
         return {r["mmsi"]: {f: r[f] for f in STATIC_FIELDS if r[f] is not None} for r in rows}
 
     async def between(self, a: int, b: int) -> tuple[list[dict], list[dict]]:
         """Positions and statics with time in (a, b], oldest first."""
-        async with self.pool.acquire() as con:
+        async with self._con() as con:
             pos = await con.fetch(f"SELECT {POS_COLS} FROM positions WHERE time > $1 AND time <= $2 ORDER BY time",
                                   _dt(a), _dt(b))
             sta = await con.fetch(f"SELECT {STATIC_COLS} FROM statics WHERE time > $1 AND time <= $2 ORDER BY time",
@@ -163,6 +199,10 @@ class ReplaySession:
         except Exception:  # a closed socket or a database error ends playback, never the connection handler
             log.exception("Replay playback stopped")
             self.playing = False
+            try:   # tell the client it is paused now, or its play button stays on
+                await self.send(self.status())
+            except Exception:
+                pass
 
     async def step(self) -> bool:
         """Advance one tick. Returns True when playback reached the end of the stored data and paused."""

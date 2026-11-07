@@ -230,8 +230,14 @@ async def handle_replay(c: Client, msg: dict) -> None:
         return
     if c.replay is None:
         c.replay = replay.ReplaySession(replay.TigerHistory(pool), send, hub.sources)
-        if action != "seek":
-            await c.replay.seek(None)   # play, pause or speed from live starts at the newest stored time, paused
+        try:   # play, pause or speed from live starts at the newest stored time, paused
+            await c.replay.seek(msg.get("t") if action == "seek" else None)
+        except BaseException:   # no replay snapshot was sent: stay live rather than freeze the client's map
+            c.replay.close()
+            c.replay = None
+            raise
+        if action == "seek":
+            return
     if action == "seek":
         await c.replay.seek(msg.get("t"))
     elif action == "play":
