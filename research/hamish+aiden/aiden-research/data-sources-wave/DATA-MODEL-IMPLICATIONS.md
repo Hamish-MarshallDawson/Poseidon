@@ -4,6 +4,17 @@ Proposals for discussion, written from the research on 7 November 2026 and a rea
 
 **Update from the board, 18:23:** Jake decided that MMSI is the only ship ID for the 24-hour build, with no vessel identity table, identity link records or `vessel_id`, and that identity-change detection is out of scope. Names come from the latest statics row for that MMSI at or before `as_of`. The identity proposals below stay as research for later. Radar tables, freshness fields, wording, map scope and live versus as-of are still open.
 
+## Lessons from the identity wave
+
+Details are in `identity/SYNTHESIS.md`. The MMSI-only decision holds for live tracking within 24 hours. Small proposals that need no identity table:
+
+- **Match sanctions by validated IMO first, then MMSI.** On one Danish day, 22 of 76 list matches needed IMO, and 9 of 34 when limited to `sanction` and `mare.shadow`.
+- **Reject placeholder IMOs** (`0`, `1`, `1234567`, `100000000`, `999999999`) and check-digit failures before any join.
+- **Normalise names for comparison only.** Don't fuzzy-match ship names or MMSIs.
+- **Filter latitude 91, 0/0 and non-ship MMSIs** before gap, speed or spoof logic.
+- **Keep each `(mmsi, imo, name, flag)` change,** so history can be linked later.
+- **Treat MMSI-keyed history with care.** About 14 to 20% of ships took a new MMSI in the last year, so "went dark before" can miss a ship's past, and evaluation should be grouped by valid IMO where possible.
+
 ## Lessons from the MarineTraffic wave
 
 Details are in `marinetraffic/SYNTHESIS.md`. Proposals only:

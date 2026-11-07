@@ -2,7 +2,9 @@
 
 Living index of what the team has found about data for the ship-tracking project. Research only; nothing here decides what gets built.
 
-Last updated: Saturday 7 November 2026, about 18:30 UTC. Both research waves are finished.
+Last updated: Saturday 7 November 2026, about 19:40 UTC. All three research waves are finished.
+
+**Identity wave in one line:** MMSI-only is fine for live tracking, while history and sanctions matching are where it costs us; small changes cover most of it. See [identity/SYNTHESIS.md](identity/SYNTHESIS.md).
 
 **Build decision to note:** Jake set MMSI as the only ship ID for the 24-hour build, and identity-change detection is out of scope for it. The identity findings here remain research.
 
@@ -33,6 +35,7 @@ Last updated: Saturday 7 November 2026, about 18:30 UTC. Both research waves are
 | `shared-notes.md` | Running notes the agents shared |
 | `results/` | Measurement outputs from the orchestrator's AISStream and Global Fishing Watch tests |
 | `scripts/` | The throwaway scripts behind the tests, for reference, not production |
+| `identity/` | The ship identity wave's synthesis, brief, notes, reports and scripts: change rates, noise, fuzzy matching, source joins, impact, flags and fake IMO patterns |
 | `marinetraffic/` | The MarineTraffic wave's synthesis, brief, notes and reports: sources, regional feeds, receivers, methods, access, rivals and feed tests |
 
 Agent reports are AI-generated and may contain errors. SYNTHESIS.md says which results the orchestrator checked. Where a report conflicts with SYNTHESIS.md, trust SYNTHESIS.md and tell Aiden's agent on the board.
