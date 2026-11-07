@@ -1,0 +1,280 @@
+{
+ "elapsed_s": 960,
+ "first_message_s": 0.8223178386688232,
+ "total_msgs": 81795,
+ "msgs_per_s": 85.2,
+ "vessels": 26133,
+ "reconnects": 0,
+ "errors": [],
+ "queue_drops": 0,
+ "world_delay_p50": 3.0,
+ "world_delay_p90": 3.9,
+ "types": [
+  [
+   "PositionReport",
+   39361
+  ],
+  [
+   "ShipStaticData",
+   17996
+  ],
+  [
+   "StaticDataReport",
+   14209
+  ],
+  [
+   "StandardClassBPositionReport",
+   10081
+  ],
+  [
+   "ExtendedClassBPositionReport",
+   147
+  ],
+  [
+   "SubscriptionConfirmation",
+   1
+  ]
+ ],
+ "regions": {
+  "Gulf of Finland": {
+   "position_msgs": 507,
+   "static_msgs": 823,
+   "vessels": 216,
+   "with_imo": 72,
+   "half_degree_cells": 17,
+   "msgs_per_s": 0.53,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 3.9,
+   "update_gap_s_p50": 169.0,
+   "update_gap_s_p90": 399.6
+  },
+  "Baltic Proper": {
+   "position_msgs": 872,
+   "static_msgs": 149,
+   "vessels": 377,
+   "with_imo": 80,
+   "half_degree_cells": 32,
+   "msgs_per_s": 0.91,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 3.9,
+   "update_gap_s_p50": 179.8,
+   "update_gap_s_p90": 504.2
+  },
+  "Danish straits": {
+   "position_msgs": 2912,
+   "static_msgs": 983,
+   "vessels": 1041,
+   "with_imo": 268,
+   "half_degree_cells": 53,
+   "msgs_per_s": 3.03,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 3.9,
+   "update_gap_s_p50": 120.4,
+   "update_gap_s_p90": 361.3
+  },
+  "North Sea": {
+   "position_msgs": 18836,
+   "static_msgs": 6695,
+   "vessels": 7779,
+   "with_imo": 1087,
+   "half_degree_cells": 119,
+   "msgs_per_s": 19.61,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 3.9,
+   "update_gap_s_p50": 154.1,
+   "update_gap_s_p90": 400.0
+  },
+  "English Channel": {
+   "position_msgs": 2441,
+   "static_msgs": 622,
+   "vessels": 939,
+   "with_imo": 206,
+   "half_degree_cells": 37,
+   "msgs_per_s": 2.54,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 4.0,
+   "update_gap_s_p50": 160.0,
+   "update_gap_s_p90": 414.5
+  },
+  "Hormuz": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  },
+  "Persian Gulf": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  },
+  "Gulf of Oman": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  },
+  "Red Sea": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  },
+  "Malacca-Singapore": {
+   "position_msgs": 445,
+   "static_msgs": 232,
+   "vessels": 284,
+   "with_imo": 64,
+   "half_degree_cells": 2,
+   "msgs_per_s": 0.46,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 4.0,
+   "update_gap_s_p50": 218.3,
+   "update_gap_s_p90": 502.0
+  },
+  "Natuna": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  },
+  "South China Sea open": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  },
+  "Java Sea": {
+   "position_msgs": 584,
+   "static_msgs": 62,
+   "vessels": 222,
+   "with_imo": 42,
+   "half_degree_cells": 30,
+   "msgs_per_s": 0.61,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 3.9,
+   "update_gap_s_p50": 139.2,
+   "update_gap_s_p90": 386.1
+  },
+  "Gulf of Thailand": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  },
+  "Philippines": {
+   "position_msgs": 14,
+   "static_msgs": 2,
+   "vessels": 11,
+   "with_imo": 2,
+   "half_degree_cells": 1,
+   "msgs_per_s": 0.01,
+   "delay_s_p50": 3.1,
+   "delay_s_p90": 3.4,
+   "update_gap_s_p50": 358.9,
+   "update_gap_s_p90": 397.2
+  },
+  "East China Sea": {
+   "position_msgs": 9,
+   "static_msgs": 2,
+   "vessels": 4,
+   "with_imo": 1,
+   "half_degree_cells": 1,
+   "msgs_per_s": 0.01,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 3.2,
+   "update_gap_s_p50": 141.5,
+   "update_gap_s_p90": 189.3
+  },
+  "Gulf of Guinea": {
+   "position_msgs": 16,
+   "static_msgs": 6,
+   "vessels": 7,
+   "with_imo": 2,
+   "half_degree_cells": 3,
+   "msgs_per_s": 0.02,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 4.4,
+   "update_gap_s_p50": 153.3,
+   "update_gap_s_p90": 330.7
+  },
+  "US East": {
+   "position_msgs": 2448,
+   "static_msgs": 218,
+   "vessels": 987,
+   "with_imo": 100,
+   "half_degree_cells": 44,
+   "msgs_per_s": 2.55,
+   "delay_s_p50": 3.0,
+   "delay_s_p90": 3.9,
+   "update_gap_s_p50": 170.5,
+   "update_gap_s_p90": 408.5
+  },
+  "Mid-Atlantic": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  },
+  "Indian Ocean mid": {
+   "position_msgs": 0,
+   "static_msgs": 0,
+   "vessels": 0,
+   "with_imo": 0,
+   "half_degree_cells": 0,
+   "msgs_per_s": 0.0,
+   "delay_s_p50": null,
+   "delay_s_p90": null,
+   "update_gap_s_p50": null,
+   "update_gap_s_p90": null
+  }
+ }
+}
