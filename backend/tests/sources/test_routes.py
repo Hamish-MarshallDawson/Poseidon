@@ -53,13 +53,29 @@ def static(mmsi, ts, src, **kw):
     return VesselStatic(mmsi=mmsi, ts=ts, recv_ts=ts + 100, mid=230, src=src, **kw)
 
 
+async def scratch_db(admin_url: str, name: str, create: bool) -> str:
+    """The tests write into a database of their own, created and dropped here, never into the one URL names:
+    a DELETE on a shared table must be impossible whatever SOURCES_TEST_DATABASE_URL points at."""
+    from urllib.parse import urlsplit, urlunsplit
+    con = await asyncpg.connect(admin_url)
+    try:
+        await con.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+        if create:
+            await con.execute(f'CREATE DATABASE "{name}"')
+    finally:
+        await con.close()
+    u = urlsplit(admin_url)
+    return urlunsplit((u.scheme, u.netloc, "/" + name, u.query, ""))
+
+
+DB = {"url": ""}
+
+
 async def seed():
-    con = await asyncpg.connect(URL)
+    con = await asyncpg.connect(DB["url"])
     try:
         await store.setup(con)
         await schema.setup(con)
-        for t in ("observations", "positions", "statics", "source_windows"):
-            await con.execute(f"DELETE FROM {t}")
         rows = [obs(i) for i in range(1, 6)]
         rows += [obs(6, ts=T0 + 20, end_ts=None, kind="ais_presence", mmsi=None, id="rt:tie-a"),    # ties with obs(2)
                  obs(7, ts=T0 + 20, end_ts=None, kind="ais_presence", mmsi=None, id="rt:tie-b"),
@@ -88,17 +104,22 @@ async def seed():
 def client():
     if not URL or "tsdb.cloud" in URL or "timescale.com" in URL:
         pytest.skip("set SOURCES_TEST_DATABASE_URL to a local TimescaleDB")
+    name = f"poseidon_routes_test_{os.getpid()}"
+    DB["url"] = asyncio.run(scratch_db(URL, name, create=True))
     asyncio.run(seed())
     state = {}
 
     @contextlib.asynccontextmanager
     async def lifespan(app):
-        state["pool"] = await asyncpg.create_pool(URL, min_size=1, max_size=3)
+        state["pool"] = await asyncpg.create_pool(DB["url"], min_size=1, max_size=3)
         yield
         await state["pool"].close()
 
-    with TestClient(make_app(lambda: state["pool"], lifespan=lifespan)) as c:
-        yield c
+    try:
+        with TestClient(make_app(lambda: state["pool"], lifespan=lifespan)) as c:
+            yield c
+    finally:
+        asyncio.run(scratch_db(URL, name, create=False))
 
 
 def page_all(client, path, key, **params):

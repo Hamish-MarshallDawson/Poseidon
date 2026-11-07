@@ -10,6 +10,7 @@ import json
 from dvm.sources.common import SOURCES
 
 MAX_ROWS = 20_000
+MAX_SPAN_MS = 31 * 86_400_000   # longest event a windowed query still finds by overlap
 
 COLS = ("id, src, kind, ts, end_ts, recv_ts, available_ts, mmsi, lat, lon, min_lon, min_lat, max_lon, max_lat, "
         "cell_deg, value, n, matched, geom, attrs, q")
@@ -34,6 +35,9 @@ def observations_sql(kinds=None, bbox=None, start_ts=None, end_ts=None, as_of=No
         where.append(f"time <= to_timestamp({arg(end_ts / 1000)})")
     if start_ts is not None:
         where.append(f"coalesce(end_ts, ts) >= {arg(int(start_ts))}")
+        # Chunk pruning: without a lower bound on `time` every chunk back to 2012 is opened. An event that started
+        # more than MAX_SPAN_MS before the window is skipped even if it overlaps (rare: multi-month port visits).
+        where.append(f"time >= to_timestamp({arg((int(start_ts) - MAX_SPAN_MS) / 1000)})")
     if as_of is not None:
         where.append(f"available_ts <= {arg(int(as_of))}")
     if bbox:
@@ -135,6 +139,7 @@ async def model_observations_page(con, as_of, kinds, bbox, start_ts, end_ts, aft
         where.append(f"time <= to_timestamp({arg(end_ts)}::bigint / 1000.0)")
     if start_ts is not None:
         where.append(f"coalesce(end_ts, ts) >= {arg(int(start_ts))}")
+        where.append(f"time >= to_timestamp({arg(int(start_ts) - MAX_SPAN_MS)}::bigint / 1000.0)")   # chunk pruning
     if bbox:
         x0, y0, x1, y1 = (arg(float(v)) for v in bbox)
         where.append(f"coalesce(max_lon, lon) >= {x0} AND coalesce(min_lon, lon) <= {x1} "
