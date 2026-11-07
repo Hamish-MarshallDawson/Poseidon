@@ -198,7 +198,24 @@ def test_needs_fetch_rules():
 def test_query_sql_filters():
     sql, args = query.observations_sql(kinds=["radar_scene"], bbox=(9, 54, 14, 58), start_ts=1, end_ts=2000,
                                        as_of=1500, limit=10)
-    assert "available_ts <= $4" in sql and "kind = ANY($1::text[])" in sql and sql.endswith("LIMIT 10")
-    assert args[:4] == [["radar_scene"], 2.0, 1, 1500]
+    assert "available_ts <= $5" in sql and "kind = ANY($1::text[])" in sql and sql.endswith("LIMIT 10")
+    assert "time >= to_timestamp($4)" in sql   # chunk pruning below the window
+    assert args[:5] == [["radar_scene"], 2.0, 1, (1 - query.MAX_SPAN_MS) / 1000, 1500]
     sql, args = query.observations_sql()
     assert "WHERE" not in sql and args == []
+
+
+def test_back_state_stops():
+    st = jobs.BackState(date(2026, 11, 3), until=date(2026, 1, 1), empty_stop=3)
+    for rows in (10, 0, 0):
+        st.record(rows, False)
+    assert st.stopped is None and st.day == date(2026, 10, 31)
+    st.record(0, True)                        # settled earlier: not counted as empty
+    assert st.stopped is None
+    st.record(0, False)
+    assert st.stopped and "3 consecutive empty days" in st.stopped
+    st2 = jobs.BackState(date(2026, 1, 2), until=date(2026, 1, 1))
+    st2.record(5, False)
+    assert st2.stopped is None
+    st2.record(5, False)
+    assert st2.stopped == "reached --until 2026-01-01"

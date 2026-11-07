@@ -6,6 +6,7 @@ objects that do not exist yet (IF NOT EXISTS everywhere), so it is safe to run o
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -13,6 +14,8 @@ import asyncpg
 
 from dvm.models import VesselStatic
 from dvm.sources.common import Observation
+
+log = logging.getLogger(__name__)
 
 OBS_CHUNK = "7 days"   # delayed sources span weeks to years; live-sized 15-minute chunks would explode
 
@@ -89,8 +92,28 @@ def static_args(s: VesselStatic) -> tuple:
     return (_dt(s.ts), *(getattr(s, c) for c in STATIC_COLS[1:]))
 
 
+# Columnstore: order by kind, then time, no segment-by (rows per kind and chunk are few thousand, as for positions).
+# Chunks compress 30 days after their range ends, so recent days that providers still revise stay row-store;
+# backfilled history compresses on the next policy run. Each step is best-effort, like store.SETUP.
+SETUP = [
+    "DO $$ BEGIN IF NOT (SELECT compression_enabled FROM timescaledb_information.hypertables "
+    "WHERE hypertable_name = 'observations') THEN ALTER TABLE observations SET (timescaledb.enable_columnstore = true, "
+    "timescaledb.segmentby = '', timescaledb.orderby = 'kind, time'); END IF; END $$",
+    "CALL add_columnstore_policy('observations', after => interval '30 days', if_not_exists => true)",
+]
+
+
 async def setup(con: asyncpg.Connection) -> None:
     await con.execute(SCHEMA)
+    for sql in SETUP:
+        try:
+            await con.execute(sql)
+        except asyncpg.PostgresError as e:
+            log.warning("observations setup step failed, continuing without it: %s", e)
+
+
+async def db_size_bytes(con) -> int:
+    return await con.fetchval("SELECT pg_database_size(current_database())")
 
 
 async def write_observations(con: asyncpg.Connection, obs: Iterable[Observation]) -> int:

@@ -113,8 +113,14 @@ export SOURCES_DATABASE_URL=postgresql://postgres:local@127.0.0.1:55433/postgres
 .venv/bin/python -m dvm.sources backfill gfw --regions hormuz --start 2026-10-01 --end 2026-11-03
 .venv/bin/python -m dvm.sources backfill sentinel1 --start 2026-10-25 --end 2026-11-07
 .venv/bin/python -m dvm.sources backfill digitraffic
+.venv/bin/python -m dvm.sources backfill-back gfw            # today backwards until stopped (see below)
+.venv/bin/python -m dvm.sources readonly-role                 # read-only login for training and teammates
 .venv/bin/python -m dvm.sources status
 ```
+
+**Backward backfill** (`backfill-back {gfw,sentinel1}`) starts at the newest available day and walks back one day across all regions at a time. It skips windows that are already settled, so a restart resumes where it stopped. It stops at `--until` (default 2017-01-01), after 21 consecutive empty days (the provider's history has ended), or when the database reaches `--max-db-gb` (default 60). It checks the size before every day. GFW calls are paced (0.3 s apart, backoff on 429 and 5xx), at about 9 s per region-day, so a year of 4 regions takes roughly 4 hours. GFW identity rows go to `statics` only for the last 30 days, because `statics` has 15-minute chunks and a year of daily rows would make hundreds of tiny ones. Older identities stay in the `ais_presence` region rows (`attrs`: name, flag, IMO, type). `observations` chunks compress 30 days after they end.
+
+**Read-only role** (`readonly-role`) creates `poseidon_ro`. It can `SELECT` every table and view, including ones created later, and every session is read-only. Its URL is written only to `~/.config/hedged-bets/readonly.env` (mode 600) and is never printed. Use it for training scripts and teammates.
 
 Regions are `danish_straits`, `gulf_of_finland`, `hormuz` and `gulf_of_oman` (`common.REGIONS`). **Tiger Cloud is refused** unless you pass `--allow-tiger`, which is for after the proposal is agreed. Tests: `pytest tests/sources`. The database test runs when `SOURCES_TEST_DATABASE_URL` points at a local TimescaleDB.
 
