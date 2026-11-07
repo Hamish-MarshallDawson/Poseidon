@@ -1,0 +1,19 @@
+{
+  "name": "guest-seat-tests",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "agent-browser": "^0.41.2"
+  },
+  "devDependencies": {
+    "@playwright/mcp": "^0.0.84",
+    "js-tiktoken": "^1.0.21"
+  }
+}

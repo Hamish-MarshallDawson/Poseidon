@@ -1,0 +1,51 @@
+{
+  "schema_playwright_mcp": {
+    "tools": 25,
+    "est_tokens": 4464
+  },
+  "schema_agent_browser_mcp": {
+    "tools": 29,
+    "est_tokens": 17858
+  },
+  "schema_small_surface_draft": {
+    "tools": 5,
+    "est_tokens": 248,
+    "note": "Our draft, not built"
+  },
+  "standin_observations": [
+    {
+      "label": "record, interactive",
+      "chars": 277,
+      "est_tokens": 103
+    },
+    {
+      "label": "record, full tree",
+      "chars": 818,
+      "est_tokens": 258
+    },
+    {
+      "label": "after fill",
+      "chars": 290,
+      "est_tokens": 106
+    },
+    {
+      "label": "after save",
+      "chars": 292,
+      "est_tokens": 106
+    }
+  ],
+  "live_pages": [
+    {
+      "name": "DPF list",
+      "full_tree_est_tokens": 10299,
+      "interactive_est_tokens": 5972,
+      "interactive_compact_est_tokens": 5972
+    },
+    {
+      "name": "ICO search",
+      "full_tree_est_tokens": 1532,
+      "interactive_est_tokens": 598,
+      "interactive_compact_est_tokens": 598
+    }
+  ]
+}

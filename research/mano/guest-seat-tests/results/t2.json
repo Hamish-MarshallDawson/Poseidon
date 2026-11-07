@@ -1,0 +1,116 @@
+{
+  "A_state_file_shares_login": {
+    "b_landed_on": "/record",
+    "portal_login_events": 1,
+    "mfa_skipped_by_b": true
+  },
+  "B_lost_update_two_browsers": {
+    "final_answer": "",
+    "final_vat": "GB999999999",
+    "a_answer_lost": true,
+    "portal_log": [
+      {
+        "account": "acme-supplier",
+        "sid": "7a4365cf",
+        "changed": [
+          "answer"
+        ]
+      },
+      {
+        "account": "acme-supplier",
+        "sid": "7a4365cf",
+        "changed": [
+          "vat",
+          "answer"
+        ]
+      }
+    ]
+  },
+  "C_one_chrome_two_sessions": {
+    "b_attach": {
+      "ok": true,
+      "url": "/record",
+      "err": "⚠ Chrome 156.0.8078.80 is behind the current stable release 157.0.8103.38, which fixes 213 CVEs (CVE-2026-121029, CVE-2026-121030, CVE-2026-121031, +210 more). Update the browser; for agent-browser's "
+    },
+    "b_open_ok": true,
+    "a_url_after_b_open": "/login",
+    "a_fill_after_b_open": {
+      "ok": false,
+      "msg": "✗ Could not locate element with role=textbox name=answer"
+    },
+    "tabs_seen_by_a": "→ [t1] 127.0.0.1:59968/login - /login",
+    "b_close_ok": true,
+    "a_alive_after_b_close": true
+  },
+  "D_refs_across_navigation": {
+    "held_ref": "@e14",
+    "fill_on_other_page": {
+      "ok": false,
+      "msg": "✗ Unknown ref: e14"
+    },
+    "other_page_username_field_now": "",
+    "fill_after_returning": {
+      "ok": false,
+      "msg": "✗ Unknown ref: e14"
+    },
+    "value_after_returning": ""
+  },
+  "E_forced_logout": {
+    "a_click_reported": {
+      "ok": true,
+      "msg": "✓ Done"
+    },
+    "a_url_after_click": "/login",
+    "saved_on_portal": false,
+    "forced_logouts": 2
+  },
+  "F_takeover_same_tab": {
+    "person_attached": true,
+    "agent_snapshot_exposed_code": true,
+    "agent_view_of_code_field": "- textbox \"One-time code\" [ref=e7]: 492817",
+    "password_masked_in_snapshot": true,
+    "agent_resumed_and_saved": true,
+    "portal_login_events": 1
+  },
+  "G_held_ref_wrong_record": {
+    "same_tab": {
+      "a_fill": {
+        "ok": true,
+        "msg": "✓ Done"
+      },
+      "page_now": "\"Supplier record (Bravo Ltd)\"",
+      "value_in_that_page": "meant for Acme",
+      "a_held_save_click": {
+        "ok": true,
+        "msg": "✓ Done"
+      },
+      "bravo_record_answer_on_portal": "meant for Acme",
+      "acme_record_answer_on_portal": ""
+    },
+    "b_new_tab": {
+      "b_tab_new_ok": true,
+      "a_fill": {
+        "ok": true,
+        "msg": "✓ Done"
+      },
+      "a_page_now": "\"Supplier record (Bravo Ltd)\"",
+      "a_value": "meant for Acme 2"
+    }
+  },
+  "H_pin_tab": {
+    "b_landed_without_login": "/record-b",
+    "a_page": "\"Supplier record\"",
+    "b_page": "\"Supplier record (Bravo Ltd)\"",
+    "a_fill_ok": true,
+    "b_fill_ok": true,
+    "a_value": "\"meant for Acme\"",
+    "b_value": "\"meant for Bravo\"",
+    "tabs_seen_by_b": "[t1] Stand-in portal - /record\n  [t2] about:blank - about:blank\n→ [t3] 127.0.0.1:60256/record-b - /record-b",
+    "b_tab_switch": {
+      "tried": "t1",
+      "ok": false,
+      "msg": "✗ tab_locked: tab E77A46285FEE6BFFBF8DAE9A06632B00 is pinned by session 'pin-a-53358' (--pin-tab); close that session or use another tab"
+    },
+    "kept_apart": true
+  }
+}

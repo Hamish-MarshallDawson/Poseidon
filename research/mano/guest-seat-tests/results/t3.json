@@ -1,0 +1,70 @@
+{
+  "N": 20,
+  "ref_numbers_after_reload": {
+    "before": "e8,e10,e11,e12,e13,e14,e9",
+    "after": "e15,e17,e18,e19,e20,e21,e16",
+    "raw_snapshot_identical": false
+  },
+  "case1_no_gate": {
+    "trials": 20,
+    "human_text_survived": 0,
+    "dropped": 0,
+    "gate_check_ms_median": null,
+    "gate_check_ms_p95": null
+  },
+  "case1_with_gate": {
+    "trials": 20,
+    "human_text_survived": 20,
+    "dropped": 20,
+    "gate_check_ms_median": 68,
+    "gate_check_ms_p95": 78
+  },
+  "case2_clock_full_snapshot": {
+    "trials": 20,
+    "false_drops": 20
+  },
+  "case2_clock_interactive_only": {
+    "trials": 20,
+    "false_drops": 0
+  },
+  "case3_tab_digest_only": {
+    "trials": 20,
+    "other_actor_change_overwritten": 20,
+    "dropped": 0,
+    "check_ms_median": 69
+  },
+  "case3_fresh_reader_session": {
+    "trials": 20,
+    "other_actor_change_overwritten": 0,
+    "dropped": 20,
+    "check_ms_median": 281
+  },
+  "case3_fresh_reader_control_no_change": {
+    "trials": 20,
+    "other_actor_change_overwritten": 0,
+    "dropped": 0,
+    "check_ms_median": 278
+  },
+  "case4_race": {
+    "trials": 40,
+    "human_lost_despite_gate": 17,
+    "human_kept_dropped": 9,
+    "human_edit_landed_after_fill": 14,
+    "no_edit_seen": 0,
+    "note": "human_edit_landed_after_fill means the agent text was replaced by the person, so nothing of the person is lost"
+  },
+  "case6_atomic_check_and_set": {
+    "trials": 40,
+    "human_lost": 0,
+    "refused_stale": 30,
+    "written_then_human_edit_landed": 10,
+    "other": 0
+  },
+  "case5_recover": {
+    "first_action_dropped": true,
+    "agent_left_answer_alone": true,
+    "vat_filled": true,
+    "final_answer": "human answer",
+    "final_vat": "GB222222222"
+  }
+}
