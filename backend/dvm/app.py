@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from contextlib import asynccontextmanager
 
 import jwt
@@ -19,6 +20,7 @@ from dvm.rawlog import RawLog
 from dvm.store import Store
 
 log = logging.getLogger("dvm")
+BAD_LOG_EVERY_S = 10
 
 
 class Client:
@@ -40,6 +42,9 @@ class Hub:
         self.clients: set[Client] = set()
         self.msgs_per_s = 0.0
         self._count = 0
+        self.bad_messages = 0          # messages that raised while being handled, then skipped
+        self.last_bad: str | None = None
+        self._bad_logged_at = float("-inf")
 
     def stats(self) -> dict:
         return {"tracked": len(self.live.pos), "msgs_per_s": round(self.msgs_per_s, 1), "queue_depth": self.queue.qsize()}
@@ -51,24 +56,39 @@ class Hub:
         while True:
             recv_ts, msg = await self.queue.get()
             try:
-                raw = json.loads(msg)
-            except ValueError:
-                raw = msg if isinstance(msg, str) else msg.decode("utf-8", "replace")
-            self._count += 1
-            self.rawlog.write("aisstream", recv_ts, raw)
-            if isinstance(raw, dict) and "error" in raw:
-                log.error("AISStream says: %s", raw["error"])   # e.g. a bad API key; the server then closes
-                continue
-            if isinstance(raw, dict) and raw.get("MessageType") == "SubscriptionConfirmation":
-                self.feed.state = "up"   # an invalid subscription gets no confirmation
-                if (raw.get("Message") or {}).get("CompressionEnabled"):
-                    log.info("AISStream subscription confirmed, compression on")
-                else:   # uncompressed connections are bandwidth-limited and drop messages, which look like dark ships
-                    log.warning("AISStream subscription confirmed WITHOUT compression: expect dropped messages")
-                continue
-            for rec in normalise(Envelope(src="aisstream", recv_ts=recv_ts, raw=raw)):
-                if self.live.apply(rec) and self.store:
-                    self.store.add(rec)
+                self.handle(recv_ts, msg)
+            except Exception as e:  # one bad message must never stop ingest
+                self._bad(e)
+
+    def _bad(self, e: Exception) -> None:
+        self.bad_messages += 1
+        self.last_bad = f"{type(e).__name__}: {str(e)[:200]}"
+        now = time.monotonic()
+        if now - self._bad_logged_at >= BAD_LOG_EVERY_S:   # rate-limited: a stream of junk can't flood the log
+            log.warning("Skipped a bad AISStream message (%d so far): %s", self.bad_messages, self.last_bad,
+                        exc_info=self._bad_logged_at == float("-inf"))   # full traceback the first time only
+            self._bad_logged_at = now
+
+    def handle(self, recv_ts: int, msg) -> None:
+        try:
+            raw = json.loads(msg)
+        except ValueError:
+            raw = msg if isinstance(msg, str) else msg.decode("utf-8", "replace")
+        self._count += 1
+        self.rawlog.write("aisstream", recv_ts, raw)
+        if isinstance(raw, dict) and "error" in raw:
+            log.error("AISStream says: %s", raw["error"])   # e.g. a bad API key; the server then closes
+            return
+        if isinstance(raw, dict) and raw.get("MessageType") == "SubscriptionConfirmation":
+            self.feed.state = "up"   # an invalid subscription gets no confirmation
+            if (raw.get("Message") or {}).get("CompressionEnabled"):
+                log.info("AISStream subscription confirmed, compression on")
+            else:   # uncompressed connections are bandwidth-limited and drop messages, which look like dark ships
+                log.warning("AISStream subscription confirmed WITHOUT compression: expect dropped messages")
+            return
+        for rec in normalise(Envelope(src="aisstream", recv_ts=recv_ts, raw=raw)):
+            if self.live.apply(rec) and self.store:
+                self.store.add(rec)
 
     async def tick(self) -> None:
         last_sent = now_ms()
@@ -93,8 +113,9 @@ class Hub:
             n += 1
             if n % 10 == 0:
                 db = f"db rows {self.store.rows_written}, error {self.store.last_error}" if self.store else "db off"
-                log.info("aisstream %s: %.1f msg/s, %d ships, queue %d, dropped %d, clients %d, %s", self.feed.state,
-                         self.msgs_per_s, len(self.live.pos), self.queue.qsize(), self.feed.dropped, len(self.clients), db)
+                log.info("aisstream %s: %.1f msg/s, %d ships, queue %d, dropped %d, bad %d, clients %d, %s", self.feed.state,
+                         self.msgs_per_s, len(self.live.pos), self.queue.qsize(), self.feed.dropped, self.bad_messages,
+                         len(self.clients), db)
 
     async def _send(self, c: Client, msg: dict) -> None:
         try:
@@ -140,7 +161,8 @@ app.add_middleware(CORSMiddleware, allow_origins=config.FRONTEND_ORIGINS, allow_
 def health() -> dict:
     store = hub.store
     return {"ok": True, "aisstream": {"state": hub.feed.state, "received": hub.feed.received, "dropped": hub.feed.dropped,
-                                      "last_error": hub.feed.last_error, "limits": hub.limiter.status()},
+                                      "last_error": hub.feed.last_error, "bad_messages": hub.bad_messages,
+                                      "last_bad": hub.last_bad, "limits": hub.limiter.status()},
             "stats": hub.stats(), "clients": len(hub.clients),
             "db": {"enabled": bool(store), "rows_written": store.rows_written if store else 0,
                    "last_error": store.last_error if store else None}}
