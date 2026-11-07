@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
-import { Map as MapLibreMap, type GeoJSONSource } from 'maplibre-gl'
+import { Map as MapLibreMap, Popup, type GeoJSONSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { ServerMsg, VesselView } from './types'
 import { applyMessage, toFeatureCollection } from './vessels'
+import { popupContent, type StaticDetail } from './popup'
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark'
@@ -38,6 +39,8 @@ function LiveMap({ getToken, onLogout }: { getToken: () => Promise<string | unde
   const mapRef = useRef<MapLibreMap | null>(null)
   const styleReady = useRef(false)
   const vessels = useRef(new Map<number, VesselView>())
+  const wsRef = useRef<WebSocket | null>(null)
+  const popupRef = useRef<{ popup: Popup; mmsi: number } | null>(null)
   const [connected, setConnected] = useState(false)
   const [shipCount, setShipCount] = useState(0)
   const [msgsPerS, setMsgsPerS] = useState(0)
@@ -63,6 +66,20 @@ function LiveMap({ getToken, onLogout }: { getToken: () => Promise<string | unde
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 0, 2, 8, 3, 14, 4],
         },
       })
+      // Click a ship: open its popup at once, then ask the server for `detail` (destination, numeric ship type).
+      map.on('click', 'ships', (e) => {
+        const v = vessels.current.get(Number(e.features?.[0]?.properties?.mmsi))
+        if (!v) return
+        popupRef.current?.popup.remove()
+        const popup = new Popup({ maxWidth: '300px' }).setLngLat([v.lon, v.lat]).setDOMContent(popupContent(v, undefined)).addTo(map)
+        popupRef.current = { popup, mmsi: v.mmsi }
+        popup.on('close', () => {
+          if (popupRef.current?.popup === popup) popupRef.current = null
+        })
+        if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'detail', mmsi: v.mmsi }))
+      })
+      map.on('mouseenter', 'ships', () => (map.getCanvas().style.cursor = 'pointer'))
+      map.on('mouseleave', 'ships', () => (map.getCanvas().style.cursor = ''))
       styleReady.current = true
     })
     return () => {
@@ -82,6 +99,7 @@ function LiveMap({ getToken, onLogout }: { getToken: () => Promise<string | unde
     const connect = () => {
       const sock = new WebSocket(WS_URL)
       ws = sock
+      wsRef.current = sock
       let lastSeq: number | null = null
       let stale = false
 
@@ -117,6 +135,9 @@ function LiveMap({ getToken, onLogout }: { getToken: () => Promise<string | unde
           setShipCount(vessels.current.size)
         }
         if (msg.type === 'snapshot' || msg.type === 'delta') setMsgsPerS(msg.stats.msgs_per_s)
+        const open = popupRef.current
+        const v = open && msg.type === 'detail' && msg.mmsi === open.mmsi ? vessels.current.get(open.mmsi) : undefined
+        if (open && v && msg.type === 'detail') open.popup.setDOMContent(popupContent(v, msg.statics[0] as StaticDetail))
       }
 
       sock.onclose = () => {

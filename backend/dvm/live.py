@@ -45,6 +45,12 @@ class Live:
     def snapshot(self) -> list[dict]:
         return [self.view(m) for m in self.pos]
 
+    def detail(self, mmsi: int) -> dict:
+        """06 section 4.3 `detail` reply. shortcut: `statics` holds the merged current identity, not the last 5 records."""
+        return {"type": "detail", "mmsi": mmsi, "vessel": self.view(mmsi),
+                "statics": [{"mmsi": mmsi, **self.static.get(mmsi, {})}],
+                "gaps": [], "spoofs": [], "sanction": None, "score": None}
+
     def take_changes(self, now_ms: int, stale_after_s: int) -> tuple[list[dict], list[int]]:
         """Vessels changed since the last call, and vessels removed for being silent too long."""
         cutoff = now_ms - stale_after_s * 1000
