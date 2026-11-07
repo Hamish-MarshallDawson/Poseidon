@@ -11,12 +11,16 @@ Every data source assessed so far. **Tested** means someone ran it on 7 November
 | **Danish Maritime Authority** | Danish waters, western Baltic, 53.7 to 58.7N, 2.6 to 16.5E | About 3 days | No key; `http://aisdata.ais.dk/aisdk-YYYY-MM-DD.zip` | Full tracks; name 91%, IMO 61.5%; median 10 s | 580 MB zip per day; 28% duplicates; monthly files to 2007; licence unstated | Agent |
 | **Global Fishing Watch AIS** | Global, all ship types despite the name | About 4 days | Free token | Vessel presence, identity, flag, type, port visits, gap events | Non-commercial (CC BY-NC 4.0). **Per-vessel positions return 404 "temporarily unavailable"**; anonymous hourly cell positions work | Orchestrator |
 | **NOAA MarineCadastre** | US waters | Ends 31 Dec 2024 | No key; daily zips | Full tracks, `TransceiverClass`, IMO 58% | Stale; 2025 and 2026 return 404 | Agent |
-| **CetaHAV** | Baltic | About 1 min | No key; `cetahav.org/api/public/v1/ais` | MMSI, name, speed, course | One call only: 59 vessels. Credits 20 sources, worth following | Agent; retest running |
+| **CetaHAV** | Baltic and Danish straits, 9 to 26E; Hormuz zero | About 1 min for moving ships; old for stopped ones | No key; `cetahav.org/api/public/v1/ais` | MMSI, name, speed, course, heading; **no timestamp** | AISStream-based sampler: about 55 ships per 12.6 s call; 6.9% of positions over 1 h old; parallel calls return empty. An empty answer never means no ships | Agent |
+| **Pelyr** | Named sources Finnish and Norwegian, plus own and unnamed permitted feeds; **Gulf unknown** | Unknown | Free account and key, non-commercial | Positions, 3-day history, satellite detections, ship-to-ship finds | Reportedly 50 ships by MMSI, 2 requests a minute. Also a possible competitor | Sources page checked by orchestrator; plan terms agent; **not tested, needs key** |
+| **AIS Trail** | Mostly Baltic, Norway, US, Taiwan port calls | Varies | Key | Positions, per-source provenance | 9-station volunteer network | Agent |
+| **AIS-catcher community map** | Claims 1,313 stations | Claimed live | Human-confirmed viewing only | Viewing | Blocks automated clients; no network API. Not a usable feed | Agent |
+| **Sweden, Sjöfartsverket** | Swedish waters | Live, history from 2006 | Paid, by order | AIS stream, history | Published 2027 price annex | Agent |
 | **BarentsWatch** | Norwegian zone, Svalbard, Jan Mayen | Live | Free account and OAuth client | Latest AIS, 14-day history | Norway only | Docs |
 | **Kystverket TCP** | Norway | Live | `153.44.253.27:5631` | Raw AIS | Timed out from this network; port 5632 closes without data | Orchestrator, agent |
-| **AISHub** | Global where members feed | Near real time | Must contribute a receiver | Raw pooled AIS | Patchy | Docs |
-| **MarineTraffic / Kpler** | Global | Shore near live; satellite paid | Free map to view; paid plans and API | Rich processed data | Free tier is shore positions only; satellite for one ship on Essential, all on Enterprise. Not for scraping | Aiden's manual look; docs |
-| **Paid APIs** | Global | Varies | ShipAtlas from €65/month; MyShipTracking from €90; Searoutes from €300; others by quote | Varies | Listed prices unverified; check licence and coverage | Docs |
+| **AISHub** | Global where members feed; 4 UAE stations in its directory | Near real time; station delay up to 10 s | Must contribute a receiver | Combined latest positions once a minute | Station needs 10+ vessels, 90% uptime on a 7-day average. Commercial use with credit; no passing on raw data. **Not possible this weekend** | Terms checked by orchestrator; directory by agent |
+| **MarineTraffic / Kpler** | Global | Shore near live; satellite in bursts, paid | Free map to view; plans; sales-led API | Rich processed data, labelled terrestrial, roaming or satellite | **Terms bar derived data and publishing.** Export capped at 5, 300 or 10,000 rows a month on plans. Manual cross-check at most; not for scraping | Terms checked by orchestrator; Aiden's manual look; agent |
+| **Paid APIs** | Global | Varies | ShipAtlas from €65/month; MyShipTracking from €90, reportedly shore-only; Searoutes from €300; VesselFinder from €175 for 5,000 credits, shore-only, satellite separate at $139/month; others by quote | Varies | Listed prices mostly unverified; check licence and coverage | Docs, agent |
 
 ## What satellites see
 
@@ -55,6 +59,8 @@ Every data source assessed so far. **Tested** means someone ran it on 7 November
 | **Open-Meteo Marine** | Waves, including past dates | Location, time | No key | Agent |
 | **IMF PortWatch** | Daily transits and capacity at 28 chokepoints | Chokepoint, day | No key; 6 days old; updated weekly | Orchestrator, agent |
 | **FRED Brent** | Oil price | Day | No key CSV; about 4 days old | Agent |
+| **EMODnet vessel density** | Monthly ship density at 1 km, EU waters; useful as a normal-traffic prior; Hormuz blank | Location, month | No key; CC BY 4.0 | Agent |
+| **Zenodo LNG-T3** | LNG tanker voyages and terminal throughput 2020 to 2024, includes Gulf terminals | Vessel, terminal, day | No key; CC BY 4.0; historical only | Docs, agent |
 
 ## Coverage by region
 
@@ -71,7 +77,8 @@ Every data source assessed so far. **Tested** means someone ran it on 7 November
 
 ## Still to test
 
-- Sources from the MarineTraffic wave, added when it finishes.
+- Pelyr's real Gulf coverage (needs a free key).
 - Whether Global Fishing Watch's per-vessel positions return.
 - Equasis for checking a sample of identity changes (needs a free account).
-- MarineTraffic's API terms and credits, from a signed-in account.
+
+See `marinetraffic/SYNTHESIS.md` for why MarineTraffic itself isn't a data source for us.

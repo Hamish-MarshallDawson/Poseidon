@@ -2,6 +2,19 @@
 
 Proposals for discussion, written from the research on 7 November 2026 and a read of `backend/dvm/models.py`, `backend/dvm/store.py` and `frontend/src/types.ts` at commit `bfba7c9`. `models.py` says field names change only by asking on the board, so nothing here changes the contract by itself. @Hamish-MarshallDawson @JakeCallcut, please say what fits.
 
+**Update from the board, 18:23:** Jake decided that MMSI is the only ship ID for the 24-hour build, with no vessel identity table, identity link records or `vessel_id`, and that identity-change detection is out of scope. Names come from the latest statics row for that MMSI at or before `as_of`. The identity proposals below stay as research for later. Radar tables, freshness fields, wording, map scope and live versus as-of are still open.
+
+## Lessons from the MarineTraffic wave
+
+Details are in `marinetraffic/SYNTHESIS.md`. Proposals only:
+
+- **Label every position's source class and coverage basis,** so a silence says who was listening. MarineTraffic does this with terrestrial, roaming and satellite labels.
+- **Model silence as states, not one flag.** For example: fresh, silent while nearby reception is normal, out of coverage, or feed outage. Adding this to `VesselView.status` would be a contract change.
+- **Keep raw and cleaned layers apart.** Don't delete suspect positions, because cleaning rules are signals too. Display can be thinned, but silence analysis needs raw rates.
+- **Label proxies and never present them as ships seen.** PortWatch counts and similar sources need their own table with granularity and lag.
+- **Age stale ships off the map, and don't interpolate across gaps.**
+- **Budget paid APIs per row returned,** not per request, if one is ever added.
+
 ## Five facts that shape the design
 
 1. **Sources run on different clocks.** The same picture mixes data under a second old, hours old, days old and weekly.
