@@ -4,7 +4,7 @@ Agent `id-frequency`, ship identity wave. Everything below is `measured` by me o
 Global Fishing Watch sample unless labelled otherwise. **Frozen snapshot: 429 IMO records read 19:13 UTC
 2026-11-07**, copied to `$WAVE/data/id-frequency/gfw-identities-snapshot-1913.jsonl` so the numbers
 reproduce after `gfw-identities.jsonl` stops growing. The live file held 4 records when I started, so
-this is one point in a growing sample, not a final dataset. Scripts:
+this is one point in a growing sample. Scripts:
 `$WAVE/scripts/id-frequency/final.py` (headline numbers, takes a path) and `freq.py`-`freq4.py` (working
 steps, including two errors I found and fixed — see Data artefacts).
 
@@ -52,7 +52,7 @@ ship-years, 1,223 de-duplicated identity periods, 1,156 MMSIs.
 
 By region: Malacca 0.070, Danish 0.092, Hormuz 0.111 switches per ship-year. **The group effect
 dominates the region effect**: silent tankers churn roughly twice as fast as random tankers and 2.3×
-cargo, and that held in each region separately on the 335-record read. Silent tankers average 4.4 MMSIs
+cargo, and that held in each region separately on the 335-record read. Silent tankers carry 4.4 identity periods on average
 against 2.4.
 
 My denominator is ship-years of observation, first to last transmission. `id-flags` computed 0.265
@@ -66,9 +66,8 @@ identity starts per ship. Quote the rate with its denominator.
 |---|---|---|---|---|
 | 0.03-0.07 | 0.06-0.10 | 0.16 | 0.15 | 0.23 |
 
-Consistent with the reported 2024-2026 reflagging surge, but **not a clean trend measurement** (see
-Unknowns). The 2012 bump (0.09) is left-censoring: GFW AIS starts in 2012, so first periods often start
-2012-01-01 and the next switch lands in 2012.
+Consistent with the reported 2024-2026 reflagging surge, but **not a clean trend measurement** (Unknowns).
+The 2012 bump (0.09) is left-censoring: GFW AIS starts in 2012, so first periods often start 2012-01-01.
 
 **Timing between identity periods** (n=476; gap = new MMSI's first transmission minus old MMSI's last):
 
@@ -114,11 +113,11 @@ sample. These ships were selected on having gone quiet, so it is not a rate for 
 
 | Change | Typical timescale | Likely causes | Rate, with denominator | Standard, noise or potentially malicious? | Effect on tracking | Effect on prediction | Suggested handling or flag | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| MMSI switch | median 9 min; 97.5% within 31 d | sale/reflag, re-registration, transponder replacement, mis-set MMSI | 0.090/ship-year sequential, 0.151 counting side identities, 5,274 ship-years | ordinary for tankers and old tonnage; AIS alone cannot separate sale from evasion | splits one hull into two tracks with no gap | history reset at the switch; label leakage if one hull is scored twice | treat an MMSI change under one IMO as **re-identification**, not an event | this report, measured |
-| Name change | same instant as the switch in 62% of cases | sale, rebrand, reflag | 0.058/ship-year; 16/1,156 MMSIs ever held two names | ordinary; within-MMSI churn is rare enough to treat as noise | breaks name-based joins and display continuity | name-keyed features reset even when the hull does not | join on MMSI, carry the last name, never key on name | this report, measured |
-| Flag change | same instant as the switch in 97% of cases | reflag on sale, move to a lighter registry | 0.087/ship-year; 0 changes without an MMSI change | ordinary | none beyond the MMSI change | none beyond the MMSI change | do not score separately from MMSI | this report, measured |
-| Side identity (two MMSIs on air at once) | median 224 d; 17% under 30 d, 4% under 1 day | handover double-broadcast, mis-set or typo MMSI, two hulls reporting one IMO | 318/1,223 periods (26%) on 172/429 ships | mix of noise and ordinary handover; long overlaps are often a GFW or self-report artefact | ambiguous which track is the hull; false "two ships" | duplicate rows for one hull | log only; escalate when the MMSIs also disagree on name or IMO | this report, measured |
-| IMO placeholder or shared IMO | years | placeholder entry, mis-keyed IMO in a Class B unit | IMO 1234567: 27 periods, 25 MMSIs; 0/429 sampled IMOs failed the check digit | noise, occasionally deliberate | one IMO maps to many ships | poisoned training rows | reject `1234567`, `0000000`, all-same-digit, >2 IMO-holders per day | this report and `id-joins`, measured |
+| MMSI switch | median 9 min; 97.5% within 31 d | sale/reflag, re-registration, transponder swap, mis-set MMSI | 0.090/ship-year sequential, 0.151 with side identities; 5,274 ship-years | ordinary for tankers and old tonnage; sale and evasion look alike in AIS | splits one hull into two tracks, no gap | history reset; double-counted hull | treat as **re-identification**, not an event | measured here |
+| Name change | same instant as the switch in 62% | sale, rebrand, reflag | 0.058/ship-year; 16/1,156 MMSIs held two names | ordinary; within-MMSI churn is noise | breaks name joins and display history | name-keyed features reset | join on MMSI, carry last name | measured here |
+| Flag change | same instant as the switch in 97% | reflag on sale | 0.087/ship-year; never without an MMSI change | ordinary | none beyond MMSI | none beyond MMSI | never score separately | measured here |
+| Side identity (two MMSIs on air) | median 224 d; 17% under 30 d | handover, mis-set MMSI, two hulls on one IMO | 318/1,223 periods (26%) on 172/429 ships | mostly artefact or ordinary handover | ambiguous which track is the hull | duplicate rows | log only; escalate if names or IMOs differ | measured here |
+| Placeholder IMO | years | placeholder entry, mis-keyed IMO | IMO 1234567: 27 periods, 25 MMSIs; 0/429 bad check digits | noise, occasionally deliberate | one IMO, many ships | poisoned rows | reject `1234567`, `0000000`, >2 IMO-holders/day | measured here, `id-joins` |
 
 ## What this means for us, given MMSI-only
 
@@ -143,12 +142,12 @@ sample. These ships were selected on having gone quiet, so it is not a rate for 
 ## Unknowns, and how to settle them
 
 - **Sale versus evasion.** AIS cannot say. Needs ownership history (Equasis is login-walled per
-  `id-joins`) or GFW `registryOwners`: present for 345/429 ships but only as a single latest record, with
-  415 registry records against 1,223 AIS periods, 20% of ships with no registry record. Settle by
-  checking owner change for 30 sampled switches on a registry with history.
-- **Whether the 2024-2026 rise is real.** Confounded by GFW's improving identity resolution, by the
-  sample's survivorship (present in February 2026) and by the partial 2026 year. Settle with a fixed
-  2015 cohort, a denominator not conditioned on 2026 presence, or a second source (Danish daily files).
+  `id-joins`) or GFW `registryOwners`: present for 345/429 ships but as a single latest record, 415 registry
+  records for 1,223 AIS periods, 20% of ships with none. Settle by checking owner change for 30 sampled
+  switches.
+- **Whether the 2024-2026 rise is real.** Confounded by GFW's improving identity resolution,
+  survivorship (present in February 2026) and the partial 2026 year. Settle with a fixed 2015 cohort and
+  a denominator not conditioned on 2026 presence, or a second source (Danish daily files).
 - **Whether side identities are two transmitters or two hulls.** Needs raw AIS with simultaneous
   positions (`id-shortterm`).
 - **Long tails.** One ship has 27 periods (the placeholder IMO); one Danish workboat changes MMSI
