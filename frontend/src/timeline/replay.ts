@@ -1,7 +1,8 @@
 import { adapter } from '../data/index'
 import { createStore } from '../store/store'
-import { nextWindowLetter, ui } from '../store/ui'
+import { ui } from '../store/ui'
 import { vessels } from '../store/vessels'
+import { openShipWindow } from '../windows/open'
 
 // The replay controller owns the shown clock. In live it runs at wall speed from the last frame; in replay while playing
 // it runs at `speed` between the server's 1 Hz deltas. Drift is absorbed by a soft rate correction (aim to meet the next
@@ -60,12 +61,8 @@ export const replay = {
   live() { queued = null; ui.set((s) => ({ time: { ...s.time, dragT: null } })); send('live') },
 }
 
-// shortcut: opens a window by writing ui.windows directly; switch to windows/ openShipWindow(mmsi) when it lands.
 export function openShip(mmsi: number) {
-  ui.set((s) => s.windows.some((w) => w.mmsi === mmsi) ? { frontMmsi: mmsi } : {
-    frontMmsi: mmsi,
-    windows: [...s.windows, { mmsi, letter: nextWindowLetter(s.windows), minimised: false, x: 24 + 24 * s.windows.length, y: 80, z: s.windows.length + 1 }],
-  })
+  openShipWindow(mmsi)
 }
 
 let started = false

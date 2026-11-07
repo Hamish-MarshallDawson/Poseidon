@@ -10,7 +10,7 @@ import { vessels } from '../store/vessels'
 import { onTokensChange } from '../theme/tokens'
 import { createLiveAdapter } from '../data/live'
 import { mapStore } from './context'
-import { currentTheme, getStyle, recolourBasemap } from './style'
+import { getStyle, recolourBasemap } from './style'
 import { ShipController } from './ships/controller'
 import { StackList } from './StackList'
 import './map.css'
@@ -42,7 +42,6 @@ export default function MapView({ getToken }: MapViewProps) {
     ctl.onChipHover = setTip
     let map: MapLibreMap | null = null
     let disposed = false
-    let theme = currentTheme()
     const stops: (() => void)[] = []
 
     void getStyle().then((style) => {
@@ -65,12 +64,11 @@ export default function MapView({ getToken }: MapViewProps) {
       if (import.meta.env.DEV) (window as unknown as { __dvm: unknown }).__dvm = { map: m, ctl, ui, vessels, mapStore }
     })
 
-    // Theme swap: new basemap style (our layers re-attach on style.load). Signals or text size: repaint our layers.
+    // Theme, signals or text size changed: recolour the basemap in place (one style serves every theme) and repaint our
+    // layers. No setStyle, so tiles stay loaded and the theme crossfade stays cheap.
     stops.push(onTokensChange(() => {
-      const next = currentTheme()
-      if (next === theme) { ctl.repaint(); return }
-      theme = next
-      void getStyle().then((style) => { if (!disposed) map?.setStyle(style, { diff: false }) })
+      if (map) recolourBasemap(map)
+      ctl.repaint()
     }))
 
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && ctl.escape()) e.preventDefault() }

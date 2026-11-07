@@ -1,24 +1,21 @@
 import type { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
-import { readToken } from '../theme/tokens'
+import { basemapStyle, registerBasemap, setBasemapTheme } from '../basemap'
 
-// The one indirection for the basemap. At integration the body of getStyle() becomes the coastline agent's
-// `basemapStyle(tokens)` from src/basemap/style.ts; nothing else in map/ knows where the style comes from.
-const OPENFREEMAP: Record<string, string> = { light: 'positron', 'light-hc': 'bright', dark: 'dark', 'dark-hc': 'dark' }
-
+// The one indirection for the basemap: the coastline style (our coast.pmtiles over OpenFreeMap, coloured from the
+// tokens). One style serves every theme; recolourBasemap repaints it in place, so a theme swap never reloads tiles.
 export const currentTheme = () => document.documentElement.dataset.theme ?? 'dark'
 
+let registered = false
 export async function getStyle(): Promise<string | StyleSpecification> {
-  return `https://tiles.openfreemap.org/styles/${OPENFREEMAP[currentTheme()] ?? 'dark'}`
+  if (!registered) { registerBasemap(); registered = true }
+  try {
+    return await basemapStyle()
+  } catch (e) {
+    console.warn('[basemap] style build failed, using OpenFreeMap dark as is', e)
+    return 'https://tiles.openfreemap.org/styles/dark'
+  }
 }
 
-// Cheap recolour of the stand-in style to the tokens (background = land, water fills = water). The coastline
-// style is built from tokens already, so this becomes a no-op there.
 export function recolourBasemap(map: MapLibreMap): void {
-  const land = readToken('map-land'), water = readToken('map-water')
-  for (const l of map.getStyle().layers ?? []) {
-    try {
-      if (l.type === 'background' && land) map.setPaintProperty(l.id, 'background-color', land)
-      else if (l.type === 'fill' && /^water/.test(l.id) && water) map.setPaintProperty(l.id, 'fill-color', water)
-    } catch { /* a layer the style builder already themed */ }
-  }
+  try { setBasemapTheme(map) } catch { /* the fallback OpenFreeMap style has none of our layers */ }
 }
