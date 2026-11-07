@@ -30,7 +30,7 @@ export function ForecastOverlay() {
 const H = 3_600_000
 const EMPTY = { type: 'FeatureCollection' as const, features: [] }
 const tok = (name: string) => readToken(name) || '#888'
-const IMAGES = ['fc-hatch-dark', 'fc-hatch-grey', 'fc-cross-dark', 'fc-cross-grey', 'fc-out-hit', 'fc-out-miss', 'fc-out-censored', 'fc-chip-1', 'fc-chip-2', 'fc-chip-3', 'fc-chip-4']
+const IMAGES = ['fc-hatch-dark', 'fc-hatch-grey', 'fc-cross-dark', 'fc-cross-grey', 'fc-out-hit', 'fc-out-miss', 'fc-out-censored']
 
 // Small canvas images (2x) for the map: hatch patterns, crosses, outcome squares, tag chips with a risk stripe.
 function image(w: number, h: number, draw: (c: CanvasRenderingContext2D) => void): ImageData {
@@ -57,14 +57,37 @@ function addImages(map: MapLibreMap) {
   add('fc-out-hit', image(9, 9, (c) => { c.fillStyle = ink; c.fillRect(1, 1, 7, 7) }))
   add('fc-out-miss', image(9, 9, (c) => { c.fillStyle = panel; c.fillRect(1, 1, 7, 7); c.strokeStyle = ink; c.lineWidth = 1; c.strokeRect(1.5, 1.5, 6, 6) }))
   add('fc-out-censored', image(9, 9, (c) => { c.fillStyle = panel; c.fillRect(1, 1, 7, 7); c.strokeStyle = muted; c.setLineDash([2, 1]); c.strokeRect(1.5, 1.5, 6, 6) }))
-  // Chip: bg/panel, 1 px text/muted edge, 3 px risk stripe on the left. Stretches round the text, stripe fixed.
-  for (let band = 1; band <= 4; band++) {
-    add(`fc-chip-${band}`, image(20, 16, (c) => {
-      c.fillStyle = panel; c.fillRect(0, 0, 20, 16)
-      c.strokeStyle = muted; c.lineWidth = 1; c.strokeRect(0.5, 0.5, 19, 15)
-      c.fillStyle = tok(`risk-${band}`); c.fillRect(0, 0, 3, 16)
-    }), { stretchX: [[12, 36]], stretchY: [[8, 24]], content: [12, 4, 36, 28] })
-  }
+}
+
+// Probability tag (56:56) drawn whole on a canvas, text included, so map glyph metrics can't push the text out of the
+// chip. 1 px text/muted edge, 3 px risk stripe, rank in mono SemiBold, chance in mono, then a separator and the reason.
+// The image carries a 10 px leader below-left of the chip; its bottom-left corner sits on the ship.
+const LEAD = 10
+function tagImage(band: number, rank: string, chance: string, reason: string): ImageData {
+  const size = parseFloat(readToken('size-data')) || 12, h = (parseFloat(readToken('line-data')) || 16) + 2
+  const mono = readToken('font-data'), sans = readToken('font-ui')
+  const fonts = [`600 ${size}px ${mono}`, `400 ${size}px ${mono}`, `400 ${size}px ${sans}`]
+  const m = document.createElement('canvas').getContext('2d')!
+  const width = (text: string, i: number) => { m.font = fonts[i]; return Math.ceil(m.measureText(text).width) }
+  const parts: [string, number, string][] = [[rank, 0, 'text-primary']]
+  if (chance) parts.push([chance, 1, 'text-secondary'])
+  if (reason) parts.push(['|', -1, 'border-subtle'], [reason, 2, 'text-secondary'])
+  const w = 4 + parts.reduce((x, [t, f]) => x + 5 + (f < 0 ? 1 : width(t, f)), 0) + 5 + 1
+  return image(w + LEAD, h + LEAD, (c) => {
+    c.strokeStyle = tok('text-muted'); c.lineWidth = 1
+    c.beginPath(); c.moveTo(1, h + LEAD - 1); c.lineTo(LEAD, h); c.stroke()
+    c.fillStyle = tok('bg-panel'); c.fillRect(LEAD, 0, w, h)
+    c.strokeRect(LEAD + 0.5, 0.5, w - 1, h - 1)
+    c.fillStyle = tok(`risk-${band}`); c.fillRect(LEAD + 1, 1, 3, h - 2)
+    c.textBaseline = 'middle'
+    let x = LEAD + 4
+    for (const [t, f, col] of parts) {
+      x += 5
+      c.fillStyle = tok(col)
+      if (f < 0) { c.fillRect(x, (h - 12) / 2, 1, 12); x += 1; continue }
+      c.font = fonts[f]; c.fillText(t, x, h / 2 + 0.5); x += width(t, f)
+    }
+  })
 }
 
 const band = (p: number) => (p >= 0.75 ? 4 : p >= 0.5 ? 3 : p >= 0.25 ? 2 : 1)
@@ -73,7 +96,7 @@ const CAP = [5, 10, 20]
 
 function setup(map: MapLibreMap): () => void {
   addImages(map)
-  const dark = tok('ship-dark'), muted = tok('text-muted'), ink = tok('text-primary')
+  const dark = tok('ship-dark'), muted = tok('text-muted')
   const before = map.getStyle().layers.find((l) => l.type === 'symbol')?.id   // ghosts sit under labels and ships
   for (const id of ['fc-ghost', 'fc-ghost-pt', 'fc-tags', 'fc-out']) map.addSource(id, { type: 'geojson', data: EMPTY })
   map.addLayer({ id: 'fc-ghost-fill', type: 'fill', source: 'fc-ghost',
@@ -88,17 +111,11 @@ function setup(map: MapLibreMap): () => void {
   map.addLayer({ id: 'fc-out', type: 'symbol', source: 'fc-out',
     layout: { 'icon-image': ['concat', 'fc-out-', ['get', 'label']], 'icon-offset': [-11, 11], 'icon-allow-overlap': true } })
   map.addLayer({ id: 'fc-tags', type: 'symbol', source: 'fc-tags',
-    layout: {
-      'text-field': ['get', 'label'], 'text-font': ['Barlow Semi Condensed Medium'], 'text-size': 11, 'text-anchor': 'bottom-left',
-      'text-offset': [1, -1], 'text-allow-overlap': true, 'text-padding': 0, 'text-max-width': 40,
-      'icon-image': ['concat', 'fc-chip-', ['to-string', ['get', 'band']]], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 1, 8],
-      'icon-allow-overlap': true, 'symbol-sort-key': ['get', 'rank'],
-    },
-    paint: { 'text-color': ink, 'text-halo-color': tok('bg-panel'), 'text-halo-width': 1 },
-  })
+    layout: { 'icon-image': ['get', 'img'], 'icon-anchor': 'bottom-left', 'icon-allow-overlap': true, 'symbol-sort-key': ['get', 'rank'] } })
 
   // ---- probability tags: watchlist Inspect/Watch with p >= 0.10, capped per zoom tier; no tag on an open gap or open window
   let tier = zoomTier(map.getZoom())
+  const tagImages = new Set<string>()      // shortcut: tag images are never evicted while the layer lives; fine for ~40 ranked ships
   const drawTags = () => {
     const open = new Set(ui.get().windows.map((w) => w.mmsi))
     const rows = vessels.watchlist?.entries.filter((e) => e.decision !== 'none' && e.p >= 0.1).map((e) => ({ mmsi: e.mmsi, p: e.p, rank: e.rank, codes: e.reason_codes }))
@@ -107,10 +124,16 @@ function setup(map: MapLibreMap): () => void {
       const v = vessels.vessels.get(r.mmsi)
       if (!v || v.status === 'gap_open' || open.has(r.mmsi)) return []
       const rank = String(r.rank).padStart(2, '0')
-      const reason = REASON_LABEL[r.codes.find((c) => c !== 'OPEN_GAP') ?? ''] ?? ''
-      const label = tier === 0 ? rank : tier === 1 ? `${rank}  ${pct(r.p)}` : `${rank}  ${pct(r.p)}${reason ? `  ${reason}` : ''}`
-      return [{ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [v.lon, v.lat] }, properties: { label, band: band(r.p), rank: r.rank } }]
+      const chance = tier > 0 ? pct(r.p) : ''
+      const reason = tier > 1 ? REASON_LABEL[r.codes.find((c) => c !== 'OPEN_GAP') ?? ''] ?? '' : ''
+      const img = `fc-tag-${band(r.p)}-${rank}-${chance}-${reason}`
+      return [{ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [v.lon, v.lat] }, properties: { img, band: band(r.p), rank: r.rank, chance, reason, label: rank } }]
     }).slice(0, CAP[tier])
+    for (const { properties: f } of features) {
+      if (map.hasImage(f.img)) continue
+      map.addImage(f.img, tagImage(f.band, f.label, f.chance, f.reason), { pixelRatio: 2 })
+      tagImages.add(f.img)
+    }
     map.getSource<GeoJSONSource>('fc-tags')?.setData({ type: 'FeatureCollection', features })
   }
 
@@ -194,6 +217,13 @@ function setup(map: MapLibreMap): () => void {
   }
 
   const all = () => { drawTags(); syncGaps(); syncOutcomes() }
+  let live = true
+  // Tags drawn before the web fonts finished loading used a fallback face: redraw them once they are ready.
+  document.fonts.ready.then(() => {
+    if (!live || !map.style) return
+    for (const id of tagImages) if (map.hasImage(id)) map.removeImage(id)
+    tagImages.clear(); drawTags()
+  })
   all()
   const offV = vessels.subscribe(all)
   const offUi = ui.subscribe((s, p) => { if (s.windows !== p.windows) { drawTags(); syncLabels(shownNow()) } })
@@ -202,12 +232,12 @@ function setup(map: MapLibreMap): () => void {
   const labelTimer = window.setInterval(() => gaps.length && syncLabels(shownNow()), 1000)
 
   return () => {
-    cancelAnimationFrame(raf); window.clearInterval(labelTimer); offV(); offUi()
+    live = false; cancelAnimationFrame(raf); window.clearInterval(labelTimer); offV(); offUi()
     map.off('zoomend', onZoom); map.off('mousemove', 'fc-ghost-fill', onEnter); map.off('mouseleave', 'fc-ghost-fill', onLeave)
     for (const l of labels.values()) l.m.remove()
     if (!map.style) return                                   // style already torn down by a swap
     for (const id of ['fc-tags', 'fc-out', 'fc-ghost-cross', 'fc-ghost-edge', 'fc-ghost-hatch', 'fc-ghost-fill']) if (map.getLayer(id)) map.removeLayer(id)
     for (const id of ['fc-ghost', 'fc-ghost-pt', 'fc-tags', 'fc-out']) if (map.getSource(id)) map.removeSource(id)
-    for (const id of IMAGES) if (map.hasImage(id)) map.removeImage(id)
+    for (const id of [...IMAGES, ...tagImages]) if (map.hasImage(id)) map.removeImage(id)
   }
 }

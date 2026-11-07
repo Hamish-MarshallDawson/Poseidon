@@ -157,7 +157,7 @@ function WatchlistPanel() {
       <div className="wl-header">
         <div className="wl-titlerow">
           <h2 id="wl-title">Ranked for review · next 6 h</h2>
-          <Button variant="ghost" className="btn-small" onClick={() => ui.set({ watchlistOpen: false })}>Close <Kbd>Esc</Kbd></Button>
+          <Button className="btn-small" onClick={() => ui.set({ watchlistOpen: false })}>Close <Kbd>Esc</Kbd></Button>
         </div>
         <p className="wl-explain">Chance a ship goes silent with reception normal nearby, within 6 h. Behaviour only: list matches show as reasons, never as inputs.</p>
         <p className="wl-meta">{wl ? `Forecast ${utcTime(wl.snapshot_ts, false)} · ${fmtInt(entries.length)} ships ranked` : 'No forecast received yet'}</p>

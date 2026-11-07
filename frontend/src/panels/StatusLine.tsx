@@ -14,7 +14,7 @@ export function StatusLine() {
   const parts = [
     focus !== null
       ? `focus · ${related} related shown · ${fmtInt(Math.max(0, view.inView - related - 1))} hidden`
-      : `${fmtInt(view.shown)} of ${fmtInt(view.inView)} ships in view`,
+      : `${fmtInt(view.shown)} of ${fmtInt(view.inView)} ${replay ? 'then' : 'ships in view'}`,   // replay wording per 68:16538
   ]
   if (focus === null && (view.stacked || view.inCells)) parts.push(`${fmtInt(view.stacked)} in stacks, ${fmtInt(view.inCells)} in cells`)
   if (view.noCoverageCells) parts.push(`${fmtInt(view.noCoverageCells)} cells without coverage`)
@@ -32,7 +32,7 @@ export function StatusLine() {
       )}
       <span className="sl-text">
         {utcTime(feed.now_ts)}
-        {replay && feed.replay && ` −${minutes(feed.replay.to_ts - feed.now_ts)}`} · {parts.join(' · ')}
+        {replay && feed.replay && ` · −${minutes(feed.replay.to_ts - feed.now_ts)}`} · {parts.join(' · ')}{replay && feed.paused && ' · paused'}
       </span>
       {feed.isMock && <span className="sl-mock">ILLUSTRATIVE DATA</span>}
     </div>

@@ -72,7 +72,8 @@ function LegendPanel() {
         <Entry label="Could be in here">
           <Tile>
             <span className="g-ghost">
-              <G src={hatch} color="--dvm-ship-dark" s={{ inset: 0, opacity: 0.45, maskSize: '3600px 1200px', WebkitMaskSize: '3600px 1200px' }} />
+              {/* The hatch sheet's lines start 1,183 px in; Figma centres it 600 px right of the circle. */}
+              <G src={hatch} color="--dvm-ship-dark" s={{ inset: 0, maskSize: '3600px 1200px', WebkitMaskSize: '3600px 1200px', maskPosition: '-1183px -583px', WebkitMaskPosition: '-1183px -583px' }} />
             </span>
             <G src={lastCourse} color="--dvm-ship-dark" s={{ left: 22.8, top: 13.9, width: 14.2, height: 5.6 }} />
             <G src={hullGhost} color="--dvm-ship-dark" s={{ left: 17, top: 3, width: 12, height: 32, transform: 'rotate(74deg)' }} />
