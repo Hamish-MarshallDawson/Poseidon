@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="8" height="14" viewBox="0 0 8 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="drag handle">
+<circle id="Ellipse" cx="2" cy="2" r="1" fill="#5D6466"/>
+<circle id="Ellipse_2" cx="7" cy="2" r="1" fill="#5D6466"/>
+<circle id="Ellipse_3" cx="2" cy="7" r="1" fill="#5D6466"/>
+<circle id="Ellipse_4" cx="7" cy="7" r="1" fill="#5D6466"/>
+<circle id="Ellipse_5" cx="2" cy="12" r="1" fill="#5D6466"/>
+<circle id="Ellipse_6" cx="7" cy="12" r="1" fill="#5D6466"/>
+</g>
+</svg>
