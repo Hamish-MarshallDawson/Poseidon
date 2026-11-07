@@ -6,6 +6,7 @@ buffer is capped and the raw JSONL log stays the source of truth for a later bac
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -40,6 +41,48 @@ CREATE TABLE IF NOT EXISTS statics (
 );
 SELECT create_hypertable('statics', by_range('time', INTERVAL '{CHUNK_INTERVAL}'), if_not_exists => TRUE);
 CREATE INDEX IF NOT EXISTS statics_mmsi_time ON statics (mmsi, time DESC);
+
+-- Detector, forecast and evaluation tables (06 sections 2.4, 2.7, 2.10). All append-only: a gap update is a new
+-- version row, and a score is never changed after it is written, so the forecast frozen at a time stays checkable.
+-- mmsi is the only vessel ID (Jake, 7 Nov): no identity table, names come from the latest statics row for the mmsi.
+CREATE TABLE IF NOT EXISTS gaps (
+  id text NOT NULL, version integer NOT NULL, mmsi integer NOT NULL, state text NOT NULL,
+  start_ts bigint NOT NULL, end_ts bigint, detected_at bigint NOT NULL, duration_s integer NOT NULL,
+  expected_interval_s real, last_lat double precision NOT NULL, last_lon double precision NOT NULL,
+  last_sog_kn real, last_cog_deg real, last_nav_status smallint, next_lat double precision, next_lon double precision,
+  implied_speed_kn real, draught_before_m real, draught_after_m real,
+  neighbours_heard integer NOT NULL, neighbours_baseline integer NOT NULL, cell_id text NOT NULL,
+  coverage_flag text NOT NULL, src text NOT NULL, gfw_intentional boolean, q text[] NOT NULL DEFAULT '{{}}',
+  PRIMARY KEY (id, version)
+);
+CREATE INDEX IF NOT EXISTS gaps_mmsi_start ON gaps (mmsi, start_ts);
+CREATE INDEX IF NOT EXISTS gaps_detected_at ON gaps (detected_at);
+
+-- `time` (= made_at) partitions it; a unique index on a hypertable must include the partition column.
+CREATE TABLE IF NOT EXISTS scores (
+  time timestamptz NOT NULL, id text NOT NULL, mmsi integer NOT NULL, target text NOT NULL, made_at bigint NOT NULL,
+  horizon_s integer NOT NULL, p double precision NOT NULL, model_version text NOT NULL, feature_version text NOT NULL,
+  features jsonb NOT NULL, contrib jsonb, mode text NOT NULL
+);
+SELECT create_hypertable('scores', by_range('time', INTERVAL '1 hour'), if_not_exists => TRUE);
+CREATE UNIQUE INDEX IF NOT EXISTS scores_id_time ON scores (id, time);
+CREATE INDEX IF NOT EXISTS scores_mmsi_time ON scores (mmsi, time DESC);
+CREATE INDEX IF NOT EXISTS scores_time_p ON scores (time, p DESC);
+
+CREATE TABLE IF NOT EXISTS outcomes (
+  score_id text PRIMARY KEY, mmsi integer NOT NULL, target text NOT NULL, made_at bigint NOT NULL,
+  horizon_s integer NOT NULL, resolved_at bigint NOT NULL, label boolean, censored text, event_id text, lead_s integer
+);
+CREATE INDEX IF NOT EXISTS outcomes_made_at ON outcomes (made_at);
+
+CREATE OR REPLACE FUNCTION dvm_append_only() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION '% is append-only: write a new row instead of %', TG_TABLE_NAME, TG_OP; END $$;
+CREATE OR REPLACE TRIGGER gaps_append_only BEFORE UPDATE OR DELETE ON gaps
+  FOR EACH ROW EXECUTE FUNCTION dvm_append_only();
+CREATE OR REPLACE TRIGGER scores_append_only BEFORE UPDATE OR DELETE ON scores
+  FOR EACH ROW EXECUTE FUNCTION dvm_append_only();
+CREATE OR REPLACE TRIGGER outcomes_append_only BEFORE UPDATE OR DELETE ON outcomes
+  FOR EACH ROW EXECUTE FUNCTION dvm_append_only();
 """
 
 # Run after SCHEMA on every start-up, one statement per execute(): asyncpg sends a multi-statement string as one
@@ -60,16 +103,33 @@ SETUP = [
     "timescaledb.segmentby = '', timescaledb.orderby = 'mmsi, time'); END IF; END $$",
     "CALL add_columnstore_policy('positions', after => interval '1 hour', if_not_exists => true)",
     "CALL add_columnstore_policy('statics', after => interval '1 hour', if_not_exists => true)",
+    # The first coverage_1m had no cls column. Drop that version so the next statement rebuilds it from positions.
+    "DO $$ BEGIN IF EXISTS (SELECT FROM timescaledb_information.continuous_aggregates WHERE view_name = 'coverage_1m') "
+    "AND NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'coverage_1m' AND column_name = 'cls') "
+    "THEN DROP MATERIALIZED VIEW coverage_1m; END IF; END $$",
     # Per-cell coverage baseline (06 section 2.9): separates dark ships from coverage holes. Real-time aggregation on.
+    # Split by cls: gaps and the forecast are Class A only, and short-range Class B makes a cell look healthier.
     # WITH DATA fills the history once, at creation; the policy keeps the last 2 h fresh.
     """CREATE MATERIALIZED VIEW IF NOT EXISTS coverage_1m
        WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
        SELECT time_bucket('1 minute', time) AS bucket, floor(lat * 10)::int AS lat_bin, floor(lon * 10)::int AS lon_bin,
-              count(DISTINCT mmsi)::int AS ships, count(*)::int AS msgs
-       FROM positions GROUP BY 1, 2, 3 WITH DATA""",
+              cls, count(DISTINCT mmsi)::int AS ships, count(*)::int AS msgs
+       FROM positions GROUP BY 1, 2, 3, 4 WITH DATA""",
     "SELECT add_continuous_aggregate_policy('coverage_1m', start_offset => interval '2 hours', "
     "end_offset => interval '1 minute', schedule_interval => interval '1 minute', if_not_exists => true)",
+    # Hourly cells for the hour-of-day expected_vessels baseline (06 section 2.9); kept for the whole run.
+    # Built on positions, not on coverage_1m: distinct ships per hour can't be summed from per-minute distinct counts.
+    """CREATE MATERIALIZED VIEW IF NOT EXISTS coverage_1h
+       WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+       SELECT time_bucket('1 hour', time) AS bucket, floor(lat * 10)::int AS lat_bin, floor(lon * 10)::int AS lon_bin,
+              cls, count(DISTINCT mmsi)::int AS ships, count(*)::int AS msgs
+       FROM positions GROUP BY 1, 2, 3, 4 WITH DATA""",
+    "SELECT add_continuous_aggregate_policy('coverage_1h', start_offset => interval '3 hours', "
+    "end_offset => interval '1 hour', schedule_interval => interval '15 minutes', if_not_exists => true)",
 ]
+
+# Rebuilding an aggregate WITH DATA over hours of positions can take minutes; the pool's 60 s default is too short.
+SETUP_TIMEOUT_S = 900
 
 
 async def setup(con: asyncpg.Connection) -> None:
@@ -81,7 +141,7 @@ async def setup(con: asyncpg.Connection) -> None:
     await con.execute(SCHEMA)
     for sql in SETUP:
         try:
-            await con.execute(sql)
+            await con.execute(sql, timeout=SETUP_TIMEOUT_S)
         except asyncpg.PostgresError as e:
             log.warning("Tiger Data setup step failed, continuing without it: %s (%s)", e, sql.split("(")[0][:60])
 
@@ -91,6 +151,41 @@ STATIC_COLS = ["mmsi", "ts", "recv_ts", "imo", "name", "callsign", "ship_type", 
                "dim_a_m", "dim_b_m", "dim_c_m", "dim_d_m", "length_m", "beam_m", "draught_m",
                "destination", "eta_utc", "mid", "flag_iso2", "src", "q"]
 MAX_BUFFER = 200_000
+
+# Columns the detector, scorer and evaluator write, in 06 field names. scores also gets `time` from made_at.
+APPEND_COLS = {
+    "gaps": ["id", "version", "mmsi", "state", "start_ts", "end_ts", "detected_at", "duration_s",
+             "expected_interval_s", "last_lat", "last_lon", "last_sog_kn", "last_cog_deg", "last_nav_status",
+             "next_lat", "next_lon", "implied_speed_kn", "draught_before_m", "draught_after_m",
+             "neighbours_heard", "neighbours_baseline", "cell_id", "coverage_flag", "src", "gfw_intentional", "q"],
+    "scores": ["id", "mmsi", "target", "made_at", "horizon_s", "p", "model_version", "feature_version",
+               "features", "contrib", "mode"],
+    "outcomes": ["score_id", "mmsi", "target", "made_at", "horizon_s", "resolved_at", "label", "censored",
+                 "event_id", "lead_s"],
+}
+JSON_COLS = {"features", "contrib"}
+
+
+def append_sql(table: str) -> str:
+    cols = (["time"] if table == "scores" else []) + APPEND_COLS[table]
+    return f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join(f'${i}' for i in range(1, len(cols) + 1))})"
+
+
+def append_args(table: str, row: dict) -> tuple:
+    """One row's INSERT arguments. Missing optional fields become NULL; a missing required one fails in the database."""
+    vals = [json.dumps(row[c]) if c in JSON_COLS and row.get(c) is not None else row.get(c)
+            for c in APPEND_COLS[table]]
+    if table == "gaps" and vals[-1] is None:
+        vals[-1] = []
+    if table == "scores":
+        vals.insert(0, datetime.fromtimestamp(row["made_at"] / 1000, timezone.utc))
+    return tuple(vals)
+
+
+async def append(con: asyncpg.Connection, table: str, rows: list[dict]) -> None:
+    """Insert rows into gaps, scores or outcomes, all or none. These tables refuse UPDATE and DELETE."""
+    if rows:
+        await con.executemany(append_sql(table), [append_args(table, r) for r in rows])
 
 
 def _row(rec: Record, cols: list[str]) -> tuple:
