@@ -1,1 +1,7 @@
 .claude/settings.local.json
+
+# Local secrets: copy .env.example to .env. Never commit keys.
+.env
+.env.*
+!.env.example
+env/
