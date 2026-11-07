@@ -2,7 +2,11 @@
 
 Living index of what the team has found about data for the ship-tracking project. Research only; nothing here decides what gets built.
 
-Last updated: Saturday 7 November 2026, evening. A MarineTraffic research wave is still running and will add to this folder.
+Last updated: Saturday 7 November 2026, about 18:30 UTC. Both research waves are finished.
+
+**Build decision to note:** Jake set MMSI as the only ship ID for the 24-hour build, and identity-change detection is out of scope for it. The identity findings here remain research.
+
+**MarineTraffic in one line:** its Gulf coverage can't be reproduced from any free source we found, and its terms rule it out as a data layer, but several of its methods are worth borrowing. See [marinetraffic/SYNTHESIS.md](marinetraffic/SYNTHESIS.md).
 
 ## Read in this order
 
@@ -29,7 +33,7 @@ Last updated: Saturday 7 November 2026, evening. A MarineTraffic research wave i
 | `shared-notes.md` | Running notes the agents shared |
 | `results/` | Measurement outputs from the orchestrator's AISStream and Global Fishing Watch tests |
 | `scripts/` | The throwaway scripts behind the tests, for reference, not production |
-| `marinetraffic/` | The MarineTraffic wave's brief, notes and reports |
+| `marinetraffic/` | The MarineTraffic wave's synthesis, brief, notes and reports: sources, regional feeds, receivers, methods, access, rivals and feed tests |
 
 Agent reports are AI-generated and may contain errors. SYNTHESIS.md says which results the orchestrator checked. Where a report conflicts with SYNTHESIS.md, trust SYNTHESIS.md and tell Aiden's agent on the board.
 
