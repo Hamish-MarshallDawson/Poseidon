@@ -1,4 +1,5 @@
-// frontend/src/types.ts (copied from CONTEXT.md section 6.2, path only changed)
+// Frontend contract types. Mirrors 06-unified-data-model.md section 4.3 (WebSocket) and sections 2.x (records).
+// Field names are frozen by the data model; add types here, never rename fields.
 export type Status = "active" | "silent" | "gap_open" | "stale";
 export type TypeGroup = "tanker" | "cargo" | "passenger" | "fishing" | "tug_special"
   | "military" | "pleasure" | "other" | "unknown";
@@ -41,6 +42,34 @@ export interface CoverageCellView { cell_id: string; state: "ok" | "degraded" | 
 export interface SourceStatus { src: string; state: "up" | "silent" | "down" | "stall"; msgs_per_s: number }
 export interface Stats { tracked: number; msgs_per_s: number; queue_depth: number }
 
+// 06 section 2.7: one forecast row. Append-only on the server, so a frozen forecast stays checkable.
+export interface RiskScore {
+  id: string; mmsi: number; made_at: number; as_of: number; horizon_s: number;   // 21600 = 6 h
+  target: "dark_6h"; p: number; rank: number | null; mode: "live" | "replay" | "backtest";
+  features: Record<string, number>; contrib: Record<string, number>; model_version: string;
+}
+// 06 section 2.10: what happened after a forecast.
+export interface Outcome {
+  score_id: string; mmsi: number; made_at: number; resolved_at: number;
+  label: "hit" | "miss"; censored: "coverage_gap" | "own_stall" | "data_end" | "already_dark" | null;
+  lead_s: number | null;
+}
+// Markers for the scrub bar track (R2 timeline design). Built from gaps, spoofs, outcomes and feed stalls.
+export type TimelineEvent =
+  | { kind: "gap"; id: string; mmsi: number; start_ts: number; end_ts: number | null }
+  | { kind: "spoof"; id: string; mmsi: number; ts: number }
+  | { kind: "meeting"; id: string; mmsi: number; other_mmsi: number; ts: number }
+  | { kind: "freeze"; id: string; ts: number }                       // forecast frozen and committed
+  | { kind: "outcome"; id: string; mmsi: number; ts: number; label: "hit" | "miss" | "censored" }
+  | { kind: "coverage"; id: string; start_ts: number; end_ts: number; state: "data" | "degraded" | "own_stall" | "none" };
+export interface HistoryRange { from_ts: number; to_ts: number }
+
+// Statics merged by the server for `detail` (backend live.detail: fields never seen are absent, not null).
+export interface StaticDetail {
+  mmsi: number; imo?: number; name?: string; callsign?: string; ship_type?: number; type_group?: TypeGroup;
+  length_m?: number; beam_m?: number; draught_m?: number; destination?: string; eta_utc?: string; flag_iso2?: string;
+}
+
 type Base = { seq: number };
 export type ServerMsg =
   | (Base & { type: "hello"; schema: 1; mode: "live" | "replay"; speed: number; now_ts: number;
@@ -52,12 +81,13 @@ export type ServerMsg =
   | (Base & { type: "delta"; now_ts: number; vessels: VesselView[]; removed: number[];
               gaps: GapEvent[]; spoofs: SpoofEvent[]; watchlist: Watchlist | null; stats: Stats })
   | (Base & { type: "watchlist" } & Watchlist)
-  | (Base & { type: "status"; now_ts: number; mode: "live" | "replay"; speed: number;
+  | (Base & { type: "status"; now_ts: number; mode: "live" | "replay"; speed: number; paused?: boolean;
               sources: SourceStatus[]; replay?: { from_ts: number; to_ts: number } })
-  | (Base & { type: "detail"; mmsi: number; vessel: unknown; statics: unknown[]; gaps: GapEvent[];
-              spoofs: SpoofEvent[]; sanction: unknown | null; score: unknown | null });
+  | (Base & { type: "ping"; now_ts: number })
+  | (Base & { type: "detail"; mmsi: number; vessel: VesselView; statics: StaticDetail[]; gaps: GapEvent[];
+              spoofs: SpoofEvent[]; sanction: unknown | null; score: RiskScore | null });
 
 export type ClientMsg =
   | { type: "subscribe"; bbox: [[number, number], [number, number]]; min_status?: Status }
-  | { type: "replay"; action: "play" | "pause" | "seek" | "speed"; t?: number; speed?: number }
+  | { type: "replay"; action: "play" | "pause" | "seek" | "speed" | "live"; t?: number; speed?: number }
   | { type: "detail"; mmsi: number };
