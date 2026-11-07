@@ -52,14 +52,14 @@ def test_bad_message_is_skipped_and_counted(hub, caplog):
     assert task.cancelled(), "consume stopped by itself"
     assert {538003705, 538003707} <= set(hub.live.pos), "messages after the bad one were not handled"
     assert hub.bad_messages == 1 and hub.last_bad.startswith(("TypeError", "ValueError"))
-    assert sum("Skipped a bad AISStream message" in r.message for r in caplog.records) == 1
+    assert sum("Skipped a bad message" in r.message for r in caplog.records) == 1
 
 
 def test_bad_message_log_is_rate_limited(hub, caplog):
     with caplog.at_level(logging.WARNING, logger="dvm"):
         drain(hub, [position(538003706, sog="abc")] * 50)
     assert hub.bad_messages == 50
-    assert sum("Skipped a bad AISStream message" in r.message for r in caplog.records) == 1
+    assert sum("Skipped a bad message" in r.message for r in caplog.records) == 1
 
 
 def test_health_reports_bad_messages(hub, monkeypatch):

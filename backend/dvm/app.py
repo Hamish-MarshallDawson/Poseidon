@@ -15,9 +15,12 @@ from dvm import auth, config, coverage, limits
 from dvm.briefing.routes import make_router as briefing_router
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import Live
+from dvm.merge import FeedMerger
 from dvm.models import Envelope
 from dvm.normalise import normalise
 from dvm.rawlog import RawLog
+from dvm.sources import digitraffic, schema as sources_schema
+from dvm.sources.routes import make_router as sources_router
 from dvm.store import Store
 
 log = logging.getLogger("dvm")
@@ -46,12 +49,34 @@ class Hub:
         self.bad_messages = 0          # messages that raised while being handled, then skipped
         self.last_bad: str | None = None
         self._bad_logged_at = float("-inf")
+        self.merger = FeedMerger()     # every feed's records pass through here before the map and the store
+        self.digitraffic = digitraffic.Stats() if config.DIGITRAFFIC else None
+        self.sources_schema: str = "pending"   # observations tables: pending | ready | failed: <error>
+
+    def ingest(self, rec, now: int) -> None:
+        """One normalised record from any feed: merge it across feeds, then map and store what the merger emits."""
+        self._emit(self.merger.push(rec, now))
+
+    def _emit(self, recs) -> None:
+        for rec in recs:   # the merger has already dropped cross-feed copies and repeats, so store everything it emits
+            self.live.apply(rec)
+            if self.store:
+                self.store.add(rec)
+
+    def digitraffic_sink(self, rec) -> None:
+        try:
+            self.ingest(rec, now_ms())
+        except Exception as e:  # one bad record must never stop the Digitraffic stream
+            self._bad(e)
 
     def stats(self) -> dict:
         return {"tracked": len(self.live.pos), "msgs_per_s": round(self.msgs_per_s, 1), "queue_depth": self.queue.qsize()}
 
     def sources(self) -> list[dict]:
-        return [{"src": "aisstream", "state": self.feed.state, "msgs_per_s": round(self.msgs_per_s, 1)}]
+        out = [{"src": "aisstream", "state": self.feed.state, "msgs_per_s": round(self.msgs_per_s, 1)}]
+        if self.digitraffic:
+            out.append({"src": "digitraffic", "state": "up" if self.digitraffic.connected else "down"})
+        return out
 
     async def consume(self) -> None:
         while True:
@@ -66,7 +91,7 @@ class Hub:
         self.last_bad = f"{type(e).__name__}: {str(e)[:200]}"
         now = time.monotonic()
         if now - self._bad_logged_at >= BAD_LOG_EVERY_S:   # rate-limited: a stream of junk can't flood the log
-            log.warning("Skipped a bad AISStream message (%d so far): %s", self.bad_messages, self.last_bad,
+            log.warning("Skipped a bad message (%d so far): %s", self.bad_messages, self.last_bad,
                         exc_info=self._bad_logged_at == float("-inf"))   # full traceback the first time only
             self._bad_logged_at = now
 
@@ -88,8 +113,7 @@ class Hub:
                 log.warning("AISStream subscription confirmed WITHOUT compression: expect dropped messages")
             return
         for rec in normalise(Envelope(src="aisstream", recv_ts=recv_ts, raw=raw)):
-            if self.live.apply(rec) and self.store:
-                self.store.add(rec)
+            self.ingest(rec, now_ms())
 
     async def tick(self) -> None:
         last_sent = now_ms()
@@ -97,6 +121,10 @@ class Hub:
         while True:
             await asyncio.sleep(1)
             self.rawlog.flush()
+            try:
+                self._emit(self.merger.flush(now_ms()))   # fixes held for the other feed's copy, now due
+            except Exception as e:  # never let a merger bug stop the 1 Hz loop
+                self._bad(e)
             self.msgs_per_s = 0.7 * self.msgs_per_s + 0.3 * self._count   # smoothed per-second rate
             self._count = 0
             now = now_ms()
@@ -114,9 +142,37 @@ class Hub:
             n += 1
             if n % 10 == 0:
                 db = f"db rows {self.store.rows_written}, error {self.store.last_error}" if self.store else "db off"
+                dt = self.digitraffic
+                db += (f", digitraffic {'up' if dt.connected else 'down'} {dt.positions} pos, merged "
+                       f"{self.merger.stats['merged']}" if dt else ", digitraffic off")
                 log.info("aisstream %s: %.1f msg/s, %d ships, queue %d, dropped %d, bad %d, clients %d, %s", self.feed.state,
                          self.msgs_per_s, len(self.live.pos), self.queue.qsize(), self.feed.dropped, self.bad_messages,
                          len(self.clients), db)
+
+    async def run_digitraffic(self) -> None:
+        """paho reconnects by itself; this only restarts the stream if it ever ends with an error."""
+        while True:
+            try:
+                await digitraffic.run(self.digitraffic_sink, self.rawlog, stats=self.digitraffic)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 - log and restart, the live map keeps AISStream meanwhile
+                self.digitraffic.connected, self.digitraffic.last_error = False, f"{type(e).__name__}: {e}"
+                log.warning("Digitraffic stream stopped (%s); restarting in 30 s", self.digitraffic.last_error)
+            await asyncio.sleep(30)
+
+    async def setup_sources_schema(self) -> None:
+        """observations and source_windows (dvm/sources/schema.py), once the store has connected and set up its own
+        tables. Idempotent and best-effort: a failure is logged and shown in /health, positions keep flowing."""
+        while self.store.pool is None:
+            await asyncio.sleep(1)
+        try:
+            async with self.store.pool.acquire() as con:
+                await sources_schema.setup(con)
+            self.sources_schema = "ready"
+        except Exception as e:  # noqa: BLE001
+            self.sources_schema = f"failed: {type(e).__name__}: {e}"
+            log.warning("observations tables setup failed, data routes may 500: %s", e)
 
     async def _send(self, c: Client, msg: dict) -> None:
         try:
@@ -139,8 +195,13 @@ async def lifespan(app: FastAPI):
                                                        config.AIS_BBOX, hub.queue, hub.feed, hub.limiter)))
     else:
         log.warning("AISSTREAM_API_KEY is not set in .env: no live data")
+    if hub.digitraffic:
+        tasks.append(asyncio.create_task(hub.run_digitraffic()))
+    else:
+        log.info("DIGITRAFFIC=0: Digitraffic stream off")
     if hub.store:
         tasks.append(asyncio.create_task(hub.store.run()))
+        tasks.append(asyncio.create_task(hub.setup_sources_schema()))
     else:
         log.warning("TIGER_DATABASE_URL is not set: positions go to the JSONL log only")
     if not auth.ENABLED:
@@ -164,6 +225,10 @@ def health() -> dict:
     return {"ok": True, "aisstream": {"state": hub.feed.state, "received": hub.feed.received, "dropped": hub.feed.dropped,
                                       "last_error": hub.feed.last_error, "bad_messages": hub.bad_messages,
                                       "last_bad": hub.last_bad, "limits": hub.limiter.status()},
+            "digitraffic": ({"enabled": True, "connected": dt.connected, "received": dt.received,
+                             "positions": dt.positions, "statics": dt.statics, "last_error": dt.last_error}
+                            if (dt := hub.digitraffic) else {"enabled": False}),
+            "merger": hub.merger.stats, "sources_schema": hub.sources_schema,
             "stats": hub.stats(), "clients": len(hub.clients),
             "db": {"enabled": bool(store), "rows_written": store.rows_written if store else 0,
                    "last_error": store.last_error if store else None}}
@@ -204,6 +269,8 @@ class _CurrentHub:
 
 
 app.include_router(briefing_router(_CurrentHub(), require_login))   # POST /briefing, POST /briefing/speech
+# GET /observations, /sources, /model/observations, /model/positions, /model/statics (dvm/sources/routes.py)
+app.include_router(sources_router(lambda: hub.store.pool if hub.store else None, require_login))
 
 
 @app.websocket("/ws")

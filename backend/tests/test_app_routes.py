@@ -13,6 +13,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA_DIR", tmp_path)
     monkeypatch.setattr(config, "TIGER_DATABASE_URL", "")
     monkeypatch.setattr(config, "AISSTREAM_API_KEY", "")
+    monkeypatch.setattr(config, "DIGITRAFFIC", False)   # no network in unit tests
     monkeypatch.setattr(auth, "ENABLED", False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with TestClient(app_mod.app) as c:
