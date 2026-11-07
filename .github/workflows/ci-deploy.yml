@@ -1,0 +1,104 @@
+# Tests on every PR and push; on main, deploys to the Vultr server (deploy/vultr/deploy.sh).
+# Secrets: VULTR_SSH_KEY (private key whose only power is deploy.sh) and VULTR_KNOWN_HOSTS (the server's host key).
+name: CI and deploy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-{0}', github.ref) || 'deploy-vultr' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SERVER: 192.248.153.178
+  SITE: 192-248-153-178.sslip.io
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      # No .env in CI: Tiger tests and the stress suite skip themselves.
+      - run: python -m pytest -q tests
+
+  frontend:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+        env:
+          VITE_WS_URL: wss://${{ env.SITE }}/api/ws
+          VITE_API_URL: https://${{ env.SITE }}/api
+          VITE_AUTH0_DOMAIN: hedgedbets-hacktheburgh.uk.auth0.com
+          VITE_AUTH0_CLIENT_ID: XYVmFNiyeduk9gu9HCTBLPlBqnC0sfUJ
+          VITE_AUTH0_AUDIENCE: https://api.dark-vessel-monitor
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: dist
+          path: frontend/dist
+          retention-days: 3
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: SSH key
+        env:
+          KEY: ${{ secrets.VULTR_SSH_KEY }}
+          KNOWN: ${{ secrets.VULTR_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+      - name: Deploy frontend
+        run: tar -C dist -cf - . | ssh -o BatchMode=yes root@$SERVER frontend
+      # Restart the backend only when backend/ changed: each restart is an AISStream reconnect (12 per hour max).
+      - name: Did backend change?
+        id: be
+        run: |
+          before='${{ github.event.before }}'
+          if [ '${{ github.event_name }}' = push ] && git cat-file -e "$before^{commit}" 2>/dev/null && git diff --quiet "$before" HEAD -- backend; then
+            echo changed=false >> "$GITHUB_OUTPUT"
+          else
+            echo changed=true >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy backend
+        if: steps.be.outputs.changed == 'true'
+        run: git archive HEAD backend | ssh -o BatchMode=yes root@$SERVER backend
+      - name: Smoke check
+        run: |
+          curl -fsS https://$SITE/ | grep -q '<div id="root">'
+          curl -fsS https://$SITE/api/health | grep -q '"ok":true'
+          echo "live: https://$SITE"
