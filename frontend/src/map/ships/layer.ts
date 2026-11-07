@@ -1,5 +1,5 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl'
-import type { Atlas } from './sprites'
+import type { Atlas, Sprite } from './sprites'
 import type { ShipState } from './state'
 import { clock, EXTRAP_S } from './state'
 
@@ -9,7 +9,9 @@ import { clock, EXTRAP_S } from './state'
 // dead reckoning, heading ease and opacity fades all run in the vertex shader from per-ship start/end values, so
 // the CPU touches the buffer only when a fix arrives or the slot set changes, never per frame.
 
-export const enum Colour { Normal = 0, Selected = 1, Dark = 2, Spoof = 3, Sanctioned = 4 }
+export const Colour = { Normal: 0, Selected: 1, Dark: 2, Spoof: 3, Sanctioned: 4, Keyline: 5 } as const
+export type Colour = (typeof Colour)[keyof typeof Colour]
+export const N_COLOURS = 6
 const STRIDE = 24   // floats per instance
 
 const VS = `#version 300 es
@@ -20,7 +22,7 @@ layout(location=3) in vec4 a_uv;    // u0 v0 u1 v1
 layout(location=4) in vec4 a_op;    // op0 op1 tFade rotate
 layout(location=5) in vec4 a_oc;    // offX offY colour fadeDuration
 uniform mat4 u_m; uniform float u_now; uniform vec2 u_vp; uniform float u_wrap;
-uniform vec4 u_colors[5];
+uniform vec4 u_colors[6];
 out vec2 v_uv; out vec4 v_col; out float v_op;
 const vec2 C[6] = vec2[6](vec2(-.5,-.5), vec2(.5,-.5), vec2(-.5,.5), vec2(-.5,.5), vec2(.5,-.5), vec2(.5,.5));
 void main() {
@@ -53,15 +55,22 @@ void main() {
 
 export class InstanceBuffer {
   data = new Float32Array(STRIDE * 1024)
+  instSlot = new Int32Array(1024)          // instance → ship slot (-1 = fixed position), for O(changed) patches
   count = 0
-  constructor(private atlas: Atlas, private state: ShipState) {}
+  private atlas: Atlas
+  private state: ShipState
+  constructor(atlas: Atlas, state: ShipState) { this.atlas = atlas; this.state = state }
   reset() { this.count = 0 }
   // One quad tied to a ship's motion (slot) or fixed at (x, y) mercator when slot < 0.
-  push(slot: number, sprite: string, colour: Colour, rotate: boolean, offX: number, offY: number, scale: number,
+  push(slot: number, sprite: string | Sprite | undefined, colour: Colour, rotate: boolean, offX: number, offY: number, scale: number,
        op0: number, op1: number, tFade: number, fadeS: number, x = 0, y = 0): void {
-    const sp = this.atlas.sprites.get(sprite)
+    const sp = typeof sprite === 'string' ? this.atlas.sprites.get(sprite) : sprite
     if (!sp) return
-    if ((this.count + 1) * STRIDE > this.data.length) { const d = new Float32Array(this.data.length * 2); d.set(this.data); this.data = d }
+    if ((this.count + 1) * STRIDE > this.data.length) {
+      const d = new Float32Array(this.data.length * 2); d.set(this.data); this.data = d
+      const q = new Int32Array(this.instSlot.length * 2); q.set(this.instSlot); this.instSlot = q
+    }
+    this.instSlot[this.count] = slot
     const d = this.data, i = this.count++ * STRIDE, s = this.state
     if (slot >= 0) {
       d[i] = s.x0[slot]; d[i + 1] = s.y0[slot]; d[i + 2] = s.x1[slot]; d[i + 3] = s.y1[slot]
@@ -78,9 +87,19 @@ export class InstanceBuffer {
   }
 }
 
+// Rewrite only the motion fields of instance `inst` from its ship's current motion state.
+export function writeMotion(buf: InstanceBuffer, state: ShipState, inst: number, slot: number): void {
+  const d = buf.data, i = inst * STRIDE
+  d[i] = state.x0[slot]; d[i + 1] = state.y0[slot]; d[i + 2] = state.x1[slot]; d[i + 3] = state.y1[slot]
+  d[i + 4] = state.vx[slot]; d[i + 5] = state.vy[slot]; d[i + 6] = state.t0[slot]; d[i + 7] = state.t1[slot]
+  d[i + 8] = state.h0[slot]; d[i + 9] = state.dh[slot]
+}
+
 export interface ShipLayerHooks {
   rebuild(buf: InstanceBuffer): number      // fill the buffer; return the time (clock) the last motion or fade ends
-  colours(): { list: number[][]; key: number[] }  // 5 rgba colours (0..1) and the keyline rgb
+  // Optional O(changed) update when only positions moved: write into buf.data, return the dirty instance range.
+  patch?(buf: InstanceBuffer): { lo: number; hi: number; end: number } | null
+  colours(): { list: Float32Array; key: Float32Array }  // N_COLOURS rgba colours (0..1, flat) and the keyline rgb
 }
 
 export function createShipLayer(id: string, atlas: Atlas, buf: InstanceBuffer, hooks: ShipLayerHooks) {
@@ -88,7 +107,7 @@ export function createShipLayer(id: string, atlas: Atlas, buf: InstanceBuffer, h
   let gl: WebGL2RenderingContext
   let prog: WebGLProgram, vao: WebGLVertexArrayObject, vbo: WebGLBuffer, tex: WebGLTexture
   let u: Record<string, WebGLUniformLocation | null> = {}
-  let dirty = true, animEnd = 0, colours = hooks.colours(), coloursDirty = false
+  let dirty = true, patchDue = false, animEnd = 0, colours = hooks.colours(), coloursDirty = false
 
   const layer: CustomLayerInterface = {
     id, type: 'custom', renderingMode: '2d',
@@ -127,16 +146,25 @@ export function createShipLayer(id: string, atlas: Atlas, buf: InstanceBuffer, h
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo)
         gl.bufferData(gl.ARRAY_BUFFER, buf.data.subarray(0, buf.count * STRIDE), gl.DYNAMIC_DRAW)
         dirty = false
+        patchDue = false                                      // the rebuild already holds the new motion
+      } else if (patchDue) {
+        patchDue = false
+        const r = hooks.patch?.(buf)
+        if (r && r.hi > r.lo) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, vbo)
+          gl.bufferSubData(gl.ARRAY_BUFFER, r.lo * STRIDE * 4, buf.data, r.lo * STRIDE, (r.hi - r.lo) * STRIDE)
+          animEnd = Math.max(animEnd, r.end)
+        }
       }
       if (coloursDirty) { colours = hooks.colours(); coloursDirty = false }
       if (!buf.count) return
       gl.useProgram(prog)
       gl.bindVertexArray(vao)
-      gl.uniformMatrix4fv(u.u_m, false, args.modelViewProjectionMatrix as Float32Array)
+      gl.uniformMatrix4fv(u.u_m, false, args.defaultProjectionData.mainMatrix as Float32Array)   // mercator 0..1 → clip
       gl.uniform1f(u.u_now, now)
       const canvas = map.getCanvas()
       gl.uniform2f(u.u_vp, canvas.clientWidth, canvas.clientHeight)
-      gl.uniform4fv(u.u_colors, colours.list.flat())
+      gl.uniform4fv(u.u_colors, colours.list)
       gl.uniform3fv(u.u_key, colours.key)
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(u.u_tex, 0)
       gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
@@ -155,6 +183,7 @@ export function createShipLayer(id: string, atlas: Atlas, buf: InstanceBuffer, h
   return {
     layer,
     invalidate() { dirty = true; map?.triggerRepaint() },
+    patch() { patchDue = true; map?.triggerRepaint() },
     recolour() { coloursDirty = true; map?.triggerRepaint() },
   }
 }

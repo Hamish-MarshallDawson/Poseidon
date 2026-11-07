@@ -45,21 +45,21 @@ export class ShipState {
     this.cap = cap
   }
 
-  // Glide progress 0..1 and seconds of dead reckoning so far.
-  private phase(s: number, now: number): [number, number] {
+  // Glide progress 0..1 (no allocation: posAt runs for every ship in the slot pass).
+  private ease(s: number, now: number): number {
     const span = this.t1[s] - this.t0[s]
-    const e = span > 0 ? Math.min(1, Math.max(0, (now - this.t0[s]) / span)) : 1
-    return [e, Math.min(EXTRAP_S, Math.max(0, now - this.t1[s]))]
+    return span > 0 ? Math.min(1, Math.max(0, (now - this.t0[s]) / span)) : 1
   }
 
   posAt(s: number, now: number, out: Float64Array | number[]): void {
-    const [e, dt] = this.phase(s, now)
+    const e = this.ease(s, now)
+    const dt = Math.min(EXTRAP_S, Math.max(0, now - this.t1[s]))
     out[0] = this.x0[s] + (this.x1[s] - this.x0[s]) * e + this.vx[s] * dt
     out[1] = this.y0[s] + (this.y1[s] - this.y0[s]) * e + this.vy[s] * dt
   }
 
   headingAt(s: number, now: number): number {
-    const [e] = this.phase(s, now)
+    const e = this.ease(s, now)
     return this.h0[s] + this.dh[s] * e * e * (3 - 2 * e)
   }
 
@@ -110,6 +110,10 @@ export class ShipState {
     this.hasHeading[s] = hdg == null ? 0 : 1
     this.view[s] = v
     return s
+  }
+
+  clear(): void {
+    this.n = 0; this.free.length = 0; this.slotOf.clear(); this.view.length = 0
   }
 
   remove(mmsi: number): void {
