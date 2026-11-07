@@ -160,4 +160,7 @@ def normalise(env: Envelope) -> list[Record]:
     """Dispatch on source. Unknown sources and message types yield nothing."""
     if env.src == "aisstream":
         return _aisstream(env)
+    if env.src == "digitraffic":
+        from dvm.sources.digitraffic import normalise_digitraffic   # late import: that module imports this one
+        return normalise_digitraffic(env)
     return []
