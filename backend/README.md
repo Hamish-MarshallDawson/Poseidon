@@ -44,7 +44,7 @@ Tiger Cloud runs TimescaleDB 2.31 on PostgreSQL 18. Everything below is created 
 - **Hypertables** `positions` and `statics`, partitioned on `time timestamptz` (= `ts`, as Tiger's docs recommend). `ts` and `recv_ts` stay epoch milliseconds per 06.
 - **Continuous aggregate `coverage_1m`**: per 1-minute bucket and 0.1-degree cell, `ships = count(DISTINCT mmsi)` and `msgs = count(*)`. Real-time aggregation is on (`materialized_only = false`), so the latest minute is correct without waiting for a refresh. `count(DISTINCT)` is allowed in a 2.31 continuous aggregate.
 - **Refresh policy** on `coverage_1m`: every 1 minute, over the window from 2 hours ago to 1 minute ago.
-- **Columnstore** on both hypertables, with a policy that compresses chunks older than 1 hour.
+- **Columnstore** on both hypertables (15-minute chunks, provisional), with a policy that compresses chunks older than 1 hour.
 - **`GET /coverage`** returns `{"cells": [{cell_id, bucket_ts, ships, msgs}]}` for the last `minutes` (default 10, capped at 120), optionally `?bbox=[[lon1,lat1],[lon2,lat2]]`. It takes the same Auth0 access token as `/ws`, as `Authorization: Bearer <token>`, and returns 401 without a valid one. It is open when Auth0 is not configured.
 
 **Why**
@@ -76,7 +76,7 @@ The gap is modest at this size (about 2.6x) because the raw query is already a s
 
 The policy has not compressed any chunk on the live database yet (see below), so there is no ratio on live data. The probe copy was dropped afterwards. `statics` uses the same settings.
 
-**The existing chunk.** The hypertables were created with the 7-day default. The only chunk is 5 to 12 Nov 2026 (UTC) and it takes every live write until 12 Nov 00:00 UTC. Setting the interval to 1 hour (`set_chunk_time_interval`) only applies to chunks created after that. The compression policy can't compress a chunk that is still open, so the first compression runs on 12 Nov, after 01:00 UTC, and it compresses that whole 7-day chunk at once. From then on the chunks are 1 hour each. We did not split the existing chunk, because that means migrating live data.
+**Chunks: 15 minutes, provisional.** `CHUNK_INTERVAL` in `dvm/store.py` is 15 minutes for now, so the 1-hour compression policy has closed chunks to compress during the hackathon. Jake may change it once the data model settles. Existing chunks can't be resized, so a change moves the tables with `python -m dvm.rechunk`. It copies into new hypertables while ingest runs, then waits for the backend to be stopped with Ctrl+C. It copies the last few minutes, swaps names only if the row counts match, and keeps the old tables as `*_old` until `python -m dvm.rechunk --drop-old`. The restarted backend recreates `coverage_1m` and the columnstore policy. Set `CHUNK_INTERVAL` first, because start-up applies it with `set_chunk_time_interval`.
 
 **Gotchas**
 
