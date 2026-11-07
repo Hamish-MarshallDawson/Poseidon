@@ -1,0 +1,37 @@
+html, body, #root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0f14;
+}
+
+/* Sized, not positioned: maplibre-gl.css loads later and sets .maplibregl-map to position: relative. */
+.map {
+  width: 100%;
+  height: 100%;
+}
+
+.status {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #e5e7eb;
+  font: 13px system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.dot.on { background: #22c55e; }
+.dot.off { background: #ef4444; }
