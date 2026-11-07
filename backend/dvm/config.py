@@ -1,4 +1,4 @@
-"""Settings from backend/.env (see .env.example)."""
+"""Settings from the repo-root .env (see the root .env.example). An optional backend/.env wins over it."""
 import json
 import os
 from pathlib import Path
@@ -6,7 +6,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")
+load_dotenv(ROOT / ".env")          # optional per-backend overrides; load_dotenv never overrides, so this wins
+load_dotenv(ROOT.parent / ".env")   # the one root .env per machine
 
 AISSTREAM_API_KEY = os.getenv("AISSTREAM_API_KEY", "")
 AISSTREAM_URL = os.getenv("AISSTREAM_URL", "wss://stream.aisstream.io/v0/stream")
