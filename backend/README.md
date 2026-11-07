@@ -82,7 +82,8 @@ The policy has not compressed any chunk on the live database yet (see below), so
 
 - A continuous aggregate can't be created inside a transaction block, and asyncpg sends a multi-statement string as one. So `SETUP` runs one statement per `execute()`.
 - `add_columnstore_policy` is a procedure in 2.31: `CALL`, not `SELECT`.
-- The `segmentby` and `orderby` settings are applied with `ALTER TABLE ... SET` on every start-up. Once chunks are compressed, check that a changed `segmentby` is refused rather than silently applied.
+- The columnstore `ALTER TABLE ... SET` runs only while columnstore is still off (a catalog check in a `DO` block), because changing it once chunks are compressed is refused. To change `segmentby` or `orderby` later, do it by hand.
+- Only the base tables must succeed at start-up. A failing extra (columnstore, policy, aggregate) is logged as a warning and never stops positions being written.
 
 If the database is unreachable, ingest and the map carry on: rows are buffered (capped) and retried, and the JSONL log keeps everything. `/coverage` returns 503 until the connection is up.
 

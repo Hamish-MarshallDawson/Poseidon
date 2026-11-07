@@ -47,10 +47,14 @@ SETUP = [
     "SELECT set_chunk_time_interval('statics', interval '1 hour')",
     # Not segmented by mmsi: at ~3,000 rows a minute over ~7,000 ships a 1-hour chunk holds about a dozen rows per
     # ship, and segmenting by mmsi made the compressed chunk BIGGER (0.6x). Ordering by mmsi, time gives 4.3x.
-    "ALTER TABLE positions SET (timescaledb.enable_columnstore = true, timescaledb.segmentby = '', "
-    "timescaledb.orderby = 'mmsi, time')",
-    "ALTER TABLE statics SET (timescaledb.enable_columnstore = true, timescaledb.segmentby = '', "
-    "timescaledb.orderby = 'mmsi, time')",
+    # Only while columnstore is off: changing it once chunks are compressed is refused, and a restart must not trip.
+    "DO $$ BEGIN IF NOT (SELECT compression_enabled FROM timescaledb_information.hypertables "
+    "WHERE hypertable_name = 'positions') THEN ALTER TABLE positions SET (timescaledb.enable_columnstore = true, "
+    "timescaledb.segmentby = '', timescaledb.orderby = 'mmsi, time'); END IF; END $$",
+    # Only while columnstore is off: changing it once chunks are compressed is refused, and a restart must not trip.
+    "DO $$ BEGIN IF NOT (SELECT compression_enabled FROM timescaledb_information.hypertables "
+    "WHERE hypertable_name = 'statics') THEN ALTER TABLE statics SET (timescaledb.enable_columnstore = true, "
+    "timescaledb.segmentby = '', timescaledb.orderby = 'mmsi, time'); END IF; END $$",
     "CALL add_columnstore_policy('positions', after => interval '1 hour', if_not_exists => true)",
     "CALL add_columnstore_policy('statics', after => interval '1 hour', if_not_exists => true)",
     # Per-cell coverage baseline (06 section 2.9): separates dark ships from coverage holes. Real-time aggregation on.
@@ -66,10 +70,17 @@ SETUP = [
 
 
 async def setup(con: asyncpg.Connection) -> None:
-    """Create the tables and Tiger Data objects. Safe to run again."""
+    """Create the tables and Tiger Data objects. Safe to run again.
+
+    The tables must exist; the extras (columnstore, policies, aggregate) are best-effort, so a problem with one is
+    logged and never stops positions being written.
+    """
     await con.execute(SCHEMA)
     for sql in SETUP:
-        await con.execute(sql)
+        try:
+            await con.execute(sql)
+        except asyncpg.PostgresError as e:
+            log.warning("Tiger Data setup step failed, continuing without it: %s (%s)", e, sql.split("(")[0][:60])
 
 POS_COLS = ["mmsi", "ts", "recv_ts", "lat", "lon", "sog_kn", "cog_deg", "heading_deg", "nav_status",
             "cls", "msg_type", "ts_quality", "src", "q"]
