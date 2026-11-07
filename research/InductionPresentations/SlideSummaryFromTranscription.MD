@@ -160,6 +160,8 @@ From the [MLH event prizes page](https://www.mlh.com/events/hacktheburgh-9f/priz
 
 ## 4. Team
 
+The full skills profile for each person, with a map of skills to tracks, is in [`agent/TeamSkill/team-skills.md`](../../agent/TeamSkill/team-skills.md).
+
 | Person | Relevant strengths |
 |---|---|
 | Hamish | Agentic pipelines, VLMs, speech recognition, local AI and quantisation, multi-agent coding (ran 11 agents at Code for Good) |
