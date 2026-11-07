@@ -10,7 +10,7 @@ import jwt
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import auth, config
+from dvm import auth, config, limits
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import Live
 from dvm.models import Envelope
@@ -33,7 +33,8 @@ class Client:
 class Hub:
     def __init__(self):
         self.live, self.feed = Live(), Feed()
-        self.queue: asyncio.Queue = asyncio.Queue(maxsize=100_000)
+        self.queue: asyncio.Queue = asyncio.Queue(maxsize=limits.QUEUE_MAX)
+        self.limiter = limits.AisLimiter(config.DATA_DIR / "aisstream_limits.json")
         self.rawlog = RawLog(config.DATA_DIR)
         self.store = Store(config.TIGER_DATABASE_URL) if config.TIGER_DATABASE_URL else None
         self.clients: set[Client] = set()
@@ -113,7 +114,7 @@ async def lifespan(app: FastAPI):
     tasks = [asyncio.create_task(hub.consume()), asyncio.create_task(hub.tick())]
     if config.AISSTREAM_API_KEY:
         tasks.append(asyncio.create_task(run_aisstream(config.AISSTREAM_URL, config.AISSTREAM_API_KEY,
-                                                       config.AIS_BBOX, hub.queue, hub.feed)))
+                                                       config.AIS_BBOX, hub.queue, hub.feed, hub.limiter)))
     else:
         log.warning("AISSTREAM_API_KEY is not set in backend/.env: no live data")
     if hub.store:
@@ -139,7 +140,7 @@ app.add_middleware(CORSMiddleware, allow_origins=config.FRONTEND_ORIGINS, allow_
 def health() -> dict:
     store = hub.store
     return {"ok": True, "aisstream": {"state": hub.feed.state, "received": hub.feed.received, "dropped": hub.feed.dropped,
-                                      "last_error": hub.feed.last_error},
+                                      "last_error": hub.feed.last_error, "limits": hub.limiter.status()},
             "stats": hub.stats(), "clients": len(hub.clients),
             "db": {"enabled": bool(store), "rows_written": store.rows_written if store else 0,
                    "last_error": store.last_error if store else None}}

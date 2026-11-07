@@ -50,6 +50,20 @@ If the database is unreachable, ingest and the map carry on: rows are buffered (
 
 World-wide, 7 Nov 2026 around 16:55 UTC: about 90 messages a second, 7,300 ships after 3 minutes, queue depth 0, nothing dropped. One process keeps up easily, so the default box is the whole world.
 
+## AISStream rate rule (hard rule)
+
+AISStream bans clients for what they send: connections, reconnects and subscription updates. All the limits live in **`dvm/limits.py`**, as constants with a source on each, and the code enforces them. A breach is refused and logged as `AISSTREAM RATE RULE BREACH REFUSED`, and ingest stops instead of retrying.
+
+- **Connections:** at most 1 per process, and 1 process per machine (a localhost port lock). AISStream's cap is 3 per account and 3 per IP. Run only one backend per API key.
+- **Reconnects:** backoff from 5 s doubling to 30 min with jitter, and at most 12 connects in any hour. After HTTP 429, 401 or 403, an error message from the server, or a policy close, there is no connection for 1 hour. Ban reports in https://github.com/aisstream/issues (#256, #287, #302) came from reconnect loops capped at 2 to 5 minutes.
+- **Restarts:** the backoff, the hourly count and any penalty are saved in `data/aisstream_limits.json`, so a restart doesn't reset them. Delete the file only after checking the account.
+- **Subscription updates:** at most 1 per 2 s per connection (theirs is 1 per second), sent within 3 s of connecting.
+- **Compression:** permessage-deflate always. The log warns if `SubscriptionConfirmation` says it is off.
+- **Slow reader:** the reader never waits, it only enqueues. If the queue is full, messages are dropped and counted locally instead of slowing the socket.
+- **Shutdown:** stop the backend with Ctrl+C so the WebSocket closes cleanly. A forced kill can leave a "ghost" connection that holds AISStream's quota (#292).
+
+`GET /health` shows `aisstream.limits`: open connections, connects in the last hour, seconds until the next connect is allowed, and any penalty. Tests: `tests/test_limits.py`.
+
 ## References
 
 - **AISStream: https://aisstream.io/documentation#reference** is the canonical reference for message types, fields, the subscription and limits. Read it before touching `dvm/ingest.py` or `dvm/normalise.py`, and point any sub-agent at it.
