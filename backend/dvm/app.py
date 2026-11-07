@@ -6,10 +6,11 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
+import jwt
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import config
+from dvm import auth, config
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import Live
 from dvm.models import Envelope
@@ -56,6 +57,13 @@ class Hub:
             self.rawlog.write("aisstream", recv_ts, raw)
             if isinstance(raw, dict) and "error" in raw:
                 log.error("AISStream says: %s", raw["error"])   # e.g. a bad API key; the server then closes
+                continue
+            if isinstance(raw, dict) and raw.get("MessageType") == "SubscriptionConfirmation":
+                self.feed.state = "up"   # an invalid subscription gets no confirmation
+                if (raw.get("Message") or {}).get("CompressionEnabled"):
+                    log.info("AISStream subscription confirmed, compression on")
+                else:   # uncompressed connections are bandwidth-limited and drop messages, which look like dark ships
+                    log.warning("AISStream subscription confirmed WITHOUT compression: expect dropped messages")
                 continue
             for rec in normalise(Envelope(src="aisstream", recv_ts=recv_ts, raw=raw)):
                 if self.live.apply(rec) and self.store:
@@ -112,6 +120,8 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(hub.store.run()))
     else:
         log.warning("TIGER_DATABASE_URL is not set: positions go to the JSONL log only")
+    if not auth.ENABLED:
+        log.warning("AUTH0_DOMAIN / AUTH0_AUDIENCE not set: /ws is open to anyone (local dev only)")
     yield
     for t in tasks:
         t.cancel()
@@ -137,10 +147,20 @@ def health() -> dict:
 
 @app.websocket("/ws")
 async def ws(websocket: WebSocket) -> None:
-    # Milestone 2: validate the Auth0 access token here before accept().
+    # Browsers can't set headers on a WebSocket, and a token in the URL lands in access logs, so the client's
+    # first message is {"type": "auth", "token": "<Auth0 access token>"}; nothing is sent until it checks out.
+    # shortcut: the token is checked once at connect, not again when it expires; recheck if sessions get long.
     await websocket.accept()
     c = Client(websocket)
     try:
+        if auth.ENABLED:
+            try:
+                first = json.loads(await asyncio.wait_for(websocket.receive_text(), 10))
+                await auth.verify_async(first["token"] if first.get("type") == "auth" else "")
+            except (ValueError, KeyError, TypeError, AttributeError, asyncio.TimeoutError, jwt.PyJWTError) as e:
+                log.info("WebSocket refused: %s", type(e).__name__)
+                await websocket.close(code=1008, reason="login required")
+                return
         async with c.lock:
             hub.clients.add(c)
             now = now_ms()

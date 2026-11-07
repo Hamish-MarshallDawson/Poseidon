@@ -1,4 +1,7 @@
-"""AISStream client. The reader only stamps and enqueues: AISStream drops slow readers, and drops look like dark ships."""
+"""AISStream client. The reader only stamps and enqueues: AISStream drops slow readers, and drops look like dark ships.
+
+Canonical reference, check it before changing AISStream code: https://aisstream.io/documentation#reference
+"""
 from __future__ import annotations
 
 import asyncio
@@ -40,8 +43,7 @@ async def run_aisstream(url: str, api_key: str, bbox: list, queue: asyncio.Queue
             # compression="deflate" is permessage-deflate (the websockets default, kept explicit).
             async with websockets.connect(url, compression="deflate", open_timeout=10, max_size=2**22) as ws:
                 await ws.send(json.dumps(subscription(api_key, bbox)))   # must arrive within 3 s of connecting
-                feed.state = "up"
-                log.info("AISStream connected, bbox (lon, lat) %s", bbox)
+                log.info("AISStream connected, bbox (lon, lat) %s; waiting for SubscriptionConfirmation", bbox)
                 async for msg in ws:
                     try:
                         queue.put_nowait((now_ms(), msg))

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAuth0 } from '@auth0/auth0-react'
 import { Map as MapLibreMap, type GeoJSONSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { ServerMsg, VesselView } from './types'
@@ -10,8 +11,30 @@ const SOURCE_ID = 'ships'
 const MIN_DELAY_MS = 1000
 const MAX_DELAY_MS = 15000
 
+// Auth0 login gates the map; the backend checks the same access token on the WebSocket.
 export default function App() {
+  const { isLoading, isAuthenticated, error, loginWithRedirect, logout, getAccessTokenSilently } = useAuth0()
+  if (isLoading) return <div className="gate">Loading…</div>
+  if (!isAuthenticated) {
+    return (
+      <div className="gate">
+        <h1>Dark Vessel Monitor</h1>
+        <button onClick={() => loginWithRedirect()}>Log in to view the map</button>
+        {error && <p className="error">{error.message}</p>}
+      </div>
+    )
+  }
+  return (
+    <LiveMap
+      getToken={() => getAccessTokenSilently()}
+      onLogout={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+    />
+  )
+}
+
+function LiveMap({ getToken, onLogout }: { getToken: () => Promise<string | undefined>; onLogout: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const getTokenRef = useRef(getToken) // the socket effect runs once; this keeps it off the deps list
   const mapRef = useRef<MapLibreMap | null>(null)
   const styleReady = useRef(false)
   const vessels = useRef(new Map<number, VesselView>())
@@ -62,10 +85,16 @@ export default function App() {
       let lastSeq: number | null = null
       let stale = false
 
-      sock.onopen = () => setConnected(true)
+      // The first message must be the access token: browsers can't set headers on a WebSocket.
+      sock.onopen = () => {
+        getTokenRef.current()
+          .then((token) => (token ? sock.send(JSON.stringify({ type: 'auth', token })) : sock.close()))
+          .catch(() => sock.close())
+      }
 
       sock.onmessage = (ev) => {
         if (stale) return
+        setConnected(true) // the server only talks after the token checks out
         let msg: ServerMsg
         try {
           msg = JSON.parse(ev.data)
@@ -111,7 +140,8 @@ export default function App() {
       <div ref={containerRef} className="map" />
       <div className="status">
         <span className={connected ? 'dot on' : 'dot off'} />
-        {connected ? 'connected' : 'disconnected'} · ships {shipCount} · {Math.round(msgsPerS)} msg/s
+        {connected ? 'connected' : 'disconnected'} · ships {shipCount} · {Math.round(msgsPerS)} msg/s ·{' '}
+        <button className="link" onClick={onLogout}>log out</button>
       </div>
     </>
   )
