@@ -1,4 +1,4 @@
-# Dark Vessel Monitor: frontend
+# POSEIDON: frontend
 
 A full-window, flat MapLibre GL JS world map showing live ship positions from the backend WebSocket. Built with Vite, React and TypeScript. An Auth0 login gates the map; the access token is sent as the WebSocket's first message, and the backend checks it.
 
