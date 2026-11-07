@@ -1,4 +1,8 @@
-"""normalise(envelope) -> canonical records. The only code that knows source formats (06 section 3.1)."""
+"""normalise(envelope) -> canonical records. The only code that knows source formats (06 section 3.1).
+
+Canonical AISStream reference, check it before changing this file: https://aisstream.io/documentation#reference
+Live payloads also carry MetaData.time_utc, MMSI_String and lower-case latitude/longitude (see backend/README.md).
+"""
 from __future__ import annotations
 
 from datetime import datetime, timezone

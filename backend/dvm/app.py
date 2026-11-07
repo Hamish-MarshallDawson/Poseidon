@@ -58,6 +58,13 @@ class Hub:
             if isinstance(raw, dict) and "error" in raw:
                 log.error("AISStream says: %s", raw["error"])   # e.g. a bad API key; the server then closes
                 continue
+            if isinstance(raw, dict) and raw.get("MessageType") == "SubscriptionConfirmation":
+                self.feed.state = "up"   # an invalid subscription gets no confirmation
+                if (raw.get("Message") or {}).get("CompressionEnabled"):
+                    log.info("AISStream subscription confirmed, compression on")
+                else:   # uncompressed connections are bandwidth-limited and drop messages, which look like dark ships
+                    log.warning("AISStream subscription confirmed WITHOUT compression: expect dropped messages")
+                continue
             for rec in normalise(Envelope(src="aisstream", recv_ts=recv_ts, raw=raw)):
                 if self.live.apply(rec) and self.store:
                     self.store.add(rec)

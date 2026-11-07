@@ -50,6 +50,16 @@ If the database is unreachable, ingest and the map carry on: rows are buffered (
 
 World-wide, 7 Nov 2026 around 16:55 UTC: about 90 messages a second, 7,300 ships after 3 minutes, queue depth 0, nothing dropped. One process keeps up easily, so the default box is the whole world.
 
+## References
+
+- **AISStream: https://aisstream.io/documentation#reference** is the canonical reference for message types, fields, the subscription and limits. Read it before touching `dvm/ingest.py` or `dvm/normalise.py`, and point any sub-agent at it.
+  - Checked against the code on 7 Nov 2026: the subscription fields and lat, lon box order, the five subscribed type names, the field names of all five models, binary frames of UTF-8 JSON, the 3-second subscription rule, 3 connections, and reading continuously.
+  - Live payloads differ from the docs example. MetaData has `MMSI`, `MMSI_String`, `ShipName`, lower-case `latitude`/`longitude`, and `time_utc`. `time_utc` was on all of 122,000 live messages, has 4 to 9 fraction digits, and lags our clock by about 1 s. `MaximumStaticDraught` is metres (median 3.5, max 25.5).
+  - The feed counts as `up` only after `SubscriptionConfirmation`. If `CompressionEnabled` is false, the log warns, because uncompressed connections are bandwidth-limited and drop messages.
+- Data model: `research/hamish+aiden/hamish-research/dark-vessel-check/06-unified-data-model.md`.
+- Tiger Data hypertables: https://www.tigerdata.com/docs/use-timescale/latest/hypertables/create
+- Auth0 API access tokens: https://auth0.com/docs/secure/tokens/access-tokens/validate-access-tokens
+
 ## Not done yet
 
 - The token is checked once at connect, not again when it expires. `/health` stays public; there are no other HTTP routes yet.
