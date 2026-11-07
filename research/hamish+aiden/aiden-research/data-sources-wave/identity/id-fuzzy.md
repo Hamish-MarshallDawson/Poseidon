@@ -1,243 +1,199 @@
 # id-fuzzy: typos versus real differences
 
-Agent `id-fuzzy`, Saturday 7 November 2026. Started 19:07 UTC, report first written 19:14 UTC.
-All figures are `measured` by my scripts on the wave's shared data unless labelled otherwise.
-Scripts: `$WAVE/scripts/id-fuzzy/` (`dk_variants.py`, `analyse.py`, `analyse2.py`, `analyse3.py`,
-`analyse4.py`). Outputs: `$WAVE/data/id-fuzzy/`. MID table from Wikipedia (see Sources).
+Agent `id-fuzzy`. Started 19:07 UTC, first draft 19:14, this version 19:22 UTC.
+Figures are `measured` by my scripts on the wave's shared data from one snapshot at 2026-11-07
+19:16 UTC (`$WAVE/data/id-fuzzy/final_snapshot.txt`) unless labelled otherwise; the shared files were
+still growing, so AISStream and GFW counts are snapshots. Scripts `$WAVE/scripts/id-fuzzy/`, outputs
+and the 52 hand labels in `$WAVE/data/id-fuzzy/` (labels in `analyse6.py`).
 
-Sample sizes: AISStream worldwide capture `$WAVE/data/identity/aisstream-capture.jsonl`
-(N messages, M MMSIs, window ~30 min); Global Fishing Watch `gfw-identities.jsonl` (K IMO records);
-Danish AIS day 2026-11-01 raw CSV (16.0 M rows, all Danish receivers) plus the 16:30-17:00 Class A
-window (294,883 rows, 1,527 MMSIs) that `t-ais-hist` extracted.
+Samples: AISStream capture, 49,043 messages, 21,798 MMSIs, 9,559 named, 15,447 name strings.
+Global Fishing Watch, 631 IMO records -> 599 deduplicated AIS-vs-registry name pairs and 258
+deduplicated consecutive-period MMSI changes. Danish AIS day 2026-11-01 raw CSV, 15,981,609 rows,
+3,331 vessels with static fields (plus the 16:30-17:00Z Class A window, 1,527 MMSIs). MID table:
+292 codes parsed from Wikipedia.
 
 ## 1. Bottom line
 
-1. **Most "different names" are the same name written differently.** Where GFW has both an AIS name
-   and a registry name for the same MMSI, 75% differ as raw strings (222/295), but only 21% differ
-   after removing spaces and punctuation (61/295), and 18% after also mapping Roman numerals and
-   "NO." (`AL SOOR II` / `ALSOOR2`, `FS BITUMEN NO.2` / `FSBITUMEN2`). A five-line normaliser deletes
-   roughly seven of every ten apparent name disagreements, with no judgement involved.
-2. **Exact-normalised name equality is safe; fuzzy name equality is not.** Every "near" pair I found
-   in the shared data is a case where merging would be wrong or undecidable: `SEA FORTUNE` /
-   `SEA FORTUNE 1` (IMO 9014456), `KOBE PIONEER` / `KOBE PIONIER` (9747261), `HAPPINESS` /
-   `HAPPINESS I` (9212905). Fleet naming conventions recycle these patterns (`... 1`, `... II`), so a
-   threshold loose enough to merge a typo also merges distinct ships.
-3. **A changed MMSI is usually a new allocation, not a typo.** After deduplicating GFW identity
-   periods, 95 of 110 consecutive-period MMSI switches (86%) also change the MID - the three-digit
-   country prefix - so the number is a new national allocation. Only 7/110 are within two digits of
-   the old one, and those include a ship that flip-flops between two adjacent MMSIs (`636013335` /
-   `636013336`) and a pair where the name also changes. Fuzzy-matching MMSIs is not a safe join.
-4. **Free plausibility checks catch about 1 identity field in 30.** In the 30-minute worldwide
-   capture: 40% of `ShipStaticData` messages carry IMO 0/absent; 18 of 1,474 distinct IMO values
-   (1.2%) fail the IMO check digit and 41 more (2.8%) are not 7 digits at all; 22 MMSIs are not 9
-   digits and 27 ship-range MMSIs (0.3% of ~9,100) use an unallocated country code. None of that
-   needs registry access.
-5. **Truncation at 20 characters is real and silent.** The AIS name field is 20 characters,
-   space-padded: `ShipStaticData.Name` for `CL GANJIANG` arrives as `"CL GANJIANG         "`, and 30
-   of 1,527 Danish Class A names seen in a 30-minute window are exactly 20 characters long. Any
-   name comparison must compare only the first 20 normalised characters of both sides.
+1. **Most "different names" are the same name written differently.** Of 599 deduplicated pairs where
+   GFW holds both the AIS and a registry name for one MMSI, 83% are formatting: 25% spacing/case
+   (GFW strips spaces: `BERGE BLANC`/`BERGEBLANC`), 55% punctuation, 2% Roman-vs-Arabic or `NO.`
+   (`AL SOOR II`/`ALSOOR2`, `FS BITUMEN NO.2`/`FSBITUMEN2`), 1% an `MV`/`M/T` prefix. Five lines of
+   normalisation remove three-quarters of it.
+2. **Normalised equality is safe; similarity thresholds are not.** On 52 hand-labelled pairs:
+   normalised equality gives precision 1.00, recall 0.55-0.62; Levenshtein ratio >= 0.85 gives recall
+   0.69 at precision 0.62 (12 wrong merges in 52). The errors are systematic: test-transmitter names
+   differing in a trailing number (`KEEP CLEAR 0.25NM 91` vs `...94`, `FISHFARM 92%` vs `96%`) and
+   fleet names differing by a trailing token (`HAPPINESS` vs `HAPPINESS I`, `SEA FORTUNE` vs
+   `SEA FORTUNE 1`).
+3. **Names are not unique.** In one Danish day 94 normalised names appear on more than one MMSI,
+   covering 218 of 3,331 named vessels (6.5%) - `MISSING` on 9 MMSIs, `FREJA`, `NEPTUN`, `ODIN` on 4
+   each. Of 4,723 distinct-ship pairs sharing a four-letter name prefix, 178 (3.8%) exceed ratio 0.95,
+   272 (5.8%) exceed 0.90, 429 (9.1%) exceed 0.85: the false-merge rate of any name-similarity join.
+4. **A changed MMSI is usually a new national allocation, not a typo.** Of 258 deduplicated
+   consecutive-period MMSI switches, 214 (83%) change the MID. Only 21 (8.1%) are within two digits;
+   233 (90%) are four or more apart. 93 keep the same name, 25 (10%) the same name and flag.
+5. **Free plausibility checks catch about 1 field in 30.** AISStream: IMO absent or zero on 4,452 of
+   11,234 `ShipStaticData` messages (40%); 38 of 3,320 distinct IMO values (1.1%) fail the check digit
+   and 81 (2.4%) are not seven digits (`879331600`, `1010363000`, `1000000000`, `3123456`); 21 of
+   21,763 ship-range MMSIs (0.1%) use an unallocated country code; 26 MMSIs are not nine digits.
 
 ## 2. Findings
 
-### 2.1 What the strings actually contain
+### 2.1 What the strings contain
 
-- AIS names arrive space-padded to 20 characters (`"CL GANJIANG         "`,
-  `"S.V.  SABARTE"` with a double space). Call signs likewise (`"VRVV9  "`).
-- The AIS 6-bit character set produces glyph artefacts. GFW records one self-reported period for
-  IMO 9421415 with ship name `",NDI IPSA"`, and the next period under a different MMSI with
-  `"BINDI IPSA"` - a leading letter rendered as a comma. Normalisation that only strips whitespace
-  leaves these as different ships.
-- Class B `StaticDataReport` carries the name in Part A and the call sign/type/dimensions in Part B,
-  so a single "static record" for a Class B boat needs two messages; Part B often has
-  `Valid: false` and empty fields (observed in the capture).
-- GFW's registry names are already space-stripped (`BERGEBLANC`, `BRITISHEAGLE`), so comparing them
-  to AIS names without normalisation manufactures differences that do not exist.
-- `MetaData.ShipName` in AISStream is not an independent observation: for all 4,258 MMSIs that had
-  both a static message and metadata in the capture, the two names were identical (0 disagreements).
-  It is a copy, so it cannot be used as a second opinion.
+- Names arrive space-padded to 20 characters (`"CL GANJIANG         "`, call sign `"VRVV9  "`); Class
+  B names carry double spaces (`"S.V.  SABARTE"`).
+- The AIS 6-bit character set leaves glyph artefacts. Four of 9,559 named MMSIs (0.04%) sent two
+  different static names inside 30 minutes, and all four are formatting, not renames:
+  `LOCA LOLA 2`/`LOCA LOLA II`, `MIP- 3`/`MIP-3`, `RUEY I SHYANG NO.106`/`RUEY ISHYANG NO.106`,
+  `LISTA@@@@N\*`/`LISTA` (padding decoded into the name). GFW shows the same over years: IMO 9421415
+  appears as `,NDI IPSA` and then `BINDI IPSA`, a leading letter rendered as a comma.
+- GFW's registry names are already space-stripped, so raw comparison against AIS manufactures
+  differences. That is the largest single "name change" signal in free data and it is the
+  aggregator's artefact.
+- AISStream `MetaData.ShipName` is a cache of the last static message, not a second observation: for
+  9,559 MMSIs carrying both, names differed in 2 cases (0.02%): `244000460` metadata `THE VIKING`
+  then static `SILVER GHOST`, `244030275` `ALELOTTE` then `PIACERE` (Dutch inland craft, same position
+  each time). It lags; it is not a cross-check.
+- Class B `StaticDataReport` splits name (Part A) from call sign/type/dimensions (Part B), and Part B
+  often arrives with `Valid: false` and empty fields, so a complete Class B record needs two messages.
+- 163 of 15,447 capture names (1.1%) and 74 of 3,357 Danish names (2.2%) are exactly 20 characters,
+  i.e. at the cut. Comparing more than 20 characters is meaningless. GFW cannot measure this: its
+  registry names are pre-squashed and never exceed 20 characters, so the test needs a real registry.
 
-### 2.2 Classification of name differences
+### 2.2 Classification, and where the signal is actually lost
 
-Deduplicated pairs, classified by script (`analyse.py`, rules in the report appendix below):
+599 deduplicated same-MMSI AIS-vs-registry pairs: spacing/case 150 (25%), punctuation 330 (55%),
+Roman/`NO.` 11 (2%), prefix token 4 (1%), typo 12 (2%), real difference 92 (15%). Normalisation
+ladder: raw 75% still differ, after stripping non-alphanumerics 20%, after Roman/`NO.` 18%.
 
-| Category | Rule | Pairs (AIS vs registry, same MMSI) | Same MMSI, consecutive GFW periods |
-|---|---|---|---|
-| spacing / case | equal after upper-casing and whitespace collapse | 0 | 0 |
-| punctuation / padding | equal after removing non-alphanumerics | 73 -> 61 after dedupe | 0 |
-| truncation at 20 | one is the other's first 20 characters | 0 in GFW (registry names are pre-squashed) | 0 |
-| prefix token | one has a leading `MV` / `M.T.` / `S.V.` ... | 0 | 0 |
-| abbreviation | one is the initials of the other | 0 | 0 |
-| typo | edit distance <=2 on the squashed strings, ratio >= 0.85 | 2 | 5 |
-| real difference | everything else | 26 | 39 |
+Danish whole day: only 10 of 3,331 vessels show more than one name in 24 hours (67 pairs), 64 of them
+number changes by moving test/buoy transmitters (`KEEP CLEAR 0.25NM 91` -> `...94`, `FISHFARM 92%` ->
+`96%`, `END OF TOW 90%` -> `92%`). No Danish vessel carried two IMOs in a day (0 of 1,507), 7 changed
+call sign, 22 changed dimensions. The 30-minute Danish window shows no name variation in 1,527
+MMSIs. So short-term name instability is rare and almost always a transmitter label, not a rename.
 
-Danish full-day numbers (per-MMSI variants within 24 h) are in section 2.6 once the streaming job
-finishes.
+### 2.3 Precision and recall on 52 hand-checked pairs
 
-The `typo` class in the data is instructive because it is where fuzzy matching is tempted:
-`KOBE PIONEER` -> `KOBE PIONIER`, `SEA FORTUNE 1` -> `SEA FORTUNE`, `HAPPINESS` -> `HAPPINESS I`.
-Each is a genuine edit-distance-1 or 2 pair, and in each case it is not possible from AIS alone to
-tell whether the ship was renamed, whether a digit was dropped, or whether a different ship started
-using the same name. Those three pairs are a complete enumeration of the typo class in the current
-GFW sample, so treat "typo" as rare (5/295) and ambiguous.
+Sample: 29 cosmetic, 22 substantive, 1 ambiguous (only cosmetic pairs should match).
 
-### 2.3 Normalisation and thresholds, and the false-merge problem
+| Rule | Merged | TP | FP | FN | Precision | Recall |
+|---|---|---|---|---|---|---|
+| normalised (alphanumeric-only) equality | 16 | 16 | 0 | 13 | 1.00 | 0.55 |
+| + Roman/`NO.` rule | 18 | 18 | 0 | 11 | 1.00 | 0.62 |
+| Levenshtein ratio >= 0.85 | 32 | 20 | 12 | 9 | 0.62 | 0.69 |
+| Levenshtein ratio >= 0.90 | 29 | 17 | 12 | 12 | 0.59 | 0.59 |
 
-Normalisation ladder, applied to the 295 deduplicated AIS-vs-registry pairs:
+Seven points of recall cost 38 points of precision. My own taxonomy agreed with the hand labels on
+35 of 52 pairs (67%); every disagreement was a buoy-number change called "typo" (11) or a
+Roman/`Ø`/OCR difference called "real" (5). `KEEP CLEAR 0.25NM 91` vs `...94` and `EAGLE SYDNEY` vs
+`EAELE QYDNEY` are similar distances apart and opposite in meaning; the data does not say which.
 
-| Step | Pairs still different | Share |
-|---|---|---|
-| raw, upper-cased and space-collapsed | 222 | 75% |
-| + strip all non-alphanumerics | 61 | 21% |
-| + Roman numerals to digits, drop `NO.` | 53 | 18% |
+### 2.4 IMO problems
 
-False merges. I measured how often two *different* MMSIs in one Danish day carry names that are near
-identical, i.e. how often name-only matching would merge distinct ships. Results in section 2.6;
-the qualitative finding from the shared data is that names are not unique identifiers: the Danish
-day contains multiple MMSIs sharing a squashed name, and the fleet vocabulary is dominated by a few
-hundred words (`SEA`, `STAR`, `LADY`, `NORDIC`, `MARIA`, `... 1`, `... II`).
-
-Recommended rule set, in order of cost:
-
-1. `key(name) = first 20 chars of [upper, strip non-alphanumeric]` for comparison; store the raw name.
-   This is the equality test to use for "same name", and it is safe.
-2. Add the Roman-numeral/`NO.` rule only to produce a *candidate* link, never an automatic merge.
-3. If a score is needed, use the normalised Levenshtein ratio with a high threshold (>= 0.95) and
-   only ever to rank candidates for a human or a later check, never to assert a match.
-
-### 2.4 IMO problems: zero, bad check digits, and typos
-
-The IMO number's last digit is a check digit: weights 7,6,5,4,3,2 on the first six digits, mod 10.
-
-| Sample | IMO values | zero / absent | bad check digit | not 7 digits |
+| Sample | IMO values | zero/absent | bad check digit | not 7 digits |
 |---|---|---|---|---|
-| AISStream capture, `ShipStaticData` messages | 3,850 msgs | 1,543 (40.1%) | 18 distinct values (1.2% of 1,474 values) | 41 (2.8%) |
-| GFW self-reported periods | 404 periods | 14 | 0 | 0 |
-| GFW registry records | - | - | 0 | 0 |
+| AISStream, `ShipStaticData` messages | 11,234 msgs | 4,452 (40%) | - | - |
+| AISStream, distinct values | 3,320 | 0 recorded as zero | 38 (1.1%) | 81 (2.4%) |
+| Danish day, per vessel | 1,507 | 0 | 2 (0.1%) | 15 (1.0%) |
+| GFW, self-reported periods | 1,815 | 53 | 0 | 0 |
 
-The malformed values are not near-misses; they are other numbers pasted into the field:
-`879331600`, `540641809`, `101156053`, `1010363000`, `1000000000`, `99678938`, and the obvious
-placeholder `3123456`. So "not 7 digits" is a distinct failure from "bad check digit", and both are
-free to detect.
-
-Likely-typo detection. A one-digit transcription error in an IMO almost always breaks the check
-digit, so the test is: for a ship whose AIS IMO fails the check digit, does a valid IMO within edit
-distance 1 appear for the same ship or a very similar identity? Result on the Danish day and the
-capture: section 2.6. GFW's own data shows the mechanism on the MMSI side rather than the IMO side:
-one period is recorded with an 8-digit `ssvid` `24924600` and the next with `249246000` for the same
-name, PATANI (IMO 9373644) - a dropped digit that GFW kept as two identity periods.
+The two Danish failures are placeholders: `2222222` (MMSI 219033078) and `1048576` (MMSI 220076700,
+exactly 2^20). No Danish vessel has both a bad and a good IMO, so nothing is repairable by matching.
+Only one bad-check IMO in the capture is one digit from a valid IMO claimed elsewhere in the same
+capture (`9903595` vs `9903592`), and two Antarctic fishing hulls are more plausible than a typo. So
+**a failed check digit is not repairable by fuzzy matching**: the digit exists to expose single-digit
+errors, and what the data holds is junk, not slips. The dropped-digit mechanism shows up on the MMSI
+instead: IMO 9373644 has one period with the 8-digit `ssvid` `24924600` and the next with
+`249246000`, same name PATANI, two days apart.
 
 ### 2.5 MMSI validity, and whether a changed MMSI can be fuzzy-matched
 
-MMSI structure (length, first digit, and MID against the 292-code ITU/Wikipedia table):
+21,763 ship-range MMSIs: 21 (0.1%) use an unallocated country code; 26 of 21,798 MMSIs (0.12%) are
+not nine digits. Unallocated prefixes seen: `200, 222, 223, 260, 299, 302, 386, 500, 524, 583, 712,
+724, 741, 799, 825, 887`. A bad MID is a data-quality flag, not a lead: a mis-keyed transponder looks
+the same.
 
-| Class | AISStream capture (M MMSIs) |
-|---|---|
-| 9-digit ship-range MMSI with a known MID | ... |
-| 9-digit ship-range MMSI, MID not allocated | 27 (0.3%) |
-| not 9 digits | 22 |
-| AtoN (99x / 970x), auxiliary craft (98x), other | ... |
+Across 258 deduplicated consecutive-period MMSI switches: MID changed 214 (83%); flag unchanged 47
+(18%); same name 93 (36%); same name and flag 25 (10%); edit distance 1 or 2 in 21 cases (8.1%); four
+or more in 233 (90%). The close ones are the only ones a fuzzy matcher could act on, and they split
+three ways:
 
-The unallocated prefixes seen were `799`, `887`, `712`, `500`, `200`, `222`, `524`, `724`, `299`,
-`583` - none of which are assigned in the table, so a rule "MID must be in the ITU list" is
-implementable from a file we now have.
+- Likely typo or duplicate record: IMO 9421415, `636017318` -> `636017378`, `ARSAN` both sides,
+  Liberia both sides, 11 hours apart; IMO 9593517, `537985027` -> `537985026`, `,NDI IPSA` ->
+  `BINDI IPSA`; IMO 9373644, `24924600` -> `249246000`.
+- Same hull, two numbers in parallel: IMO 9377781 under `636013336` and `636013335` in both
+  directions, with names `HAMPSHIRE` and `BW BROKER`. Proximity gets this right; the name misleads.
+- Close but a real reallocation: IMO 9212905, `677026400` -> `677000400`, `M.V. KESHAN` ->
+  `HAPPINESS`, ten months apart.
 
-**Can a changed MMSI be fuzzy-matched?** No, and the data says why. Across 110 deduplicated
-consecutive-period MMSI switches in GFW:
-
-| Property | Count |
-|---|---|
-| MID changed (new country allocation) | 95 (86%) |
-| MID unchanged | 15 |
-| flag unchanged | 17 |
-| flag unchanged but MID changed | 3 (the two fields disagree) |
-| MMSI edit distance 1 | 6 |
-| MMSI edit distance 2 | 1 |
-| MMSI edit distance >=4 | 103 |
-| same name across the switch | 39 |
-| same name *and* same flag | 10 |
-
-The edit-distance-1/2 cases are exactly the ones a fuzzy matcher would merge, and they are mixed:
-
-- `9421415` `636017318` -> `636017378`, name `ARSAN` both sides, Liberia both sides, 11 hours apart.
-  Consistent with a one-digit error or a reallocation; not decidable.
-- `9593517` `537985027` -> `537985026`, name `,NDI IPSA` -> `BINDI IPSA`. Consistent with a charset
-  artefact plus a last-digit error.
-- `9377781` `636013336` <-> `636013335`, Liberia, with names `HAMPSHIRE` and `BW BROKER` -
-  the same hull recorded under two adjacent MMSIs in both directions. A fuzzy matcher flags this
-  correctly as one ship, and it also shows that the name field alone is not the identity.
-- `9212905` `677026400` -> `677000400`, `M.V. KESHAN` -> `HAPPINESS`, ten months apart: a two-digit
-  MMSI change with a real rename. Distance says "close", reality says "selling/renaming".
-
-So: an MMSI change with the same MID and same normalised name and a short gap is a *lead* for a typo
-or a duplicate entry. It is never sufficient to merge. The only safe merge key remains the IMO, and
-only when its check digit passes.
-
-### 2.6 Hand-checked sample and precision/recall
-
-(To fill in: 56-pair stratified sample from Danish-day and GFW pairs, labelled by hand, with the
-script's category accuracy and the threshold sweep precision/recall.)
+So a same-MID, one-or-two-digit MMSI change with an unchanged normalised name and a short gap is a
+**lead** that a transponder was mis-keyed, never a merge. The MID must be part of the test: a change
+of MID is a new allocation 83% of the time.
 
 ## 3. Change classification
 
-| Change | Typical timescale | Likely causes | Rate, with denominator | Standard, noise or potentially malicious? | Effect on tracking | Effect on prediction | Suggested handling or flag | Evidence |
+| Change | Timescale | Likely causes | Rate, with denominator | Standard, noise or malicious | Effect on tracking | Effect on prediction | Suggested handling | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| Name, cosmetic (spacing, punctuation, padding, charset) | every message | encoders, GFW squashing, 6-bit charset | 61/295 AIS-vs-registry pairs (21%) are cosmetic-only after squashing | Noise | none | none if normalised, else spurious new identity | normalise, don't flag | measured |
-| Name, truncation at 20 | permanent until rename | AIS field limit | 30/1,527 Danish Class A names are exactly 20 chars | Noise | none | none | compare 20-char prefixes | measured |
-| Name, real rename | years | sale, new owner, rebrand | 26/295 AIS-vs-registry (9%), 39 consecutive GFW periods | Standard for sales; can be used to obscure history | track appears to vanish | history resets; a "new" ship scores as clean | log with IMO, flag only with timing | measured |
-| Name, typo-class (edit distance 1-2) | hours to months | dropped/added token or letter | 5/295 (1.7%) | Ambiguous | none | none | candidate only, never auto-merge | measured |
-| MMSI, new MID | minutes to days around a reflag | reflagging, new allocation | 95/110 switches (86%) | Standard | new track | history split unless IMO joins them | join on IMO | measured |
-| MMSI, same-MID near-identical | hours | typo, duplicate entry, test transponder | 7/110 (6.4%) | Noise or deliberate | duplicate tracks | duplicate rows in training data | lead only; require same IMO | measured |
-| IMO absent (0) | persistent | Class B has no IMO field; Class A left blank | 1,543/3,850 ShipStaticData messages (40%) | Noise | none | can't build IMO features | never treat as a change | measured |
-| IMO bad check digit / not 7 digits | persistent | transcription, placeholder junk | 18/1,474 values (1.2%), 41 (2.8%) | Mostly noise, some spoofing | can't join registry | wrong joins if unvalidated | reject for joins, keep raw | measured |
-| MMSI unallocated MID | persistent | mis-set transponder, stale table | 27/~9,100 ship MMSIs (0.3%) | Weak lead | still tracks | flag as data quality | log only | measured |
+| Name, cosmetic | every message | padding, GFW squashing, 6-bit charset | 495/599 pairs (83%) | Noise | none | none if normalised | normalise, never flag | measured |
+| Name, truncation at 20 | until rename | AIS field limit | 163/15,447 (1.1%) capture, 74/3,357 (2.2%) Danish | Noise | none | none | compare 20-char prefixes | measured |
+| Name, real rename | months to years | sale, rebrand, operator prefix | 92/599 (15%) | Standard, and an ordinary way to obscure history | track looks new | history resets, "clean" score | store with IMO, flag only with timing | measured |
+| Name, typo-class | hours to years | dropped token, transposition | 12/599 (2%) | Ambiguous, undecidable from AIS | none | none | candidate list only | measured |
+| Name, buoy/test transmitter | within hours | operator relabels unit | 64/67 Danish same-MMSI pairs | Noise | one MMSI, many names | none | filter by name pattern | measured |
+| Name, two names in 30 min | minutes | encoder inconsistency, shared MMSI | 4/9,559 named MMSIs (0.04%) | Noise | momentary duplicate label | none | keep latest static | measured |
+| MMSI, new MID | minutes to days | reflag, new allocation | 214/258 (83%) | Standard | new track unless IMO joins | history split | join on IMO | measured |
+| MMSI, same-MID close | hours to years | mis-key, duplicate record, two transponders | 21/258 (8.1%) | Mostly noise, occasionally deliberate | duplicate tracks | duplicate training rows | lead only (same MID + name + short gap) | measured |
+| IMO absent (0) | persistent | Class B has no IMO field, Class A blank | 4,452/11,234 messages (40%) | Noise | none | no IMO features | never treat as a change | measured |
+| IMO bad digit / not 7 digits | persistent | placeholders, pasted numbers | 38/3,320 (1.1%), 81 (2.4%); 2 and 15 of 1,507 Danish | Mostly noise | can't join registry | wrong joins if unvalidated | drop for joins, keep raw | measured |
+| MMSI unallocated MID | persistent | mis-key, stale table | 21/21,763 (0.1%) | Weak lead | still tracks | quality flag | log only | measured |
 
-## 4. What this means for us given MMSI-only
+## 4. What this means given MMSI-only
 
-Jake's decision stands up better than I expected on the name side, and worse on the IMO side.
-
-- **Name changes do not need detection to be handled well; they need normalisation.** Almost all of
-  the noise disappears with a 20-character, alphanumeric-only comparison key. That is five lines in
-  the ingest path, not a feature. Without it the map and the `VesselView.name` field will flicker
-  between `BERGE BLANC` and `BERGEBLANC` across sources.
-- **Identity changes mostly *are* MMSI changes here** (86% come with a new MID), so an MMSI-only
-  model does not lose a subtle signal - it loses the ship. The 40% of silent tankers that returned
-  under another identity in the existing samples are, by this data, reflags and reallocations, and
-  the MMSI-only build will show them as new ships. That is a display and history problem, not a
-  detector problem, and the cheapest mitigation is to keep the self-reported IMO in the track record
-  (already a field in `VesselStatic`) and to render "same IMO, new MMSI" as a note leading to the
-  track that went silent.
-- **Free quality gates are worth having now** because they cost nothing and prevent nonsense later:
-  IMO check digit (drop the value, keep the raw string), MMSI length and MID validity, name
-  normalisation, 20-character prefix comparison. Each is a boolean; none is a detector.
-- **Do not build typo-tolerant ship matching.** The measured typo class is 5/295 pairs, all of them
-  ambiguous, and the fleet's naming conventions (trailing numbers, Roman numerals) make the false
-  merge rate structurally high. The pitch should not claim fuzzy identity matching.
+- **Name handling is normalisation, not detection.** Upper-case, strip non-alphanumerics, cut to 20,
+  map Roman numerals, drop `NO.` removes three-quarters of cross-source disagreement, and normalised
+  equality never merged two distinct names in my sample. Without it `VesselView.name` flips between
+  `BERGE BLANC` and `BERGEBLANC` by source; with it, "name changed" becomes rare and meaningful.
+- **Nothing here supports fuzzy ship matching.** Typo-class pairs are 2% and undecidable, the
+  false-merge rate on real distinct ships is 4-9%, and the vocabulary recycles (`... 1`, `... II`,
+  `MISSING`). A pitch claiming identity resolution meets this number.
+- **MMSI-only is mostly fine for 24 hours; the gap is history.** 83% of MMSI changes come with a new
+  MID, i.e. a reflag: the build shows a new ship, right on the map and wrong in history. Cheap
+  mitigation: keep the self-reported IMO in `VesselStatic` (already a field), compare normalised names
+  at 20 characters, and render "same IMO, new MMSI" as a note pointing at the track that went quiet.
+  That is one lookup, not identity-change detection.
+- **Free quality gates, all booleans:** IMO check digit; IMO seven digits; MMSI nine digits; MMSI MID
+  in the ITU table; normalised 20-character name; a recorded same-MID-close-MMSI lead.
+  `VesselStatic.q` already has `imo_bad_checksum`, which is the right home.
+- **Judge-facing wording:** not "we detect identity fraud", but "identity noise is measurable and
+  cheap to normalise, and what remains is a data problem, not a detector". That survives someone who
+  knows AIS.
 
 ## 5. Unknowns
 
-- **Whether a near-MMSI pair is a typo or a genuine reallocation** cannot be settled from AIS. It
-  needs a registry record for the exact allocation (ITU MARS or the flag register), which `id-joins`
-  found to be browser-only or login-walled.
-- **How often names flicker over a full day** is still pending on the Danish 24-hour file here;
-  `id-shortterm` has the per-message timing. My 30-minute slices show zero within-window variation in
-  both Danish waters (1,527 MMSIs) and the worldwide capture, which argues that flicker is a
-  multi-day or encoder-specific phenomenon rather than a per-hour one.
-- **Charset artefacts** (`,NDI IPSA`) need the raw 6-bit field to map properly; the decoded name is
-  lossy. One extra field in the raw envelope would settle it.
-- **GFW's duplicate identity groups** inflate pair counts by roughly 15%; I deduplicated by
-  (MMSI, name, flag, call sign), but a clean count needs the orchestrator's canonical panel.
-- **Truncation** can only be measured on AIS data, because GFW stores registry names pre-squashed;
-  a full check needs one registry feed (Equasis or the flag register) to supply long names.
+- **Typo vs genuine reallocation** of a near-identical MMSI cannot be settled from AIS; it needs the
+  allocation record (ITU MARS ShipStation or the flag register), both browser-only or login-walled per
+  `id-joins`.
+- **Flicker rate over a full day** is only partly covered: 4 cases in 9,559 MMSIs in 30 minutes
+  worldwide, 10 vessels in 3,331 in a Danish day. A per-30-minute sweep over the Danish day (already
+  downloaded) would settle it; `id-shortterm` has the per-message timing.
+- **Charset artefacts** need the raw 6-bit field; the decoded name is lossy (`LISTA@@@@N\*`).
+- **Truncation against a real registry** needs one feed with long names.
+- **GFW duplicate identity groups** inflate pair counts by roughly 15% (flag from `id-frequency`); I
+  deduplicated by (MMSI, name, flag, call sign) per record, but a canonical panel would be cleaner.
+- **Ownership** is out of reach: whether a rename followed a sale needs Equasis or a register, and
+  that needs a login.
 
 ## 6. Sources
 
-- `$WAVE/data/identity/aisstream-capture.jsonl` - AISStream worldwide capture, ~30 minutes, received
-  by the orchestrator on 2026-11-07. Message counts in section 2.
-- `$WAVE/data/identity/gfw-identities.jsonl` - Global Fishing Watch vessel identity API, CC BY-NC
-  4.0, fetched by the orchestrator 2026-11-07.
-- `$WAVE/data/t-match/aisdk-2026-11-01.zip` - Danish Maritime Authority AIS day file for 2026-11-01
-  (`http://aisdata.ais.dk/aisdk-2026-11-01.zip`).
+- AISStream worldwide capture, ~30 min, received by the orchestrator 2026-11-07
+  (`$WAVE/data/identity/aisstream-capture.jsonl`).
+- Global Fishing Watch vessel identity API, CC BY-NC 4.0, fetched by the orchestrator 2026-11-07
+  (`$WAVE/data/identity/gfw-identities.jsonl`).
+- Danish Maritime Authority AIS day 2026-11-01, `http://aisdata.ais.dk/aisdk-2026-11-01.zip`,
+  downloaded once by the team (`$WAVE/data/t-match/aisdk-2026-11-01.zip`).
 - MID table: Wikipedia, "Maritime identification digits",
-  `https://en.wikipedia.org/wiki/Maritime_identification_digits`, fetched 2026-11-07, 292 codes.
-  (The ITU M.585 list is the authority; Wikipedia was used because it is machine-readable and free.)
-- IMO check-digit rule: the standard weighting 7,6,5,4,3,2 over the first six digits, sum mod 10.
+  `https://en.wikipedia.org/wiki/Maritime_identification_digits`, fetched 2026-11-07, 292 codes
+  (`$WAVE/data/id-fuzzy/mid_wikipedia.json`). The ITU M.585 list is the authority; re-check
+  unallocated prefixes against ITU before any flag rule.
+- IMO check digit: weights 7,6,5,4,3,2 on the first six digits, sum mod 10.
+- The 52 hand labels are in `analyse6.py` (`LABELS`) so anyone can re-check them.
