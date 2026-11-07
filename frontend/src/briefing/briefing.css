@@ -1,0 +1,37 @@
+/* AI briefing panel and the Watchlist multi-select. Tokens only; follows the panels in panels.css. */
+.briefing {
+  position: fixed; left: 16px; bottom: 64px; z-index: 3; width: 400px; max-width: calc(100vw - 32px); max-height: calc(100vh - 140px);
+  display: flex; flex-direction: column; box-shadow: 0 6px 20px var(--dvm-shadow-lift);
+}
+.br-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--dvm-border-subtle); }
+.br-head h2 { margin: 0; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); font-weight: 600; }
+.br-body { overflow-y: auto; overscroll-behavior: contain; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.br-headline { margin: 0; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); font-weight: 600; }
+.br-overview, .br-foot, .br-note { margin: 0; color: var(--dvm-text-secondary); }
+.br-foot, .br-note { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
+.br-sample { margin: 0; padding: 8px; border: 1px dashed var(--dvm-border-strong); color: var(--dvm-text-primary); }
+.br-voice { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.br-corr { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--dvm-accent-subtle); border-left: 3px solid var(--dvm-accent-default); }
+.br-ships { display: flex; flex-direction: column; gap: 12px; }
+.br-ship { border-top: 1px solid var(--dvm-border-subtle); padding-top: 8px; }
+.br-ship ul { margin: 4px 0 0; padding-left: 18px; }
+.br-caveats { color: var(--dvm-text-muted); }
+.br-ship-head { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 4px 0; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.br-ship-head:hover b, .br-ship-head:focus-visible b { text-decoration: underline; }
+.br-risk { font: 500 var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 6px; border: 1px solid var(--dvm-border-strong); }
+.br-risk-moderate { border-color: var(--dvm-risk-2); }
+.br-risk-high { border-color: var(--dvm-risk-3); }
+.br-risk-critical { border-color: var(--dvm-risk-4); }
+.br-loading, .br-error { display: flex; align-items: center; gap: 12px; padding: 16px 12px; }
+.br-error { flex-direction: column; align-items: flex-start; }
+.br-error p { margin: 0; }
+.br-spin { flex: none; width: 16px; height: 16px; box-sizing: border-box; border: 2px solid var(--dvm-border-default); border-top-color: var(--dvm-accent-default); border-radius: 50%; animation: br-spin 0.9s linear infinite; }
+@keyframes br-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .br-spin { animation-duration: 3s; } }
+
+/* Watchlist: a tick box beside each row (a sibling of the row button, since a button cannot hold a checkbox) and a bar. */
+.wl-item { position: relative; }
+.wl-pick { position: absolute; z-index: 1; top: 8px; right: 8px; width: 18px; height: 18px; margin: 0; accent-color: var(--dvm-accent-default); cursor: pointer; }
+.wl-brief { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--dvm-border-subtle); background: var(--dvm-bg-raised); }
+.wl-brief span { color: var(--dvm-text-secondary); }
+.wl-brief-actions { display: flex; gap: 8px; }

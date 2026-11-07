@@ -5,6 +5,7 @@ import { details } from './detail'
 import { useGap, useNow, useVessel, useWatchlist } from './hooks'
 import { DECISION_LABEL, TYPE_LABEL, fmtMmsi, hms, utcTime } from './format'
 import type { VesselView } from '../types'
+import { runBriefing } from '../briefing/store'
 
 // Body of a ship window: R2/Forecast/Ship card (Figma 56:4598), states No AIS and Active.
 // Fields come from the live VesselView, its open GapEvent, the risk fields, and the `detail` reply.
@@ -101,6 +102,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
       <EvidenceStrip ts={v.last_ts} now={now} />
       <div className="sc-actions">
         <Button onClick={onFocus}>Track history</Button>
+        <Button onClick={() => runBriefing([mmsi])}>Brief me</Button>
         <Button variant={inReview ? 'outline' : 'filled'} aria-pressed={inReview} onClick={() => setInReview((x) => !x)}>
           {inReview ? 'Added to review' : 'Add to review'}
         </Button>

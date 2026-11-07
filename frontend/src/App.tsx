@@ -9,6 +9,8 @@ import { ReplayChrome } from './timeline/ReplayChrome'
 import { ForecastOverlay } from './forecast/ForecastOverlay'
 import { WindowsRoot } from './windows/WindowsRoot'
 import { bindDetailSender, receiveDetail } from './windows/detail'
+import { BriefingPanel } from './briefing/BriefingPanel'
+import { bindBriefingAuth } from './briefing/store'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
 const WindowsDemo = lazy(() => import('./windows/demo/WindowsDemo'))
@@ -48,14 +50,17 @@ function Monitor({ getToken, onLogout }: { getToken: () => Promise<string | unde
   useFeed(getToken)
   useEffect(() => {
     bindDetailSender((m) => adapter?.send(m))
+    bindBriefingAuth(getToken)
     const off = onDetail(receiveDetail)
-    return () => { off(); bindDetailSender(null) }
+    return () => { off(); bindDetailSender(null); bindBriefingAuth(null) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (
     <>
       <MapView />
       <ForecastOverlay />
       <WindowsRoot onLogout={onLogout} />
+      <BriefingPanel />
       <ReplayChrome />
       <ScrubBar />
       <ThemeMenu />
