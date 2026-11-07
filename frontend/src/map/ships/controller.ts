@@ -35,7 +35,7 @@ const L = {
 }
 const S = { cells: 'dvm-cells', dead: 'dvm-dead', focus: 'dvm-focus', chips: 'dvm-chips', fan: 'dvm-fan' }
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
-const FONT = ['Noto Sans Regular']
+const FONT = ['Barlow Semi Condensed Medium']   // served from public/basemap/fonts (scripts/basemap/glyphs.py)
 
 const hullType = (t: VesselView['type_group']): HullType =>
   t === 'tanker' || t === 'cargo' || t === 'fishing' || t === 'passenger' ? t : 'other'
@@ -118,13 +118,15 @@ export class ShipController {
     const add = (id: string, data = EMPTY) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data }) }
     add(S.cells); add(S.dead, deadCells(vessels.coverage.values())); add(S.focus); add(S.chips); add(S.fan)
     const ink = readToken('text-primary') || '#eee9dc'
-    map.addLayer({ id: L.cells, type: 'fill', source: S.cells, paint: { 'fill-color': ink, 'fill-opacity': ['get', 'tint'], 'fill-antialias': false } })
+    // Density and no-receiver fills go under the basemap's land, so cells never tint land (dashboard map, layer 2 of 4).
+    const underLand = map.getLayer('coast-land') ? 'coast-land' : undefined
+    map.addLayer({ id: L.cells, type: 'fill', source: S.cells, paint: { 'fill-color': ink, 'fill-opacity': ['get', 'tint'], 'fill-antialias': false } }, underLand)
     map.addLayer({
       id: L.cellLabels, type: 'symbol', source: S.cells, filter: ['!=', ['get', 'label'], ''],
       layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-allow-overlap': true },
       paint: { 'text-color': readToken('text-secondary') || ink, 'text-halo-color': readToken('bg-app') || '#000', 'text-halo-width': 1 },
     })
-    map.addLayer({ id: L.dead, type: 'fill', source: S.dead, paint: { 'fill-pattern': 'dvm-hatch', 'fill-antialias': false } })
+    map.addLayer({ id: L.dead, type: 'fill', source: S.dead, paint: { 'fill-pattern': 'dvm-hatch', 'fill-antialias': false } }, underLand)
     map.addLayer({
       id: L.deadEdge, type: 'line', source: S.dead,
       paint: { 'line-color': readToken('coverage-dead') || '#888', 'line-width': 1, 'line-dasharray': [3, 2] },

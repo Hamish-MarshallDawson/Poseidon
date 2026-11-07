@@ -1,6 +1,6 @@
 // Frontend smoke test: log in through Auth0, then check the map really renders.
 // Fails on a "Worker failed to load" console error (the black-map bug), no MapLibre worker, no basemap tiles,
-// or no live ships. Needs the dev server on :5173, the backend on :8000, and an Auth0 test user:
+// or no ships drawn. Needs the dev server on :5173, the backend on :8000, and an Auth0 test user:
 //   AUTH0_TEST_EMAIL=... AUTH0_TEST_PASSWORD=... npm run smoke
 // Runs a headed installed browser (SMOKE_BROWSER, default msedge): headless Chromium here has no WebGL2.
 import { chromium } from 'playwright-core'
@@ -31,7 +31,8 @@ try {
   await page.locator('input[type=password]').fill(password)
   await page.getByRole('button', { name: 'Continue', exact: true }).click()
   await page.waitForURL((u) => u.origin === new URL(url).origin, { timeout: 30000 })
-  await page.waitForFunction(() => /connected · ships [1-9]/.test(document.querySelector('.status')?.textContent ?? ''),
+  // The status line (src/panels/StatusLine.tsx) reads "N of M ships in view" once ships are drawn (live or labelled mock).
+  await page.waitForFunction(() => /[1-9][\d,]* of [\d,]+ ships in view/.test(document.querySelector('.status-line')?.textContent ?? ''),
     null, { timeout: 30000 })
   await page.waitForTimeout(5000) // let tiles and a few deltas arrive
 } catch (e) {
@@ -42,7 +43,7 @@ if (consoleErrors.some((t) => /Worker failed/i.test(t))) fail.push('MapLibre "Wo
 const workers = page.workers().length
 if (workers === 0) fail.push('no MapLibre web worker is running')
 if (tiles === 0) fail.push('no basemap vector tiles loaded')
-const status = await page.locator('.status').innerText().catch(() => '(no status line)')
+const status = await page.locator('.status-line').innerText().catch(() => '(no status line)')
 const shot = join(tmpdir(), 'dvm-smoke.png')
 await page.screenshot({ path: shot })
 await browser.close()

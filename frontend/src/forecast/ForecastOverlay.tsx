@@ -89,7 +89,7 @@ function setup(map: MapLibreMap): () => void {
     layout: { 'icon-image': ['concat', 'fc-out-', ['get', 'label']], 'icon-offset': [-11, 11], 'icon-allow-overlap': true } })
   map.addLayer({ id: 'fc-tags', type: 'symbol', source: 'fc-tags',
     layout: {
-      'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 11, 'text-anchor': 'bottom-left',
+      'text-field': ['get', 'label'], 'text-font': ['Barlow Semi Condensed Medium'], 'text-size': 11, 'text-anchor': 'bottom-left',
       'text-offset': [1, -1], 'text-allow-overlap': true, 'text-padding': 0, 'text-max-width': 40,
       'icon-image': ['concat', 'fc-chip-', ['to-string', ['get', 'band']]], 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 4, 1, 8],
       'icon-allow-overlap': true, 'symbol-sort-key': ['get', 'rank'],
