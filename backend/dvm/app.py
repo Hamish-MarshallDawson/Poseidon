@@ -7,10 +7,10 @@ import logging
 from contextlib import asynccontextmanager
 
 import jwt
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import auth, config, limits
+from dvm import auth, config, coverage, limits
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import Live
 from dvm.models import Envelope
@@ -144,6 +144,32 @@ def health() -> dict:
             "stats": hub.stats(), "clients": len(hub.clients),
             "db": {"enabled": bool(store), "rows_written": store.rows_written if store else 0,
                    "last_error": store.last_error if store else None}}
+
+
+async def require_login(authorization: str | None = Header(None)) -> None:
+    """Bearer access token, checked like the WebSocket's. Open when Auth0 is not configured (local dev)."""
+    if not auth.ENABLED:
+        return
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme != "Bearer" or not token:
+        raise HTTPException(401, "login required", headers={"WWW-Authenticate": "Bearer"})
+    try:
+        await auth.verify_async(token)
+    except jwt.PyJWTError:
+        raise HTTPException(401, "invalid token", headers={"WWW-Authenticate": "Bearer"})
+
+
+@app.get("/coverage", dependencies=[Depends(require_login)])
+async def get_coverage(minutes: int = coverage.DEFAULT_MINUTES, bbox: str | None = None) -> dict:
+    """Per-cell message and ship counts per minute for the last `minutes` (capped), optionally in a bbox."""
+    try:
+        box = coverage.parse_bbox(bbox)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    pool = hub.store.pool if hub.store else None
+    if pool is None:
+        raise HTTPException(503, "Tiger Data is not connected")
+    return {"cells": await coverage.coverage(pool, minutes, box)}
 
 
 @app.websocket("/ws")

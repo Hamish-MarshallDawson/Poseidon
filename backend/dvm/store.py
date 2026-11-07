@@ -38,6 +38,39 @@ SELECT create_hypertable('statics', by_range('time'), if_not_exists => TRUE);
 CREATE INDEX IF NOT EXISTS statics_mmsi_time ON statics (mmsi, time DESC);
 """
 
+# Run after SCHEMA on every start-up, one statement per execute(): asyncpg sends a multi-statement string as one
+# transaction block, and a continuous aggregate can't be created inside one. Each statement is idempotent.
+# The hypertables were made with the 7-day default chunk, so the open chunk (5-12 Nov) stays whole until it closes;
+# new chunks are 1 hour, so the 1-hour columnstore policy has chunks to compress.
+SETUP = [
+    "SELECT set_chunk_time_interval('positions', interval '1 hour')",
+    "SELECT set_chunk_time_interval('statics', interval '1 hour')",
+    # Not segmented by mmsi: at ~3,000 rows a minute over ~7,000 ships a 1-hour chunk holds about a dozen rows per
+    # ship, and segmenting by mmsi made the compressed chunk BIGGER (0.6x). Ordering by mmsi, time gives 4.3x.
+    "ALTER TABLE positions SET (timescaledb.enable_columnstore = true, timescaledb.segmentby = '', "
+    "timescaledb.orderby = 'mmsi, time')",
+    "ALTER TABLE statics SET (timescaledb.enable_columnstore = true, timescaledb.segmentby = '', "
+    "timescaledb.orderby = 'mmsi, time')",
+    "CALL add_columnstore_policy('positions', after => interval '1 hour', if_not_exists => true)",
+    "CALL add_columnstore_policy('statics', after => interval '1 hour', if_not_exists => true)",
+    # Per-cell coverage baseline (06 section 2.9): separates dark ships from coverage holes. Real-time aggregation on.
+    # WITH DATA fills the history once, at creation; the policy keeps the last 2 h fresh.
+    """CREATE MATERIALIZED VIEW IF NOT EXISTS coverage_1m
+       WITH (timescaledb.continuous, timescaledb.materialized_only = false) AS
+       SELECT time_bucket('1 minute', time) AS bucket, floor(lat * 10)::int AS lat_bin, floor(lon * 10)::int AS lon_bin,
+              count(DISTINCT mmsi)::int AS ships, count(*)::int AS msgs
+       FROM positions GROUP BY 1, 2, 3 WITH DATA""",
+    "SELECT add_continuous_aggregate_policy('coverage_1m', start_offset => interval '2 hours', "
+    "end_offset => interval '1 minute', schedule_interval => interval '1 minute', if_not_exists => true)",
+]
+
+
+async def setup(con: asyncpg.Connection) -> None:
+    """Create the tables and Tiger Data objects. Safe to run again."""
+    await con.execute(SCHEMA)
+    for sql in SETUP:
+        await con.execute(sql)
+
 POS_COLS = ["mmsi", "ts", "recv_ts", "lat", "lon", "sog_kn", "cog_deg", "heading_deg", "nav_status",
             "cls", "msg_type", "ts_quality", "src", "q"]
 STATIC_COLS = ["mmsi", "ts", "recv_ts", "imo", "name", "callsign", "ship_type", "type_group",
@@ -68,9 +101,14 @@ class Store:
             del buf[: len(buf) - MAX_BUFFER]
 
     async def _connect(self) -> None:
-        self.pool = await asyncpg.create_pool(self.url, min_size=1, max_size=2, command_timeout=60)
-        async with self.pool.acquire() as con:
-            await con.execute(SCHEMA)
+        pool = await asyncpg.create_pool(self.url, min_size=1, max_size=2, command_timeout=60)
+        try:   # set the pool only once setup has worked, so a failed setup is retried, not half-used
+            async with pool.acquire() as con:
+                await setup(con)
+        except Exception:
+            await pool.close()
+            raise
+        self.pool = pool
         log.info("Tiger Data connected; positions and statics hypertables ready")
 
     async def flush(self) -> None:

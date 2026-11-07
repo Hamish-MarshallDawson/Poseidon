@@ -37,14 +37,54 @@ It listens on http://127.0.0.1:8000. Check http://127.0.0.1:8000/health; the log
 
 ## Tiger Data
 
-Tables are created on start-up (`dvm/store.py`). Each has a `time timestamptz` partition column equal to `ts`, as Tiger's docs recommend, while `ts` and `recv_ts` stay epoch milliseconds per 06. Example:
+Tiger Cloud runs TimescaleDB 2.31 on PostgreSQL 18. Everything below is created on start-up by `dvm/store.py` (`SCHEMA`, then `SETUP`, one statement at a time). Running it twice is safe; `tests/test_tiger.py` does that against the live database.
+
+**What we use**
+
+- **Hypertables** `positions` and `statics`, partitioned on `time timestamptz` (= `ts`, as Tiger's docs recommend). `ts` and `recv_ts` stay epoch milliseconds per 06.
+- **Continuous aggregate `coverage_1m`**: per 1-minute bucket and 0.1-degree cell, `ships = count(DISTINCT mmsi)` and `msgs = count(*)`. Real-time aggregation is on (`materialized_only = false`), so the latest minute is correct without waiting for a refresh. `count(DISTINCT)` is allowed in a 2.31 continuous aggregate.
+- **Refresh policy** on `coverage_1m`: every 1 minute, over the window from 2 hours ago to 1 minute ago.
+- **Columnstore** on both hypertables, with a policy that compresses chunks older than 1 hour.
+- **`GET /coverage`** returns `{"cells": [{cell_id, bucket_ts, ships, msgs}]}` for the last `minutes` (default 10, capped at 120), optionally `?bbox=[[lon1,lat1],[lon2,lat2]]`. It takes the same Auth0 access token as `/ws`, as `Authorization: Bearer <token>`, and returns 401 without a valid one. It is open when Auth0 is not configured.
+
+**Why**
+
+- **Coverage baseline for the gap detector.** Per cell, per minute, the message rate says how much the feed should see. A ship that goes quiet where the baseline is high is a dark-ship candidate; a cell where the baseline drops to zero is a coverage hole (06 section 2.9). The aggregate answers that without scanning raw positions.
+- **Live map stats** from the same aggregate, cheap enough to poll.
+- **Storage**: the columnstore cuts the size of old data (below).
+
+**Query and timing.** The per-cell message count over the same closed window (up to 5 minutes ago, so nothing is still being written). 5,641 cells and 165,635 messages; both queries return identical results. Median of 7 runs from the dev machine to Tiger Cloud, timed in Python with asyncpg:
 
 ```sql
-SELECT time_bucket('1 minute', time) AS minute, count(*) AS positions, count(DISTINCT mmsi) AS ships
-FROM positions WHERE time > now() - interval '1 hour' GROUP BY minute ORDER BY minute;
+-- aggregate: 114 ms median (min 114, max 156)
+SELECT lat_bin, lon_bin, sum(msgs) AS msgs FROM coverage_1m
+WHERE bucket < date_trunc('minute', now()) - interval '5 min' GROUP BY 1, 2;
+
+-- raw positions: 300 ms median (min 294, max 301)
+SELECT floor(lat*10)::int AS lat_bin, floor(lon*10)::int AS lon_bin, count(*) AS msgs FROM positions
+WHERE time < date_trunc('minute', now()) - interval '5 min' GROUP BY 1, 2;
 ```
 
-If the database is unreachable, ingest and the map carry on: rows are buffered (capped) and retried, and the JSONL log keeps everything.
+The gap is modest at this size (about 2.6x) because the raw query is already a sequential scan of 180,000 rows. It grows with the table, while the aggregate reads one row per cell per minute.
+
+**Compression.** `positions` is ordered by `mmsi, time` with no segment-by. We first set `segmentby = mmsi`, as the design suggested. At live density (about 3,000 rows a minute over about 7,000 ships) a 1-hour chunk holds roughly a dozen rows per ship, and that made the compressed chunk bigger than the raw one. Measured on a throwaway copy of 188,239 live rows in two 1-hour chunks, with the same settings:
+
+| Setting | Before | After | Ratio |
+|---|---|---|---|
+| `segmentby = mmsi`, `orderby = time` | 30.0 MB | 53.9 MB | 0.6x (worse) |
+| no segment-by, `orderby = mmsi, time` (used) | 30.2 MB | 7.0 MB | 4.3x |
+
+The policy has not compressed any chunk on the live database yet (see below), so there is no ratio on live data. The probe copy was dropped afterwards. `statics` uses the same settings.
+
+**The existing chunk.** The hypertables were created with the 7-day default. The only chunk is 5 to 12 Nov 2026 (UTC) and it takes every live write until 12 Nov 00:00 UTC. Setting the interval to 1 hour (`set_chunk_time_interval`) only applies to chunks created after that. The compression policy can't compress a chunk that is still open, so the first compression runs on 12 Nov, after 01:00 UTC, and it compresses that whole 7-day chunk at once. From then on the chunks are 1 hour each. We did not split the existing chunk, because that means migrating live data.
+
+**Gotchas**
+
+- A continuous aggregate can't be created inside a transaction block, and asyncpg sends a multi-statement string as one. So `SETUP` runs one statement per `execute()`.
+- `add_columnstore_policy` is a procedure in 2.31: `CALL`, not `SELECT`.
+- The `segmentby` and `orderby` settings are applied with `ALTER TABLE ... SET` on every start-up. Once chunks are compressed, check that a changed `segmentby` is refused rather than silently applied.
+
+If the database is unreachable, ingest and the map carry on: rows are buffered (capped) and retried, and the JSONL log keeps everything. `/coverage` returns 503 until the connection is up.
 
 ## Measured
 
