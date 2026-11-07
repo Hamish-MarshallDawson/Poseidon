@@ -15,6 +15,7 @@ import ThemeMenu from './theme/ThemeMenu'
 import { Button, Panel } from './ui'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
+const BasemapDemo = lazy(() => import('./basemap/BasemapDemo'))
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark'
@@ -26,6 +27,7 @@ const MAX_DELAY_MS = 15000
 export default function App() {
   const { isLoading, isAuthenticated, error, loginWithRedirect, logout, getAccessTokenSilently } = useAuth0()
   if (new URLSearchParams(location.search).get('demo') === 'tokens') return <Suspense><TokensDemo /></Suspense>
+  if (new URLSearchParams(location.search).get('demo') === 'basemap') return <Suspense><BasemapDemo /></Suspense>
   if (isLoading) return <div className="gate"><p className="gate__foot">Loading…</p></div>
   if (!isAuthenticated) {
     return (

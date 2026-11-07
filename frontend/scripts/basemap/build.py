@@ -107,8 +107,13 @@ def prune_lines(ls, min_area):
 def simplify_land(g, z):
     if g is None:
         return None
+    # Prune by area before simplifying, so an island of >= 1 px^2 that simplification shrinks is still kept;
+    # afterwards drop only slivers that collapsed (< 0.05 px^2).
+    g = prune(g, px(z) ** 2)
+    if g is None:
+        return None
     g = shapely.make_valid(g.simplify(TOL_PX * px(z), preserve_topology=True))
-    return prune(g, px(z) ** 2)
+    return prune(g, 0.05 * px(z) ** 2)
 
 
 def simplify_lines(ls, z):
@@ -149,13 +154,21 @@ def encode(z, x, y, layers):
         geoms = [g for g in geoms if g is not None and not g.is_empty]
         if geoms and all(isinstance(g, LineString) for g in geoms):
             geoms = [MultiLineString(geoms)]  # one feature per tile keeps the tile small
-        feats = [{"geometry": to_tile(g, z, x, y), "properties": {}} for g in geoms]
+        feats = []
+        for g in geoms:
+            t = to_tile(g, z, x, y)
+            if name in ("land", "mask"):
+                # Snap to the MVT integer grid here, keeping the result valid. (Letting the encoder quantise and then
+                # make_valid dropped whole land features when snapping created a self-touch: land vanished at z7-9.)
+                t = shapely.set_precision(t, 1.0)
+                t = MultiPolygon(polys(t)) if not t.is_empty else None
+            if t is not None and not t.is_empty:
+                feats.append({"geometry": t, "properties": {}})
         if feats:
             out.append({"name": name, "features": feats})
     if not out:
         return None
-    raw = mvt.encode(out, default_options={"y_coord_down": True, "extents": EXT,
-                                           "on_invalid_geometry": mvt.encoder.on_invalid_geometry_make_valid})
+    raw = mvt.encode(out, default_options={"y_coord_down": True, "extents": EXT})
     return gzip.compress(raw, mtime=0)
 
 
@@ -421,7 +434,7 @@ def main():
     roots = [(10, x, y) for x in xs for y in ys if R.intersects(tbox(10, x, y)) and not R.touches(tbox(10, x, y))]
     all_tiles = []
     z10 = {}
-    with ProcessPoolExecutor(30) as pool:
+    with ProcessPoolExecutor(int(os.environ.get("BASEMAP_WORKERS", "14"))) as pool:
         for i, (zxy, node, tiles) in enumerate(pool.map(job_z10, roots, chunksize=4)):
             z10[(zxy[1], zxy[2])] = node
             all_tiles += tiles

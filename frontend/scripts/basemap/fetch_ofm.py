@@ -89,7 +89,7 @@ def main():
     con.commit()
     xs, ys = tile_range(FETCH_BOX, Z_START)
     level = [(Z_START, x, y) for x in xs for y in ys]
-    with ProcessPoolExecutor(32, initializer=_init, initargs=(url,)) as pool:
+    with ProcessPoolExecutor(int(os.environ.get("BASEMAP_WORKERS", "16")), initializer=_init, initargs=(url,)) as pool:
         for z in range(Z_START, Z_MAX + 1):
             have = {(x, y): k for x, y, k in con.execute("select x,y,kind from tiles where z=? and kind!='E'", (z,))}
             todo = [t for t in level if (t[1], t[2]) not in have]

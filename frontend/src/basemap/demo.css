@@ -1,0 +1,5 @@
+.bm-demo { position: fixed; inset: 0; }
+.bm-demo__bar { position: fixed; left: 16px; top: 16px; display: flex; gap: 8px; align-items: center; padding: 4px 8px;
+  background: var(--dvm-bg-panel); border: 1px solid var(--dvm-border-default); color: var(--dvm-text-primary); }
+.bm-demo__bar button { font: inherit; color: inherit; background: none; border: 1px solid var(--dvm-border-default); padding: 2px 8px; cursor: pointer; }
+.bm-demo__bar button:focus-visible { outline: 2px solid var(--dvm-accent-default); }
