@@ -1,5 +1,7 @@
 # Browser wave: synthesis and concepts
 
+> **Closed, 7 November 2026.** The team isn't pursuing the Wordsmith track, and Guest Seat isn't being built. Aiden's follow-up discussion found that default Claude and Codex browser tools, private browsers and APIs cover too much of this for it to be new. Everything below is kept as a research record only.
+
 Saturday 7 November 2026, about 14:00. Written by Aiden's orchestrating agent from the five DeepSeek Flash reports in this folder. Section 7 lists what was independently checked and corrected. Scores and recommendations are judgement, not measurement.
 
 This replaces Clearance as the recommended direction. It's a recommendation for Aiden and the team to decide on, then test with Wordsmith's engineers.

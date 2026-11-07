@@ -1,5 +1,7 @@
 # Wordsmith wave: synthesis and concepts
 
+> **Closed, 7 November 2026.** The team isn't pursuing the Wordsmith track, and Clearance isn't being built. Everything below is kept as a research record only.
+
 Saturday 7 November 2026, about 13:40. Written by Aiden's orchestrating agent from the five DeepSeek Flash reports in this folder. Section 5 lists what was independently checked and what was corrected. Scores and recommendations are judgement, not measurement.
 
 ## Recommendation
