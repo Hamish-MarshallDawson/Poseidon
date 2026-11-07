@@ -32,20 +32,33 @@ All four run on the same engine: a typed workflow graph, accessibility-tree obse
 
 ### Concept 1: Clearance (recommended)
 
-A lawyer drops in a supplier's contract PDF.
+A request arrives in Slack with a supplier's contract PDF.
 
 1. Extract the parties, subprocessors and key promises.
 2. Resolve the company on Companies House: officers, owners, charges, and filings read from PDFs (API plus downloads).
 3. Check the UK Sanctions List (XML), then the ICO and FCA registers (browser).
 4. Read the supplier's terms, privacy and subprocessor pages (browser, unpredictable layouts).
-5. **Repeat steps 2 to 4 for every subprocessor.** The first pass is reasoned; later ones replay with guards, so the counter visibly drops.
-6. Reconcile against the contract, for example a named entity that doesn't match, a lapsed ICO registration, or a subprocessor missing from the schedule.
-7. Write a redline, wait for human approval, and submit to a clearly labelled mock procurement portal.
-8. Verify the portal's event log and produce a bundle where every finding carries its URL, time, hash and a "could not verify" list.
+5. For each US subprocessor, look it up on the Data Privacy Framework list (browser) and check that it's certified to the UK Extension.
+6. **Repeat the checks for every subprocessor.** The first pass is reasoned; later ones replay with guards, so the counter visibly drops.
+7. Reconcile against the contract, for example a named entity that doesn't match, a lapsed ICO registration, a subprocessor missing from the schedule, or a US transfer with no safeguard.
+8. Write a redline and send an approval card back to Slack. Once approved, submit to a clearly labelled mock procurement portal.
+9. Verify the portal's event log and produce a bundle where every finding carries its URL, time, hash and a "could not verify" list.
 
 **Seeded test:** a labelled mock supplier page carries injected text, and the gate visibly rejects the action it asks for.
 
 **Why it could win:** many sites, many document types, real recovery, an end state rather than a report, and repetition that makes the tie-breakers measurable. Read-only due diligence products already exist (Scout, Glasshouse, Fasrad), so the new part is reconciling against the contract and acting on the result, not the lookups.
+
+#### Additions requested by Hamish (13:33)
+
+| Addition | How it should work | Watch out for |
+|---|---|---|
+| **Data-transfer check** | The UK-US data bridge only covers US recipients that are certified to the UK Extension and appear on the DPF list, so check that specifically and treat being on the list as insufficient. The list renders with JavaScript and its robots.txt allows all, so this is a real browser step | Only flag a gap if personal data goes to that company **and** the contract has no IDTA, addendum or other safeguard. The output is a flag for a lawyer, not a legal conclusion. Sensitive data may need extra handling under the bridge |
+| **Slack in and out** | Matches Wordsmith's Receive, Route, Resolve, Record flow on its homepage. Build the approval card from the actual pending action, never from model-written text, so injected page content can't shape what the approver sees | Slack becomes a live dependency in the demo, so keep a local fallback. Test early on venue Wi-Fi |
+| **Gemini Flash** for cheap read and extract steps | Use it where the output can be checked against the source. Measure it: evidence for mixing a cheap and a strong model is contradictory (ws-frontier) | **On the free tier, Google may use inputs to improve its products and human reviewers may read them.** Use public or synthetic contracts only, or the paid tier. Our privacy answer has to state this |
+| **Auth0** for approval and acting on the user's behalf | Its CIBA support covers human-in-the-loop approval, so it can prove who approved what | **It adds to the action gate and doesn't replace it.** Identity shows who clicked approve, while the gate fixed before the run decides whether that action is allowed |
+| **Tiger Data** for the evidence and audit store | It's a natural fit for timestamped steps, hashes and event logs. The evidence bundle should also be exportable as a file | A hosted database shouldn't be able to stop the demo, so keep a local fallback |
+
+The MLH categories are add-ons, so they come after the core workflow runs end to end. If time runs short, cut them in this order: Tiger Data, Auth0, Gemini. Slack and the data-transfer check are part of the product, so they stay. The MLH qualification rules are still unread: the prizes page only gave one-line descriptions, so check each "Read more" before relying on a category.
 
 ### Concept 2: File and Prove
 
@@ -83,6 +96,8 @@ Plain HTTP requests only show that the ICO and FCA search pages respond. None of
 - [ ] Drive the ICO and FCA register searches with `agent-browser`, headed. The FCA register may be heavy on JavaScript.
 - [ ] Get a free Companies House API key and confirm that filing PDFs download.
 - [ ] Pick 5 to 10 real supplier sites, then check robots.txt and how their pages behave.
+- [ ] Search the DPF list for a known US subprocessor in a real browser, and confirm the UK Extension status can be read from its entry.
+- [ ] Send a Slack message in and an approval card back on venue Wi-Fi.
 - [ ] Measure tokens per step on real pages, because no controller publishes a reliable figure.
 - [ ] Time the same check on a second company to test replay. **Within-job replay is our own extrapolation:** the evidence covers repeating a task, not similar steps inside one job.
 
@@ -101,6 +116,7 @@ Plain HTTP requests only show that the ICO and FCA search pages respond. None of
 - **Use APIs where they exist:** Companies House, Find Case Law, legislation.gov.uk and the UK Sanctions List. Find Case Law's robots.txt names AI crawlers as disallowed, so use its documented API if we use it at all.
 - **Privacy:** officer and sanctions data is personal data. Focus on companies, keep only what the output needs, and word "not found" as "not found in this search on this date".
 - **Demo:** run headed, label every mock, pre-authenticate anything that needs a login, cap handoffs at about 60 seconds, and keep a recorded run ready. Rerunning the same task can change 12 to 14% of outcomes, so a clean rehearsal isn't a guarantee.
+- **Confidential contracts:** demo with public or synthetic contracts only, unless every model provider in the chain is on terms that allow confidential data.
 - **Team rules:** the evidence panel supports the workflow and must not become the product (no dashboards). Log AI tool use for the write-up.
 
 ## 5. Verification
