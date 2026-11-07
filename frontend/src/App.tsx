@@ -25,6 +25,7 @@ import { Button, Panel } from './ui'
 import MapView from './map/MapView'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
+const WindowsDemo = lazy(() => import('./windows/demo/WindowsDemo'))
 
 <<<<<<< HEAD
 =======
@@ -36,6 +37,7 @@ const SOURCE_ID = 'ships'
 export default function App() {
   const { isLoading, isAuthenticated, error, loginWithRedirect, getAccessTokenSilently } = useAuth0()
   if (new URLSearchParams(location.search).get('demo') === 'tokens') return <Suspense><TokensDemo /></Suspense>
+  if (new URLSearchParams(location.search).get('demo') === 'windows') return <Suspense><WindowsDemo /></Suspense>
   if (isLoading) return <div className="gate"><p className="gate__foot">Loading…</p></div>
   if (!isAuthenticated) {
     return (

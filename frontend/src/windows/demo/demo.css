@@ -1,0 +1,13 @@
+/* ?demo=windows harness only. */
+.wd-root { position: fixed; inset: 0; background: var(--dvm-map-water); }
+.wd-map { position: absolute; inset: 0; }
+.wd-root .dvm-theme-menu { top: auto; bottom: 44px; }
+.wd-root .dvm-theme-menu__panel { top: auto; bottom: calc(100% + 8px); }
+/* Stand-in for the map agent's selected brackets and letter badge (up and to the left of the hull). */
+.wd-mark { position: relative; width: 0; height: 0; pointer-events: none; }
+.wd-mark i { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; box-sizing: border-box; border: 1.5px solid var(--dvm-ship-selected); }
+.wd-mark b {
+  position: absolute; left: -26px; top: -26px; width: 14px; height: 14px; display: grid; place-items: center;
+  background: var(--dvm-ship-selected); color: var(--dvm-text-on-accent);
+  font: 600 var(--dvm-size-caption) / 1 var(--dvm-font-data);
+}

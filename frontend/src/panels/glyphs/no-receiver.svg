@@ -1,0 +1,26 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="36" height="28" viewBox="0 0 36 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Frame">
+<g clip-path="url(#clip0_0_81)">
+<rect width="36" height="28" fill="#8D969A" fill-opacity="0.24"/>
+<line id="Line" x1="-28.3536" y1="27.6464" x2="-0.353551" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_2" x1="-23.3536" y1="27.6464" x2="4.64645" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_3" x1="-18.3536" y1="27.6464" x2="9.64645" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_4" x1="-13.3536" y1="27.6464" x2="14.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_5" x1="-8.35355" y1="27.6464" x2="19.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_6" x1="-3.35355" y1="27.6464" x2="24.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_7" x1="1.64645" y1="27.6464" x2="29.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_8" x1="6.64645" y1="27.6464" x2="34.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_9" x1="11.6464" y1="27.6464" x2="39.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_10" x1="16.6464" y1="27.6464" x2="44.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_11" x1="21.6464" y1="27.6464" x2="49.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_12" x1="26.6464" y1="27.6464" x2="54.6464" y2="-0.353556" stroke="#A5A99F"/>
+<line id="Line_13" x1="31.6464" y1="27.6464" x2="59.6464" y2="-0.353556" stroke="#A5A99F"/>
+</g>
+<rect x="0.5" y="0.5" width="35" height="27" stroke="#A5A99F" stroke-dasharray="3 2"/>
+</g>
+<defs>
+<clipPath id="clip0_0_81">
+<rect width="36" height="28" fill="white"/>
+</clipPath>
+</defs>
+</svg>
