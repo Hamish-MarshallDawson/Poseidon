@@ -10,7 +10,7 @@ import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import auth, config, coverage, limits
+from dvm import auth, config, coverage, limits, replay
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import Live
 from dvm.models import Envelope
@@ -24,6 +24,7 @@ log = logging.getLogger("dvm")
 class Client:
     def __init__(self, ws: WebSocket):
         self.ws, self.seq, self.lock = ws, 0, asyncio.Lock()
+        self.replay: replay.ReplaySession | None = None   # set while this client watches the past
 
     async def send(self, msg: dict) -> None:   # call with self.lock held
         self.seq += 1
@@ -43,6 +44,10 @@ class Hub:
 
     def stats(self) -> dict:
         return {"tracked": len(self.live.pos), "msgs_per_s": round(self.msgs_per_s, 1), "queue_depth": self.queue.qsize()}
+
+    def snapshot_msg(self, now: int) -> dict:
+        return {"type": "snapshot", "now_ts": now, "vessels": self.live.snapshot(), "trails": {}, "gaps": [],
+                "spoofs": [], "watchlist": {"snapshot_ts": now, "entries": []}, "coverage": [], "stats": self.stats()}
 
     def sources(self) -> list[dict]:
         return [{"src": "aisstream", "state": self.feed.state, "msgs_per_s": round(self.msgs_per_s, 1)}]
@@ -89,7 +94,7 @@ class Hub:
                 msg = None
             if msg:
                 last_sent = now
-                await asyncio.gather(*(self._send(c, msg) for c in list(self.clients)))
+                await asyncio.gather(*(self._send(c, msg) for c in list(self.clients) if c.replay is None))
             n += 1
             if n % 10 == 0:
                 db = f"db rows {self.store.rows_written}, error {self.store.last_error}" if self.store else "db off"
@@ -172,6 +177,49 @@ async def get_coverage(minutes: int = coverage.DEFAULT_MINUTES, bbox: str | None
     return {"cells": await coverage.coverage(pool, minutes, box)}
 
 
+@app.get("/history/range", dependencies=[Depends(require_login)])
+async def history_range() -> dict:
+    """The time span replay can show: first and last stored position, epoch ms (null when nothing is stored)."""
+    pool = hub.store.pool if hub.store else None
+    if pool is None:
+        raise HTTPException(503, "Tiger Data is not connected")
+    lo, hi = await replay.TigerHistory(pool).range()
+    return {"from_ts": lo, "to_ts": hi}
+
+
+async def handle_replay(c: Client, msg: dict) -> None:
+    """06 section 4.3 replay actions, plus "live" to go back. A client in replay gets no live broadcasts."""
+    async def send(m: dict) -> None:
+        async with c.lock:
+            await c.send(m)
+
+    action = msg.get("action")
+    if action == "live":
+        session, c.replay = c.replay, None
+        if session:
+            session.close()
+            now = now_ms()
+            await send({**session.status("live"), "now_ts": now, "paused": False})
+            await send(hub.snapshot_msg(now))
+        return
+    pool = hub.store.pool if hub.store else None
+    if pool is None:
+        log.warning("Replay asked for, but Tiger Data is not connected")
+        return
+    if c.replay is None:
+        c.replay = replay.ReplaySession(replay.TigerHistory(pool), send, hub.sources)
+        if action != "seek":
+            await c.replay.seek(None)   # play, pause or speed from live starts at the newest stored time, paused
+    if action == "seek":
+        await c.replay.seek(msg.get("t"))
+    elif action == "play":
+        await c.replay.play()
+    elif action == "pause":
+        await c.replay.pause()
+    elif action == "speed":
+        await c.replay.set_speed(msg.get("speed"))
+
+
 @app.websocket("/ws")
 async def ws(websocket: WebSocket) -> None:
     # Browsers can't set headers on a WebSocket, and a token in the URL lands in access logs, so the client's
@@ -193,20 +241,29 @@ async def ws(websocket: WebSocket) -> None:
             now = now_ms()
             await c.send({"type": "hello", "schema": 1, "mode": "live", "speed": 1, "now_ts": now,
                           "sources": hub.sources(), "bbox": config.AIS_BBOX})
-            await c.send({"type": "snapshot", "now_ts": now, "vessels": hub.live.snapshot(), "trails": {}, "gaps": [],
-                          "spoofs": [], "watchlist": {"snapshot_ts": now, "entries": []}, "coverage": [],
-                          "stats": hub.stats()})
+            await c.send(hub.snapshot_msg(now))
         while True:
-            # shortcut: only `detail` is handled; `subscribe` and `replay` are ignored until needed.
+            # shortcut: `subscribe` is ignored until needed.
             try:
                 msg = json.loads(await websocket.receive_text())
-                mmsi = msg.get("mmsi") if msg.get("type") == "detail" else None
+                kind = msg.get("type")
             except (ValueError, AttributeError):
                 continue
-            if mmsi in hub.live.pos:
-                async with c.lock:
-                    await c.send(hub.live.detail(mmsi))
+            if kind == "replay":
+                try:
+                    await handle_replay(c, msg)
+                except (WebSocketDisconnect, asyncio.TimeoutError, RuntimeError):
+                    raise
+                except Exception:  # a database hiccup must not drop the connection
+                    log.exception("Replay request failed: %s", msg.get("action"))
+            elif kind == "detail":
+                state = c.replay.live if c.replay else hub.live   # in replay, details are as of the replay time
+                if msg.get("mmsi") in state.pos:
+                    async with c.lock:
+                        await c.send(state.detail(msg["mmsi"]))
     except (WebSocketDisconnect, asyncio.TimeoutError, RuntimeError):
         pass
     finally:
         hub.clients.discard(c)
+        if c.replay:
+            c.replay.close()
