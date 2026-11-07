@@ -116,3 +116,11 @@ The harness ships are circles in rough water boxes, and the brackets and badges 
 ## PR
 
 https://github.com/Hamish-MarshallDawson/Hedged-Bets-hacktheburgh/pull/55
+
+## Handover (22:00, back to FrontEndLead)
+
+- **Done:** every build item 1–8 in `4-windows.md` is implemented and browser-tested (see "Acceptance"). PR 55 is open and not merged. Nothing is half-done; no work in progress is uncommitted.
+- **Verified:** `npm run build` and `npm run lint` pass (0 warnings); `node src/windows/place.check.ts` passes; Playwright flows on `?demo=windows` with no console errors; fps in headed Chromium on a GPU (table above).
+- **Left against the acceptance list:** (1) the Figma visual comparison (the screenshots are in `reports/windows/`); (2) mount `<WindowsRoot>` in the logged-in app and wire `detail` (see "Integration"); (3) the map agent draws brackets and letter badges from `ui.windows` and calls `openShipWindow`; (4) re-measure fps on the desktop with the real map layer.
+- **Known problems:** ThemeMenu and the top-right chips overlap when both are mounted; confidence pips are estimated from message age; Add to review is local state only; the branch holds merge commits (the force-push was refused), so squash on merge.
+- **To resume:** `cd frontend && npm ci && npm run dev -- --port 5177 --strictPort`, then open `/?demo=windows`. Review PR 55, then do the integration steps above.
