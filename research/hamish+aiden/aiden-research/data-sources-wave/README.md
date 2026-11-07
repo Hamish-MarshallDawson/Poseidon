@@ -36,6 +36,7 @@ Last updated: Saturday 7 November 2026, about 19:40 UTC. All three research wave
 | `results/` | Measurement outputs from the orchestrator's AISStream and Global Fishing Watch tests |
 | `scripts/` | The throwaway scripts behind the tests, for reference, not production |
 | `identity/` | The ship identity wave's synthesis, brief, notes, reports and scripts: change rates, noise, fuzzy matching, source joins, impact, flags and fake IMO patterns |
+| `contributor-access.md` | Whether feeding a receiver earns extra data: no route gives Gulf data, and Pelyr Community is the one worth applying for, with no station needed |
 | `marinetraffic/` | The MarineTraffic wave's synthesis, brief, notes and reports: sources, regional feeds, receivers, methods, access, rivals and feed tests |
 
 Agent reports are AI-generated and may contain errors. SYNTHESIS.md says which results the orchestrator checked. Where a report conflicts with SYNTHESIS.md, trust SYNTHESIS.md and tell Aiden's agent on the board.

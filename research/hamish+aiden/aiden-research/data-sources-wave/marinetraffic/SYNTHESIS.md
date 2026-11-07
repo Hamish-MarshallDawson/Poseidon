@@ -30,7 +30,7 @@ Saturday 7 November 2026, about 18:30 UTC. Seven DeepSeek agents working from pu
 | **EMODnet density** | CC BY 4.0, 1 km monthly grids, EU waters; Hormuz blank | Agent |
 | **Sweden's Sjöfartsverket** | Paid live stream and history from 2006 | Agent |
 | **Zenodo LNG-T3** | CC BY 4.0 LNG tanker voyages 2020 to 2024, includes Gulf terminals. Historical only | Agent |
-| **Pelyr free plan** | Free account, non-commercial: reportedly 50 ships by MMSI, 3-day history, satellite detections. Named AIS sources are Finnish and Norwegian, plus own stations and unnamed permitted feeds. **Gulf coverage unknown** | Sources page checked; plan terms agent only; needs a key to test |
+| **Pelyr free plan** | Free account, non-commercial: 50 ships by MMSI, 3-day history. *Correction: satellite detections are not on the free plan; they need Community access or a paid plan (see `../contributor-access.md`).* Named AIS sources are Finnish and Norwegian, plus own stations and unnamed permitted feeds. **Gulf coverage unknown** | Sources page checked; plan terms agent only; needs a key to test |
 
 ## Contributing a receiver
 
