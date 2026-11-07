@@ -2,7 +2,9 @@
 
 Sponsor research for HackTheBurgh XIII, written 7 Nov 2026 by three Haiku 5.5 research agents, one per company. The working idea is a **Wordsmith-track agentic browser** as the baseline project, with other tracks as a bonus. The source context is [`../../InductionPresentations/SlideSummaryFromTranscription.MD`](../../InductionPresentations/SlideSummaryFromTranscription.MD).
 
-**Lead concept (7 Nov, 13:30):** Aiden's **Clearance**, in [`../aiden-research/wordsmith-wave/SYNTHESIS.md`](../aiden-research/wordsmith-wave/SYNTHESIS.md). The agent starts from a supplier contract, checks the supplier and each sub-processor across live registers and the supplier's own site, and reconciles the findings against the contract. It then writes a redline and submits it to a mock procurement portal with proof of each step. Read that first; this folder is background. Hamish adds three things to it:
+**On hold (13:38):** Aiden has doubts. Most of Clearance's lookups use APIs, so it would largely work without the browser, and the track asks for a browser-use workflow. A second wave on the browsing itself may replace it. Don't build on or pitch Clearance until the board says so.
+
+**Proposed lead concept (7 Nov, 13:30):** Aiden's **Clearance**, in [`../aiden-research/wordsmith-wave/SYNTHESIS.md`](../aiden-research/wordsmith-wave/SYNTHESIS.md). The agent starts from a supplier contract, checks the supplier and each sub-processor across live registers and the supplier's own site, and reconciles the findings against the contract. It then writes a redline and submits it to a mock procurement portal with proof of each step. Read that first; this folder is background. Hamish adds three things to it:
 1. **A data-transfer check:** for a US sub-processor, check the UK–US data bridge (Data Privacy Framework list). If the sub-processor isn't on it, flag that a transfer agreement (IDTA or addendum) is needed.
 2. **Slack in and out:** the request arrives in Slack and the approval card goes back to Slack, matching Wordsmith's own Receive, Route, Resolve, Record flow.
 3. **MLH bolt-ons:** Gemini Flash for the cheap read and extract steps (Gemini prize), Auth0 for the approval gate and acting on the user's behalf (Auth0 prize), and Tiger Data for the evidence and audit store (Tiger Data prize). See section 3.9 of the summary file.
@@ -19,4 +21,4 @@ Each folder has the same layout: `README.md` (TL;DR, start here), `01-company.md
 
 **Licence rule used throughout:** MIT, Apache-2.0 or BSD means we can reuse code with attribution. AGPL or GPL (e.g. Skyvern, workflow-use) means ideas only. No licence means ideas only.
 
-**Still unread:** the JetBrains judging criteria and the InstaLILY full brief and team kit (both behind QR codes). Recheck `02-track.md` in each folder once they're read.
+**Official briefs are now in the repo, with Markdown copies next to each original:** `research/hamish+aiden/Jetbrains/` (five ranked criteria) and `research/hamish+aiden/Insta Lily/` (the brief and the technical contract). They override these notes where they conflict, as summarised at the top of `jetbrains/README.md` and `instalily/README.md`. The big one: InstaLILY's beginner persona **must fix** simple bugs.

@@ -1,5 +1,15 @@
 # JetBrains research: README (entry point)
 
+> **Correction (7 Nov, 13:40): the judging criteria are now known.** See `research/hamish+aiden/Jetbrains/Help the Developer-HackTheBurgh.md`. In priority order:
+> 1. Implementation and proof of concept: runs end to end, not mocked.
+> 2. User experience and interface: fits the developer's existing workflow.
+> 3. Innovation and creativity: more than "wrap a prompt around a common IDE action".
+> 4. Agentic development process: **agents in JetBrains Air** did real work while we reviewed and steered them. Extra credit for multi-agent workflows.
+> 5. Presentation.
+>
+> The final project can be an ACP agent, web app, plugin, desktop app or mobile app. Air's Windows availability (flagged below as macOS preview) now matters for criterion 4: check it first.
+
+
 **TL;DR (as of 7 Nov 2026)**
 
 1. **Track:** "Help the Developer", Gold, €350 per member. Deliberately vague. Hard rule: the agentic development must run **inside JetBrains IDEs, using AI**, and judges ask how we used AI.

@@ -1,5 +1,12 @@
 # InstaLILY research: README
 
+> **Correction (7 Nov, 13:40): the official brief overrides parts of this folder.** Read `research/hamish+aiden/Insta Lily/Agentic_IDE_Challenge_Brief.md` and `Agent_Contract.md` (the technical contract) first.
+> - **Minimum bar:** the agent runs headless with one command, `agent`, and must *cleanly fix every one of a set of simple bugs* on an unseen project. Teams that miss this aren't ranked. So the beginner persona **does fix the bug**, then explains and checks understanding (their slide example does exactly this). Where these notes say "don't fix for beginners", that is wrong.
+> - The agent should **work out who it's helping without being told**. A manual persona switch alone falls short.
+> - Judging: automated conversations with hidden simulated users and an AI judge, then four InstaLILY engineers at our table.
+> - Kit: a starter agent, a Dockerfile, a manifest, and Gemini through their gateway with a US$50 key. Start from open source or our own code; they score what we add.
+
+
 Entry point for the InstaLILY track ("build a coding agent that adapts to whoever is using it"). Researched 7 Nov 2026. The full brief behind the QR code has not been read, so re-check `02-track.md` once it is.
 
 ## TL;DR
