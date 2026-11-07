@@ -93,4 +93,4 @@ fps from rAF timestamps over a 5 s linear `easeTo`. Pan = 0.6 viewport widths; z
 
 Board posts during this work (Mano's #52 briefing claim and merge, the 40-windows note) don't affect the map.
 
-PR: see the branch's PR on GitHub (title "#40 map: …").
+PR: https://github.com/Hamish-MarshallDawson/Hedged-Bets-hacktheburgh/pull/57
