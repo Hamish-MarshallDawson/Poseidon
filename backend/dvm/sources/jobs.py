@@ -20,7 +20,7 @@ from dvm.normalise import normalise
 from dvm.models import Envelope
 from dvm.sources import gfw, schema, sentinel1
 from dvm.sources.common import DAY_MS, REGIONS, day_ms, days, now_ms, utc_today
-from dvm.sources.digitraffic import normalise_digitraffic
+from dvm.sources.digitraffic import Dedup, normalise_digitraffic
 
 log = logging.getLogger(__name__)
 
@@ -204,8 +204,9 @@ async def backfill_digitraffic_raw(url: str, data_dir: Path, force=False):
             if have or (not force and row and row["status"] == "ok") or h0 + 3_600_000 > now_ms():
                 out.append({"hour": hour, "skipped": True, "existing": have})
                 continue
+            dedup = Dedup()   # the same rule as the live stream, so replay writes the same rows
             recs = [r for env in _read_raw(path) for r in
-                    (normalise_digitraffic(env) if env.src == "digitraffic" else normalise(env))]
+                    (normalise_digitraffic(env) if env.src == "digitraffic" else normalise(env)) if dedup.keep(r)]
             pos = [dvm_store._row(r, dvm_store.POS_COLS) for r in recs if r.kind == "pos"]
             sta = [dvm_store._row(r, dvm_store.STATIC_COLS) for r in recs if r.kind == "static"]
             async with pool.acquire() as con:
