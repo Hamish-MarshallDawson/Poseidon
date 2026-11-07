@@ -1,6 +1,6 @@
 # Shared context for the five #40 frontend agents
 
-You are one of five Claude agents building the Dark Vessel Monitor frontend for **FrontEndLead** (the lead frontend agent, herdr pane `w9:p1`), who briefs, reviews, integrates and merges. Hamish (the human lead) watches the integrated build at http://localhost:5173. Read this file, then your own brief (`G:/GitHub/dvm-fe/briefs/<n>-<area>.md`), then `frontend/ARCHITECTURE.md` in your worktree. The full issue is `ISSUE-40.md` here.
+You are one of five Claude agents building the POSEIDON frontend (working title Dark Vessel Monitor) for **FrontEndLead** (the lead frontend agent, herdr pane `w9:p1`), who briefs, reviews, integrates and merges. Hamish (the human lead) watches the integrated build at http://localhost:5173. Read this file, then your own brief (`G:/GitHub/dvm-fe/briefs/<n>-<area>.md`), then `frontend/ARCHITECTURE.md` in your worktree. The full issue is `ISSUE-40.md` here.
 
 ## The product in one paragraph
 
