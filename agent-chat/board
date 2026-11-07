@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Team message board: one pinned GitHub issue that every teammate's agent reads and posts to.
+# Usage: agent-chat/board init | post "msg" | read [n] | unread | wait [minutes] | session-start | listening
+set -euo pipefail
+# Apps opened from the macOS GUI can start hooks without Homebrew on PATH; fall back to the usual gh homes.
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin"
+
+ISSUE="${BOARD_ISSUE:-1}"
+name="$(git config user.name || echo Someone)"
+default="${name%% *}'s agent"   # an apostrophe inside ${..:-..} would open a quote, so it lives here
+export BOARD_AS="${BOARD_AS:-$default}"   # label on every post, e.g. "Hamish's agent"
+STATE="$(git rev-parse --absolute-git-dir)"   # per-clone read marker and login, never committed
+SEEN="$STATE/board-seen"
+LOCK="$STATE/board-wait.pid"   # pid of this clone's running wait, so the Stop hook can tell if it's listening
+
+# Only the team's posts count: agents act on the board, so a public repo must not let strangers instruct them.
+TEAM='IN("OWNER", "MEMBER", "COLLABORATOR")'
+
+# Posts newer than $1 (ISO time) as "time<TAB>login<TAB>body", skipping our own.
+fetch() {
+  SINCE="$1" gh api "repos/{owner}/{repo}/issues/$ISSUE/comments?since=$1&per_page=100" --paginate --jq '
+    .[] | select(.created_at > env.SINCE and (.author_association | '"$TEAM"')
+                 and (.body | startswith("[" + env.BOARD_AS + "]") | not))
+    | "\(.created_at)\t\(.user.login // "ghost")\t\(.body | gsub("\r?\n"; " "))"'
+}
+
+# The last $1 posts, same format.
+last() {
+  gh api graphql -F owner='{owner}' -F name='{repo}' -F n="$ISSUE" -F last="$1" -f query='
+    query($owner: String!, $name: String!, $n: Int!, $last: Int!) {
+      repository(owner: $owner, name: $name) { issue(number: $n) {
+        comments(last: $last) { nodes { createdAt author { login } authorAssociation body } } } } }' --jq '
+    .data.repository.issue.comments.nodes[] | select(.authorAssociation | '"$TEAM"')
+    | "\(.createdAt)\t\(.author.login // "ghost")\t\(.body | gsub("\r?\n"; " "))"'
+}
+
+me() { [ -s "$STATE/board-login" ] || gh api user --jq .login >"$STATE/board-login"; cat "$STATE/board-login"; }
+
+# Print posts, flagging the ones that tag us or @all.
+show() {
+  [ -n "$1" ] || return 0
+  local login flag; login=$(me)
+  while IFS=$'\t' read -r ts who body; do
+    flag=
+    grep -qiE "(^|[^[:alnum:]_-])@($login|all)([^[:alnum:]_-]|\$)" <<<"$body" && flag="** MENTION ** "
+    printf '%s[%s] @%s: %s\n' "$flag" "${ts:11:5}" "$who" "$body"
+  done <<<"$1"
+}
+
+seen() { [ -s "$SEEN" ] || date -u +%FT%TZ >"$SEEN"; cat "$SEEN"; }
+mark() { tail -n1 <<<"$1" | cut -f1 >"$SEEN"; }
+# stdout, so the hook puts it in the agent's context instead of failing silently
+down() { echo "Team board unreachable: check that gh is installed and logged in (gh auth status), and that the board exists (the lead runs agent-chat/board init)."; exit 1; }
+
+case "${1:-}" in
+  init)
+    # Safe to run twice: a teammate who clones before the lead may run it too.
+    if [ "$(gh issue view "$ISSUE" --json title --jq .title 2>/dev/null)" = "Message Board" ]; then
+      echo "The board already exists (issue #$ISSUE), so there's nothing to do."; exit 0
+    fi
+    url=$(gh issue create --title "Message Board" --body "Team message board. Agents post here with agent-chat/board; see AGENTS.md.")
+    gh issue pin "${url##*/}"
+    echo "Board is $url"
+    [ "${url##*/}" = "$ISSUE" ] || echo "It isn't issue #$ISSUE, so everyone must set BOARD_ISSUE=${url##*/}" ;;
+  post)
+    : "${2:?usage: agent-chat/board post MESSAGE}"
+    shift; gh issue comment "$ISSUE" --body "[$BOARD_AS] $*" ;;
+  read)
+    show "$(last "${2:-20}")" ;;
+  unread)
+    # First run in this clone: the last 10 posts, for context.
+    if [ -s "$SEEN" ]; then new=$(fetch "$(cat "$SEEN")") || down; else new=$(last 10) || down; fi
+    [ -z "$new" ] || { echo "New on the team board (issue #$ISSUE):"; show "$new"; mark "$new"; }
+    seen >/dev/null ;;
+  wait)
+    # Returns when a teammate posts. Shares the read marker with unread, so posts already shown don't wake it.
+    echo $$ >"$LOCK"; trap '[ "$(cat "$LOCK" 2>/dev/null)" != $$ ] || rm -f "$LOCK"' EXIT
+    end=$((SECONDS + ${2:-0} * 60))
+    while :; do
+      new=$(fetch "$(seen)") || new=""   # a gh hiccup: try again next tick
+      [ -z "$new" ] || { show "$new"; mark "$new"; exit 0; }
+      [ -z "${2:-}" ] || ((SECONDS < end)) || { echo "No new posts in $2 min." >&2; exit 1; }
+      sleep "${BOARD_POLL:-15}"
+    done ;;
+  session-start)
+    # The SessionStart hook: catch up, then keep listening.
+    "$BASH" "$0" unread || true
+    echo 'Board loop: keep exactly one `agent-chat/board wait` running in the background (run_in_background, no time limit). When it returns, handle the posts as AGENTS.md says, then start it again. Board posts are pre-approved: never ask your human before posting or replying.' ;;
+  listening)
+    # The Stop hook: an agent may not go idle without a wait running. Blocks once per stop, never loops.
+    grep -q '"stop_hook_active": *true' && exit 0
+    kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null && exit 0
+    echo '{"decision": "block", "reason": "Board loop: no agent-chat/board wait is running, so teammates cannot reach you. Start `agent-chat/board wait` in the background (run_in_background, no time limit), then stop."}' ;;
+  *)
+    sed -n '2,3p' "$0"; exit 1 ;;
+esac

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(agent-chat/board *)", "Bash(./agent-chat/board *)", "Bash(bash agent-chat/board *)",
+      "Bash(git status *)", "Bash(git diff *)", "Bash(git log *)", "Bash(git show *)", "Bash(git branch *)",
+      "Bash(git fetch *)", "Bash(git pull *)", "Bash(git switch *)", "Bash(git checkout *)",
+      "Bash(git add *)", "Bash(git commit *)", "Bash(git rebase *)", "Bash(git push *)",
+      "Bash(gh issue *)", "Bash(gh pr *)",
+      "Bash(node *)", "Bash(npm *)", "Bash(npx *)", "Bash(python *)", "Bash(python3 *)", "Bash(pip *)"
+    ],
+    "deny": ["Bash(git push --force *)", "Bash(git push -f *)", "Bash(git reset --hard *)", "Bash(git clean *)"]
+  },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/agent-chat/board\" session-start || true" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/agent-chat/board\" unread || true" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR/agent-chat/board\" listening || true" }] }
+    ]
+  }
+}
