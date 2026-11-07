@@ -6,10 +6,11 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
+import jwt
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import config
+from dvm import auth, config
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import Live
 from dvm.models import Envelope
@@ -112,6 +113,8 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(hub.store.run()))
     else:
         log.warning("TIGER_DATABASE_URL is not set: positions go to the JSONL log only")
+    if not auth.ENABLED:
+        log.warning("AUTH0_DOMAIN / AUTH0_AUDIENCE not set: /ws is open to anyone (local dev only)")
     yield
     for t in tasks:
         t.cancel()
@@ -137,10 +140,20 @@ def health() -> dict:
 
 @app.websocket("/ws")
 async def ws(websocket: WebSocket) -> None:
-    # Milestone 2: validate the Auth0 access token here before accept().
+    # Browsers can't set headers on a WebSocket, and a token in the URL lands in access logs, so the client's
+    # first message is {"type": "auth", "token": "<Auth0 access token>"}; nothing is sent until it checks out.
+    # shortcut: the token is checked once at connect, not again when it expires; recheck if sessions get long.
     await websocket.accept()
     c = Client(websocket)
     try:
+        if auth.ENABLED:
+            try:
+                first = json.loads(await asyncio.wait_for(websocket.receive_text(), 10))
+                await auth.verify_async(first["token"] if first.get("type") == "auth" else "")
+            except (ValueError, KeyError, TypeError, AttributeError, asyncio.TimeoutError, jwt.PyJWTError) as e:
+                log.info("WebSocket refused: %s", type(e).__name__)
+                await websocket.close(code=1008, reason="login required")
+                return
         async with c.lock:
             hub.clients.add(c)
             now = now_ms()
