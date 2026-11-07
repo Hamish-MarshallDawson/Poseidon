@@ -30,16 +30,23 @@ def test_parse_bbox_rejects_bad_input(bad):
 
 
 def test_minutes_default_and_cap():
-    assert coverage.coverage_sql(10, None)[1] == [10]
-    assert coverage.coverage_sql(0, None)[1] == [1]
-    assert coverage.coverage_sql(10**6, None)[1] == [coverage.MAX_MINUTES]
+    assert coverage.coverage_sql(10, None)[1] == ["A", 10]
+    assert coverage.coverage_sql(0, None)[1] == ["A", 1]
+    assert coverage.coverage_sql(10**6, None)[1] == ["A", coverage.MAX_MINUTES]
 
 
 def test_bbox_becomes_cell_bins():
     sql, args = coverage.coverage_sql(5, (19.0, 54.0, 31.0, 61.0))
-    assert args == [5, 190, 310, 540, 610]   # lon_bin 190..310, lat_bin 540..610
-    assert "lon_bin BETWEEN $2 AND $3" in sql and "lat_bin BETWEEN $4 AND $5" in sql
-    assert coverage.coverage_sql(5, None)[1] == [5]
+    assert args == ["A", 5, 190, 310, 540, 610]   # lon_bin 190..310, lat_bin 540..610
+    assert "lon_bin BETWEEN $3 AND $4" in sql and "lat_bin BETWEEN $5 AND $6" in sql
+    assert coverage.coverage_sql(5, None)[1] == ["A", 5]
+
+
+def test_class_a_by_default_and_b_on_request():
+    assert "cls = $1" in coverage.coverage_sql(5, None)[0]
+    assert coverage.coverage_sql(5, None, "B")[1] == ["B", 5]
+    with pytest.raises(ValueError):
+        coverage.coverage_sql(5, None, "C")
 
 
 class FakeAuth:
