@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useAuth0 } from '@auth0/auth0-react'
 import { Map as MapLibreMap, Popup, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -11,6 +11,10 @@ setWorkerUrl(maplibreWorkerUrl)
 import type { ServerMsg, VesselView } from './types'
 import { applyMessage, toFeatureCollection } from './vessels'
 import { popupContent, type StaticDetail } from './popup'
+import ThemeMenu from './theme/ThemeMenu'
+import { Button, Panel } from './ui'
+
+const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/dark'
@@ -21,13 +25,18 @@ const MAX_DELAY_MS = 15000
 // Auth0 login gates the map; the backend checks the same access token on the WebSocket.
 export default function App() {
   const { isLoading, isAuthenticated, error, loginWithRedirect, logout, getAccessTokenSilently } = useAuth0()
-  if (isLoading) return <div className="gate">Loading…</div>
+  if (new URLSearchParams(location.search).get('demo') === 'tokens') return <Suspense><TokensDemo /></Suspense>
+  if (isLoading) return <div className="gate"><p className="gate__foot">Loading…</p></div>
   if (!isAuthenticated) {
     return (
       <div className="gate">
-        <h1>Dark Vessel Monitor</h1>
-        <button onClick={() => loginWithRedirect()}>Log in to view the map</button>
-        {error && <p className="error">{error.message}</p>}
+        <Panel className="gate__card">
+          <h1>Dark Vessel Monitor</h1>
+          <p className="gate__lede">Ships that go quiet on AIS while reception nearby is normal, ranked for review. Never an accusation.</p>
+          <Button variant="filled" onClick={() => loginWithRedirect()}>Log in to view the map</Button>
+          {error && <p className="error" role="alert">{error.message}</p>}
+          <p className="gate__foot">HackTheBurgh · team Hedged Bets</p>
+        </Panel>
       </div>
     )
   }
@@ -170,6 +179,7 @@ function LiveMap({ getToken, onLogout }: { getToken: () => Promise<string | unde
         {connected ? 'connected' : 'disconnected'} · ships {shipCount} · {Math.round(msgsPerS)} msg/s ·{' '}
         <button className="link" onClick={onLogout}>log out</button>
       </div>
+      <ThemeMenu />
     </>
   )
 }
