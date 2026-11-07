@@ -94,3 +94,13 @@ fps from rAF timestamps over a 5 s linear `easeTo`. Pan = 0.6 viewport widths; z
 Board posts during this work (Mano's #52 briefing claim and merge, the 40-windows note) don't affect the map.
 
 PR: https://github.com/Hamish-MarshallDawson/Hedged-Bets-hacktheburgh/pull/57
+
+## Handover (paused 2026-11-07, back to FrontEndLead at 22:00)
+
+- **Done:** everything in "What's built" above, PR #57 open (not merged). No new feature work after the pause.
+- **Half-done:** nothing in progress. Every file listed above compiles, and `npm run build` and `npm run lint` pass at this commit.
+- **Left against the acceptance list:** Figma screenshot comparison at far, mid and near; desktop re-measure with Edge (`node src/map/bench/run.mjs --channel msedge --heap`); a logged-in run against the live backend (WebSocket, `historyRange`, the `ui.feed` status path).
+- **How I verified:** `tsc` and the Vite build, oxlint, the Playwright bench (fps, worst frame, first paint, heap), Playwright scene scripts with screenshots (selection, focus, chips, fan-out, list, Esc, water click, theme and signal swaps), the patch-path buffer check, and the login gate rendering.
+- **Known problems:** the logout link is gone until the status line is composed; `index.css` still has the dead `.map` and `.status` rules; the cell labels and chips need the `Noto Sans Regular` glyphs in the coastline style; `src/data/live.ts` conflicts with `40-timeline`'s copy (keep this one); scattered "+1" chips can appear at harbour zoom.
+- **Next steps:** review PR #57; merge `40-timeline` and keep this branch's `live.ts`; mount `useFeed` and drop MapView's `getToken` prop; put `basemapStyle(tokens)` into `map/style.ts` `getStyle()`; re-run the bench on the desktop and compare with Figma.
+- **Git note:** after the rebase, the force-push was blocked here, so `main` was merged in (88687db) and pushed normally. The branch contains `origin/main` as of dc9d3bf.
