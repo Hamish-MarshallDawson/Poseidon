@@ -1,6 +1,6 @@
 # Windows agent report (#40: ship windows, legend, watchlist, status line, motion)
 
-Branch `40-windows`, rebased on main `6fdb7bf`. PR: see the end of this file. Not merged.
+Branch `40-windows`, rebased on main `6fdb7bf`. PR: https://github.com/Hamish-MarshallDawson/Hedged-Bets-hacktheburgh/pull/55. Not merged.
 Built on Aiden's Linux desktop (handover from FrontEndLead's paused windows agent). The WIP commit `cd6cdeb` (now `91252eb` after
 the rebase) was reviewed, tested in a real browser and fixed. The two new commits come after it.
 
@@ -115,4 +115,4 @@ The harness ships are circles in rough water boxes, and the brackets and badges 
 
 ## PR
 
-See the PR link in the branch's PR list (title "#40 windows: …").
+https://github.com/Hamish-MarshallDawson/Hedged-Bets-hacktheburgh/pull/55
