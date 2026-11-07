@@ -1,0 +1,77 @@
+{
+  "$comment": "Single source of truth for the DVM design tokens, copied from Figma (design/R1-AGENT1-COLOUR.md). Edit here, then run npm run tokens. Colour 'hex@NN' means hex at NN % opacity. Theme columns are light, dark, light-hc, dark-hc.",
+  "themes": ["light", "dark", "light-hc", "dark-hc"],
+  "signalSets": ["standard", "cvd"],
+  "textSizes": ["default", "large", "largest"],
+  "theme": {
+    "bg/app": ["#f3efe4", "#15232d", "#ffffff", "#0c171e"],
+    "bg/panel": ["#fbf8f1", "#1c2d38", "#ffffff", "#0f1c24"],
+    "bg/raised": ["#ffffff", "#253a47", "#ffffff", "#152530"],
+    "border/subtle": ["#ddd6c5", "#30485a", "#8c8578", "#6c8494"],
+    "border/default": ["#b9b09b", "#4a6474", "#4a4740", "#a9bcc6"],
+    "border/strong": ["#5a5f5c", "#9fb4bf", "#000000", "#ffffff"],
+    "text/primary": ["#1d2529", "#eee9dc", "#000000", "#ffffff"],
+    "text/secondary": ["#424b4f", "#cbc5b6", "#1d2529", "#ece7da"],
+    "text/muted": ["#5d6466", "#a5a99f", "#33393c", "#d2cdbf"],
+    "text/on-accent": ["#ffffff", "#10202a", "#ffffff", "#000000"],
+    "accent/default": ["#1c5f86", "#86c9e8", "#0b4468", "#a6dbf3"],
+    "accent/subtle": ["#1c5f86@10", "#86c9e8@16", "#0b4468@14", "#a6dbf3@20"],
+    "map/water": ["#d6e6ec", "#1f3b4b", "#e4f1f6", "#132b38"],
+    "map/water-alt": ["#c4dbe4", "#26475a", "#cfe4ed", "#1a3646"],
+    "map/land": ["#efe4c6", "#3b3a32", "#f3e2b2", "#3e3c32"],
+    "map/coast": ["#3f4b4f", "#c3cccb", "#000000", "#f2f2ec"],
+    "map/border": ["#7a6f5a", "#b0a58a", "#4f4535", "#d8cca8"],
+    "map/label-water": ["#2f5468", "#a9c6d4", "#0f3448", "#cfe5ef"],
+    "map/label-land": ["#5a5140", "#cfc6ae", "#2f281b", "#ece2c6"],
+    "map/grid": ["#b5cad3", "#2f4b5b", "#93b0bd", "#3a5a6b"],
+    "focus/veil": ["#f3efe4@62", "#15232d@62", "#ffffff@72", "#0c171e@72"],
+    "focus/dim-ship": ["#7b8387", "#8d969a", "#5d6466", "#a3abaf"],
+    "coverage/ok": ["#2e8a6f@10", "#4fbf9f@12", "#1c6b55@14", "#5fd3b0@16"],
+    "coverage/degraded": ["#b07a12@16", "#e0b65a@18", "#8a5c00@22", "#f0c45e@24"],
+    "coverage/dead": ["#6b7275@22", "#8d969a@24", "#3d4346@30", "#a3abaf@30"],
+    "focus/dim-opacity": [0.4, 0.45, 0.35, 0.35]
+  },
+  "signals": {
+    "ship/normal": { "standard": ["#1d2529", "#eee9dc", "#000000", "#ffffff"], "cvd": ["#1d2529", "#eee9dc", "#000000", "#ffffff"] },
+    "ship/selected": { "standard": ["#1c5f86", "#86c9e8", "#0b4468", "#a6dbf3"], "cvd": ["#0c63e1", "#95cee9", "#0f3f6a", "#39c1f9"] },
+    "ship/dark": { "standard": ["#b3266b", "#f26aa0", "#8f0f4e", "#ff7fb0"], "cvd": ["#522a03", "#c98269", "#4e2b02", "#f59453"] },
+    "ship/spoof": { "standard": ["#9a6400", "#f2b33d", "#6e4700", "#ffc24d"], "cvd": ["#807a03", "#beaf3a", "#7c7d18", "#e5cd11"] },
+    "ship/sanctioned": { "standard": ["#c2331c", "#ff7650", "#9a2010", "#ff8a63"], "cvd": ["#c64b8a", "#ff5aa8", "#d209d0", "#fb4c95"] },
+    "risk/1": { "standard": ["#83702a", "#e5d38c", "#6b5a14", "#f0e0a0"], "cvd": ["#5f7686", "#7d9bb3", "#4b6170", "#93b2c8"] },
+    "risk/2": { "standard": ["#a2630a", "#f2a640", "#8a5200", "#ffb54d"], "cvd": ["#7a6430", "#a9a98a", "#6e5a24", "#c4c09a"] },
+    "risk/3": { "standard": ["#c2492b", "#ee7458", "#9a2f14", "#ff8a6a"], "cvd": ["#83420f", "#e0a95a", "#73380a", "#f0b860"] },
+    "risk/4": { "standard": ["#a8195e", "#f0609e", "#7c0a43", "#ff74ae"], "cvd": ["#4f1e08", "#ffc36b", "#3d1504", "#ffd27a"] }
+  },
+  "derivedSignals": {
+    "$comment": "Signals computed from another signal at an opacity, as in Figma.",
+    "ship/ghost-fill": "ship/dark@14",
+    "ship/ghost-edge": "ship/dark@75"
+  },
+  "text": {
+    "caption": [[10, 14], [12, 16], [14, 20]],
+    "label": [[12, 16], [14, 18], [17, 22]],
+    "data": [[12, 16], [14, 20], [17, 24]],
+    "body": [[14, 20], [17, 24], [20, 28]],
+    "heading": [[15, 20], [18, 24], [22, 28]],
+    "title": [[18, 24], [22, 28], [26, 32]],
+    "display": [[32, 38], [38, 44], [44, 52]]
+  },
+  "extraTheme": {
+    "$comment": "Roles the design agents flagged as missing, not yet in Figma. Same four theme columns.",
+    "shadow/lift": ["#1d2529@18", "#000000@45", "#000000@25", "#000000@60"]
+  },
+  "aliases": {
+    "$comment": "Roles that point at another token in every mode.",
+    "ship/keyline": "bg/app",
+    "replay/edge": "text/primary"
+  },
+  "constants": {
+    "opacity/routine": "0.8",
+    "opacity/trace": "0.2",
+    "radius/panel": "4px",
+    "duration/theme": "300ms",
+    "font/ui": "'Barlow Semi Condensed', 'Arial Narrow', system-ui, sans-serif",
+    "font/data": "'IBM Plex Mono', ui-monospace, Consolas, monospace",
+    "font/place": "'Libre Caslon Text', Georgia, 'Times New Roman', serif"
+  }
+}
