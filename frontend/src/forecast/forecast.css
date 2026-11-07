@@ -1,0 +1,42 @@
+@import '../timeline/tokens-fallback.css';
+
+/* Gap label chip (R2/Forecast/Gap label): bg/panel, a 3 px stripe in ship/dark (or text/muted in a coverage hole). */
+.fc-gap-label {
+  max-width: 280px; padding: 4px 8px 5px 10px; box-sizing: border-box; pointer-events: none;
+  background: var(--dvm-bg-panel); border: 1px solid var(--dvm-text-muted); border-left: 3px solid var(--dvm-ship-dark);
+  color: var(--dvm-text-primary); font: 500 var(--dvm-size-label) / var(--dvm-line-label) 'Barlow Semi Condensed', system-ui, sans-serif;
+  transition: opacity 160ms ease-out;
+}
+.fc-gap-label.grey { border-left-color: var(--dvm-text-muted); }
+.fc-gap-label b { display: block; font-weight: 600; }
+.fc-gap-label span { display: block; color: var(--dvm-text-secondary); font: 400 var(--dvm-size-caption) / var(--dvm-line-caption) 'IBM Plex Mono', ui-monospace, monospace; }
+.fc-gap-label.hidden { opacity: 0; }
+
+/* Forecast check panel, summoned from the scrub bar's freeze marker; drops in above the bar. */
+.fc-check {
+  position: fixed; right: max(16px, calc(50vw - 480px)); bottom: 76px; z-index: 25;
+  width: 380px; max-height: calc(100vh - 140px); overflow: auto; box-sizing: border-box; padding: 12px 16px 14px;
+  background: var(--dvm-bg-panel); border: 1px solid var(--dvm-border-default); border-radius: 4px; color: var(--dvm-text-primary);
+  font: 400 var(--dvm-size-body) / var(--dvm-line-body) 'Barlow Semi Condensed', system-ui, sans-serif;
+  animation: fc-drop 200ms ease-out;
+}
+.fc-check header { display: flex; align-items: center; gap: 8px; }
+.fc-check h2 { margin: 0; flex: 1; font-size: var(--dvm-size-body); font-weight: 600; }
+.fc-check h3 { margin: 12px 0 4px; font-size: var(--dvm-size-label); font-weight: 600; color: var(--dvm-text-secondary); }
+.fc-check p { margin: 6px 0; }
+.fc-tag { padding: 0 6px; border: 1px solid var(--dvm-text-muted); color: var(--dvm-text-secondary); font-size: var(--dvm-size-caption); }
+.fc-x { width: 24px; height: 24px; border: 0; background: none; color: var(--dvm-text-primary); font-size: 18px; cursor: pointer; }
+.fc-x:focus-visible { outline: 2px solid var(--dvm-accent-default); }
+.fc-muted { color: var(--dvm-text-muted); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.fc-head b { font: 600 var(--dvm-size-body) 'IBM Plex Mono', ui-monospace, monospace; }
+.fc-head span { color: var(--dvm-text-secondary); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.fc-rows, .fc-base { margin: 8px 0 0; padding: 0; list-style: none; font: 400 var(--dvm-size-data) / var(--dvm-line-data) 'IBM Plex Mono', ui-monospace, monospace; }
+.fc-rows li { display: grid; grid-template-columns: 12px 22px 1fr 40px 110px; gap: 6px; align-items: center; padding: 2px 0; }
+.fc-base li { display: flex; justify-content: space-between; padding: 2px 0; }
+.fc-p { text-align: right; }
+.fc-sq { width: 7px; height: 7px; box-sizing: border-box; border: 1px solid var(--dvm-text-primary); }
+.fc-sq.hit { background: var(--dvm-text-primary); }
+.fc-sq.censored { border: 1px dashed var(--dvm-text-muted); background: repeating-linear-gradient(135deg, var(--dvm-text-muted) 0 1px, transparent 1px 3px); }
+.fc-sq.pending { border-color: var(--dvm-border-default); }
+@keyframes fc-drop { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .fc-check { animation: none; } .fc-gap-label { transition: none; } }
