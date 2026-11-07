@@ -5,6 +5,25 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dark Vessel Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Libre+Caslon+Text:ital,wght@0,400;1,400&display=swap"
+    />
+    <script>
+      // Set the display modes before first paint so a dark-mode user never sees a light flash. src/theme/theme.ts
+      // owns these afterwards (same localStorage key, same defaults).
+      ;(function () {
+        var c = {}
+        try { c = JSON.parse(localStorage.getItem('dvm-theme') || '{}') || {} } catch (e) {}
+        var m = function (q) { return window.matchMedia && matchMedia(q).matches }
+        var d = document.documentElement.dataset
+        d.theme = c.theme || (m('(prefers-color-scheme: dark)') ? 'dark' : 'light') + (m('(prefers-contrast: more)') ? '-hc' : '')
+        d.signals = c.signals || 'standard'
+        d.text = c.text || 'default'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "smoke": "node --env-file-if-exists=../.env scripts/smoke.mjs"
+    "smoke": "node --env-file-if-exists=../.env scripts/smoke.mjs",
+    "tokens": "node scripts/tokens/build.mjs"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.30.0",
