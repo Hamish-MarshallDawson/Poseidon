@@ -16,15 +16,19 @@ from dvm.models import PositionReport, Record, VesselStatic
 log = logging.getLogger(__name__)
 
 # `time` (timestamptz, = ts) is the partition column, as Tiger's docs recommend; ts and recv_ts stay epoch ms per 06.
-SCHEMA = """
+# Chunk size is PROVISIONAL (Hamish, 7 Nov): 15 minutes so compression shows on live data within the hackathon.
+# Jake may change it once he settles the data model; existing tables move with `python -m dvm.rechunk`.
+CHUNK_INTERVAL = "15 minutes"
+
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS positions (
   time timestamptz NOT NULL, mmsi integer NOT NULL, ts bigint NOT NULL, recv_ts bigint NOT NULL,
   lat double precision NOT NULL, lon double precision NOT NULL,
   sog_kn real, cog_deg real, heading_deg smallint, nav_status smallint,
   cls text NOT NULL, msg_type smallint NOT NULL, ts_quality text NOT NULL, src text NOT NULL,
-  q text[] NOT NULL DEFAULT '{}'
+  q text[] NOT NULL DEFAULT '{{}}'
 );
-SELECT create_hypertable('positions', by_range('time'), if_not_exists => TRUE);
+SELECT create_hypertable('positions', by_range('time', INTERVAL '{CHUNK_INTERVAL}'), if_not_exists => TRUE);
 CREATE INDEX IF NOT EXISTS positions_mmsi_time ON positions (mmsi, time DESC);
 
 CREATE TABLE IF NOT EXISTS statics (
@@ -32,19 +36,18 @@ CREATE TABLE IF NOT EXISTS statics (
   imo integer, name text, callsign text, ship_type smallint, type_group text NOT NULL,
   dim_a_m smallint, dim_b_m smallint, dim_c_m smallint, dim_d_m smallint, length_m smallint, beam_m smallint,
   draught_m real, destination text, eta_utc bigint, mid smallint NOT NULL, flag_iso2 text,
-  src text NOT NULL, q text[] NOT NULL DEFAULT '{}'
+  src text NOT NULL, q text[] NOT NULL DEFAULT '{{}}'
 );
-SELECT create_hypertable('statics', by_range('time'), if_not_exists => TRUE);
+SELECT create_hypertable('statics', by_range('time', INTERVAL '{CHUNK_INTERVAL}'), if_not_exists => TRUE);
 CREATE INDEX IF NOT EXISTS statics_mmsi_time ON statics (mmsi, time DESC);
 """
 
 # Run after SCHEMA on every start-up, one statement per execute(): asyncpg sends a multi-statement string as one
 # transaction block, and a continuous aggregate can't be created inside one. Each statement is idempotent.
-# The hypertables were made with the 7-day default chunk, so the open chunk (5-12 Nov) stays whole until it closes;
-# new chunks are 1 hour, so the 1-hour columnstore policy has chunks to compress.
+# set_chunk_time_interval keeps an existing database on CHUNK_INTERVAL (it only affects chunks created later).
 SETUP = [
-    "SELECT set_chunk_time_interval('positions', interval '1 hour')",
-    "SELECT set_chunk_time_interval('statics', interval '1 hour')",
+    f"SELECT set_chunk_time_interval('positions', interval '{CHUNK_INTERVAL}')",
+    f"SELECT set_chunk_time_interval('statics', interval '{CHUNK_INTERVAL}')",
     # Not segmented by mmsi: at ~3,000 rows a minute over ~7,000 ships a 1-hour chunk holds about a dozen rows per
     # ship, and segmenting by mmsi made the compressed chunk BIGGER (0.6x). Ordering by mmsi, time gives 4.3x.
     # Only while columnstore is off: changing it once chunks are compressed is refused, and a restart must not trip.
