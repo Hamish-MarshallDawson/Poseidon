@@ -132,7 +132,7 @@ async def lifespan(app: FastAPI):
         await hub.store.close()
 
 
-app = FastAPI(title="Dark Vessel Monitor", lifespan=lifespan)
+app = FastAPI(title="POSEIDON", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=config.FRONTEND_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 

@@ -33,7 +33,7 @@ export default function TokensDemo() {
     <div className="demo">
       <ThemeMenu />
       <header className="demo-head">
-        <h1 className="t-display">Dark Vessel Monitor · tokens</h1>
+        <h1 className="t-display">POSEIDON · tokens</h1>
         <p className="t-data t-secondary">
           theme={mode.theme} · signals={mode.signals} · text={mode.text} · motion={mode.reducedMotion ? 'reduce' : 'full'}
         </p>

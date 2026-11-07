@@ -1,4 +1,4 @@
-# Dark Vessel Monitor backend
+# POSEIDON backend
 
 One Python process that:
 
