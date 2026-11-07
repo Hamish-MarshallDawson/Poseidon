@@ -18,7 +18,9 @@ DATA_DIR = ROOT / os.getenv("DATA_DIR", "data")
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", "8000"))
 FRONTEND_ORIGINS = [o.strip() for o in os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")]
-STALE_AFTER_S = int(os.getenv("STALE_AFTER_S", "1800"))   # drop a ship from the map after this long silent
+STALE_AFTER_S = int(os.getenv("STALE_AFTER_S", "1800"))
+# Digitraffic (Fintraffic, Finnish waters) live AIS over MQTT, merged with AISStream. On unless DIGITRAFFIC=0.
+DIGITRAFFIC = os.getenv("DIGITRAFFIC", "1").strip().lower() not in ("0", "false", "no", "off")   # drop a ship from the map after this long silent
 
 # Auth0: with DOMAIN and AUDIENCE set, /ws needs a valid access token. Unset means no login (local dev only).
 AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN", "")
