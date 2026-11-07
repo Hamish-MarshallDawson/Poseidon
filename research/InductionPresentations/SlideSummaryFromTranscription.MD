@@ -97,6 +97,8 @@ From the organisers' talk and the [code of conduct](https://hacktheburgh.com/cod
 - **Complexity:** a complex task end to end, not complex internals for their own sake.
 - **Bonus:** a few extra points if it is legal-focused, but that is not required.
 - **Tie-breaker:** tokens used, model used and compute efficiency.
+- **From their deck** (`research/hamish+aiden/Wordsmith/HackTheBurgh — Wordsmith.pdf`): the main criterion is **workflow complexity** ("how complex a workflow your team managed to make"). Also considered: **tokens used, model used, time to complete the task**. On legal focus: "Ideally legally involved, but not required. Creativity required."
+- **Judges:** three engineers. Ash (Operations Engineer: systems and automations), Eli (Product Engineer: features lawyers use), Chapman (GTM Engineer: go-to-market tools). Emails `ash@`, `eli@`, `chapman@wordsmith.ai`.
 - **Prize:** AirPods Max for every member of the winning team. Second and third: goodie bags.
 - **About them:** Edinburgh-based legal AI company; Series B recently; hiring fast. Contact emails were on their slide.
 
@@ -136,6 +138,23 @@ From the organisers' talk and the [code of conduct](https://hacktheburgh.com/cod
 - **In the demo:** explain the approach, show results and limitations, and report runtime and resource needs.
 - **Judged on:** correctness and efficiency.
 - **Prize:** "AirPods 5" (as written on the slide) plus £100 of fossils.
+
+### 3.9 MLH prize categories
+
+From the [MLH event prizes page](https://www.mlh.com/events/hacktheburgh-9f/prizes), read 7 Nov 2026. The page lists 8 categories with one-line descriptions only. The full qualification rules are behind each category's "Read more" link and have **not been read yet**. The prize shown is the label above each heading, so the mapping is inferred from the layout.
+
+| Category | What the page says | Prize |
+|---|---|---|
+| Best Use of Gemini API | "push the boundaries of what's possible with AI using Google Gemini" | MLH swag kits |
+| Best Use of ElevenLabs | "Deploy natural, human-sounding audio with ElevenLabs" | Wireless earbuds |
+| Best Use of Entire | "the Git forge for agent-human collaboration" | Mini portable projector |
+| Best Use of Solana | Solana network for infrastructure | Hardware wallets |
+| Best Use of Tiger Data | high-performance databases without complex setup | Stream Deck Mini |
+| Best Use of Vultr | cloud hosting for high-performance projects | Assorted prizes |
+| Best Use of Auth0 | "Auth0 wants your applications to be secure!" | Wireless headphones |
+| DEV Writing Challenge | publish the project's story on dev.to after the event | $100 |
+
+**Practical consequences:** these are add-ons, not main tracks. A project can pick up several by using the technology somewhere real: Gemini as the model, Auth0 for login and approvals, Tiger Data for storage, Vultr for hosting, ElevenLabs for voice. The DEV post costs only a write-up after the event. Read each "Read more" page before relying on a category.
 
 ---
 
@@ -229,4 +248,6 @@ A live scam-call warning, with the full spec in the "Possible Projects" doc.
 - Opening ceremony recordings, 7 November 2026: HackTheBurgh intro, organisers' rules talk, HRT, Metaview, G-Research, JetBrains, Bank of Scotland, Wordsmith AI, InstaLILY, Viridien (machine-transcribed; names and numbers may contain transcription errors)
 - Photographed slides: workshop schedule, sponsor challenge and prize table, InstaLILY judging and prizes, Viridien challenge, approach, dataset, outputs and considerations
 - [HackTheBurgh](https://hacktheburgh.com/), [itinerary](https://hacktheburgh.com/itinerary), [code of conduct](https://hacktheburgh.com/code-of-conduct)
+- [MLH event prizes page](https://www.mlh.com/events/hacktheburgh-9f/prizes) (read 7 Nov 2026)
+- Wordsmith sponsor deck: `research/hamish+aiden/Wordsmith/HackTheBurgh — Wordsmith.pdf`
 - Team call transcript, 6 November 2026, and the "Possible Projects" doc
