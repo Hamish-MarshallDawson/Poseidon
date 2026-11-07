@@ -96,7 +96,7 @@ async def main() -> None:
     ap.add_argument("--drop-old", action="store_true", help="drop <table>_old once the new tables are complete")
     args = ap.parse_args()
     if not config.TIGER_DATABASE_URL:
-        raise SystemExit("TIGER_DATABASE_URL is not set in backend/.env")
+        raise SystemExit("TIGER_DATABASE_URL is not set in .env")
     con = await asyncpg.connect(config.TIGER_DATABASE_URL, command_timeout=600)
     try:
         await (drop_old(con) if args.drop_old else migrate(con))

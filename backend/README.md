@@ -13,17 +13,20 @@ One Python process that:
 
 Python 3.11 or newer.
 
+One `.env` per machine, at the repo root: `cp .env.example .env` there, then fill in the keys (see the notes in `.env.example`).
+
 ```bash
 cd backend
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt     # macOS/Linux: .venv/bin/pip
-cp .env.example .env                              # then fill in the keys
 .venv/Scripts/python -m dvm                       # macOS/Linux: .venv/bin/python -m dvm
 ```
 
 It listens on http://127.0.0.1:8000. Check http://127.0.0.1:8000/health; the log prints the feed rate, ships tracked and rows written every 10 s. Tests: `.venv/Scripts/python -m pytest -q tests` (normaliser, and token validation against a local RSA key).
 
-## Configuration (`backend/.env`)
+## Configuration (the repo-root `.env`)
+
+The backend reads the root `.env`. An optional `backend/.env` is loaded first and wins for any variable set in both; real environment variables win over both.
 
 | Variable | Meaning |
 |---|---|

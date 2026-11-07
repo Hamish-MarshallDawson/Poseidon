@@ -116,7 +116,7 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(run_aisstream(config.AISSTREAM_URL, config.AISSTREAM_API_KEY,
                                                        config.AIS_BBOX, hub.queue, hub.feed, hub.limiter)))
     else:
-        log.warning("AISSTREAM_API_KEY is not set in backend/.env: no live data")
+        log.warning("AISSTREAM_API_KEY is not set in .env: no live data")
     if hub.store:
         tasks.append(asyncio.create_task(hub.store.run()))
     else:
