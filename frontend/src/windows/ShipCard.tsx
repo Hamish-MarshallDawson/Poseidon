@@ -132,7 +132,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
       </div>
       <EvidenceStrip ts={v.last_ts} now={now} />
       <div className="sc-actions">
-        <Button onClick={onFocus}>Track history</Button>
+        <Button onClick={onFocus}>Nearby ships</Button>
         <Button onClick={() => runBriefing([mmsi])}>Brief me</Button>
         <Button variant={inReview ? 'outline' : 'filled'} aria-pressed={inReview} onClick={() => toggleReview(mmsi)}>
           {inReview ? 'In review' : 'Add to review'}
@@ -143,7 +143,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
   )
 })
 
-// What the Track history path shows: how far back the oldest point is.
+// What the always-on past track shows: how far back the oldest point is.
 function trackCaption(trail: [number, number, number][] | undefined): string {
   if (!trail || trail.length < 2) return 'No track yet'
   const min = Math.round((trail[trail.length - 1][0] - trail[0][0]) / 60000)
