@@ -237,3 +237,10 @@ def test_no_pool_is_503():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as http:
             return (await http.get("/lab/runs")).status_code
     assert asyncio.run(go()) == 503
+
+
+def test_route_baseline_is_a_straight_line_guess():
+    rec = {"target": "route", "metrics": {"decision": {"against": "baseline-dr-v1", "promote": False,
+                                                      "horizons": {"10800": {"win": False}}}}}
+    assert R.rule(rec, None)[0]["check"] == "beats the straight-line guess at 3 h"
+    assert R.decision_summary(rec) == "rejected: did not beat the straight-line guess"

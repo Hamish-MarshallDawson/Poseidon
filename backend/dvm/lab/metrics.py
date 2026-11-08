@@ -1,8 +1,8 @@
 """Model Lab read routes for live track record, data collected and the overview (docs/handoffs/lab.md).
 
 - `GET /lab/metrics?hours=24&bucket=3600`: graded outcomes per time bucket (by forecast time, `made_at`), mode
-  (live or backtest) and model version. Route: per horizon, n, 80/95% coverage, median error and the dead-reckoning
-  baseline's median error on the same cases, skill = 1 - median / baseline median. Go-dark: per target, n, positives,
+  (live or backtest) and model version. Route: per horizon, n, 80/95% coverage, median error and the straight-line
+  guess baseline's median error on the same cases, skill = 1 - median / baseline median. Go-dark: per target, n, positives,
   mean p, hit rate, Brier and Brier skill over the observed base rate. Plus the go-dark reliability diagram (fixed p
   bins) and the top-10% lift of one model per target (the running champion, else the most graded non-baseline one).
 - `GET /lab/data?hours=168&bucket=3600`: graded outcomes per bucket, one row per mode, each with its own mode's
@@ -32,6 +32,8 @@ from typing import Callable, Optional
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+from dvm.lab.records import to_ms
 
 H_MS = 3_600_000
 LIVE_HOURS = 24
@@ -110,7 +112,8 @@ SOURCES = ("SELECT src, stream, min(start_ts) AS oldest, max(end_ts) AS newest, 
 AIS_RANGE = ("SELECT (SELECT ts FROM positions ORDER BY time LIMIT 1) AS oldest, "
              "(SELECT ts FROM positions ORDER BY time DESC LIMIT 1) AS newest")
 AIS_ROWS = "SELECT approximate_row_count('positions')"
-RUNS = ("SELECT DISTINCT ON (run_id) run_id, target, status, proposer, created_at, recorded_at, artifact, metrics "
+RUNS = ("SELECT DISTINCT ON (run_id) run_id, target, status, proposer, created_at, recorded_at, artifact, train_to, "
+        "metrics "
         "FROM model_runs ORDER BY run_id, recorded_at DESC, (status = 'champion') DESC")
 EXACT_COUNT_MAX = 1_000_000   # above this, graded_outcomes is the planner's row estimate (pg_class.reltuples)
 TOTALS = ("SELECT CASE WHEN c.reltuples > $2 THEN c.reltuples::bigint ELSE (SELECT count(*) FROM outcomes) END "
@@ -253,7 +256,7 @@ STATISTICS = {"log_loss": "log-loss skill", "error_m": "median-error skill", "br
 
 def statistic_label(metrics: dict) -> Optional[str]:
     """What a run's `skill` block measures, in words: 'log-loss skill' (go-dark, fishing), 'median-error skill'
-    (route, over dead reckoning)."""
+    (route, over the straight-line guess)."""
     loss = metrics.get("loss_name")
     return STATISTICS.get(loss) or (f"{loss.replace('_', '-')} skill" if loss else None)
 
@@ -330,7 +333,9 @@ def route_live(rows: list[dict], version: Optional[str], metrics: Optional[dict]
     cov = _num(r["cov80"])
     return {"hours": LIVE_HOURS, "n": r["n"], "model_version": version, "statistic": "median-error skill",
             "horizon_s": ROUTE_PRIMARY_H, "offline": offline_match(metrics or {}, "median-error skill", ROUTE_PRIMARY_H),
-            "primary": {"name": "skill over dead reckoning at 3 h", "value": skill, "ref_label": "dead reckoning"},
+            "primary": {"name": "skill over the straight-line guess at 3 h", "value": skill,
+                        "ref_label": "the straight-line guess"},
+            "median_err_m": _num(r["med"]),
             "calibration": {"name": "80% circle coverage", "value": cov, "nominal": 0.8,
                             "ok": abs(cov - 0.8) <= COV_TOL + 1e-9}}
 
@@ -371,6 +376,132 @@ def note(live: Optional[dict], deployed: bool, graded_other: Optional[str] = Non
         parts.append(f"{c['name']} off target ({c['value']:.1%} vs {c['nominal']:.1%})")
     return "; ".join(parts) or "on target"
 
+
+
+# ---------------------------------------------------------------- plain-words cards (Model Lab v2)
+# Every text here is for someone new to ML: km, %, "N times", "N in 10"; never skill, Brier or log loss.
+GRADED_24H = ("SELECT CASE WHEN target IN ('route', 'route_reappear') THEN 'route' "
+              "WHEN target LIKE 'dark\\_%' THEN 'godark' WHEN target LIKE 'fishing%' THEN 'fishing' END AS model, "
+              "count(*) AS n, max(resolved_at) AS last_ts FROM outcomes WHERE made_at >= $1 GROUP BY 1")
+PROPOSALS_BY = "SELECT target, count(*) AS n, max(created_at) AS last_ts FROM ml_proposals GROUP BY 1"
+EVENTS_BY = "SELECT target, kind, count(*) AS n, max(ts) AS last_ts FROM ml_events GROUP BY 1, 2"
+LIFT_ONE = LIFT.replace("WHERE o.target LIKE", "WHERE o.target = $3 AND s.mode = 'live' AND o.target LIKE")
+
+
+def model_of(target: Optional[str]) -> Optional[str]:
+    return next((k for k, ts in REG_TARGETS.items() if target in ts), None)
+
+
+def is_gemini(run: dict) -> bool:
+    return "gemini" in str(run.get("proposer") or "").lower() and "no ml_gemini" not in str(run.get("proposer")).lower()
+
+
+def _stage(n, last) -> dict:
+    return {"count": int(n or 0), "last_ts": int(last) if last is not None else None}
+
+
+def pipeline(key: str, runs: list[dict], proposals: list[dict], events: list[dict], graded: list[dict]) -> dict:
+    """The model page's strip, New data -> Gemini proposes -> Train -> Judge -> Promote / reject -> Live grading, each
+    {count, last_ts}. new_data: training examples of the newest run (and when its data ends); graded: outcomes of
+    the last 24 h of this model's predictions (newest resolution time)."""
+    targets = REG_TARGETS[key]
+    mine = sorted((r for r in runs if r["target"] in targets), key=lambda r: r["created_at"] or 0)
+    ev = {}
+    for e in events:
+        if e["target"] in targets:
+            n, t = ev.get(e["kind"], (0, None))
+            ev[e["kind"]] = (n + e["n"], max(x for x in (t, e["last_ts"]) if x is not None))
+
+    def last(rs, k="created_at"):
+        return max((r[k] for r in rs if r.get(k) is not None), default=None)
+
+    newest = mine[-1] if mine else None
+    n_train = (((newest or {}).get("metrics") or {}).get("split") or {}).get("n_train")
+    try:
+        data_ts = to_ms(newest.get("train_to")) if newest else None
+    except (TypeError, ValueError):
+        data_ts = None
+    props = [p for p in proposals if p["target"] in targets]
+    judged = [r for r in mine if (r.get("metrics") or {}).get("decision")]
+    promoted = [r for r in mine if r["status"] in ("champion", "retired")]
+    rejected = [r for r in mine if r["status"] == "rejected"]
+    g = next((x for x in graded if x["model"] == key), {})
+    return {"new_data": _stage(n_train, data_ts or (newest or {}).get("created_at")),
+            "proposed": _stage(sum(p["n"] for p in props), max((p["last_ts"] for p in props
+                                                                 if p["last_ts"] is not None), default=None)),
+            "trained": _stage(len(mine), last(mine)),
+            "judged": _stage(len(judged), last(judged)),
+            "promoted": _stage(len(promoted), ev.get("promoted", (0, None))[1] or last(promoted, "recorded_at")),
+            "rejected": _stage(len(rejected), ev.get("rejected", (0, None))[1] or last(rejected, "recorded_at")),
+            "graded": _stage(g.get("n"), g.get("last_ts"))}
+
+
+def _level(off: float, warn: float, bad: float) -> str:
+    return "ok" if off <= warn else "warn" if off <= bad else "bad"
+
+
+def _pct(x: float) -> str:
+    """12%, but 2.6% under 10% (go-dark chances are small, and '3%, actual 1%' hides the gap)."""
+    return f"{x:.0%}" if x >= 0.095 or x == 0 else f"{x:.1%}"
+
+
+def _km(m: float) -> str:
+    km = m / 1000
+    return f"{km:.1f}" if km < 10 else f"{km:.0f}"
+
+
+def route_card(live: Optional[dict], deployed: bool) -> tuple[dict, dict]:
+    """Headline: the live median error at 3 h in km. Status: how often the 80% circle held the ship."""
+    if not deployed:
+        return ({"text": "Not served live yet", "value": None, "unit": None},
+                {"level": "none", "text": "No live predictions"})
+    if live is None or live.get("median_err_m") is None:
+        return ({"text": "No live grades for this version yet", "value": None, "unit": None},
+                {"level": "none", "text": "Waiting for ships to reappear"})
+    km = _km(live["median_err_m"])
+    head = {"text": f"Finds a silent ship within {km} km after 3 hours", "value": float(km), "unit": "km"}
+    cov = live["calibration"]["value"]
+    st = {"level": _level(abs(cov - 0.8), COV_TOL + 1e-9, 0.15),
+          "text": f"Circle held the ship {cov:.0%} of the time · target 80%"}
+    return head, st
+
+
+def godark_card(live: Optional[dict], lift_row: Optional[dict], deployed: bool) -> tuple[dict, dict]:
+    """Headline: how many times more often the top 10% flagged ships go dark than ships in general. Status: the
+    average predicted chance against what happened."""
+    if not deployed:
+        return ({"text": "Not served live yet", "value": None, "unit": None},
+                {"level": "none", "text": "No live predictions"})
+    head = {"text": "No live grades for this version yet", "value": None, "unit": None}
+    if lift_row and lift_row.get("top_hit_rate") is not None and lift_row.get("all_hit_rate"):
+        x = lift_row["top_hit_rate"] / lift_row["all_hit_rate"]
+        v = round(x, 1) if x < 10 else round(x)
+        head = {"text": f"Flagged ships go dark {v:g}× more often", "value": v, "unit": "×"}
+    if live is None:
+        return head, {"level": "none", "text": "Waiting for grades"}
+    p, q = live["calibration"]["value"], live["calibration"]["nominal"]
+    off = abs(p - q)
+    # relative to how often ships really go dark: 2.6% said against 0.7% actual is far off, not drifting
+    return head, {"level": _level(off, max(0.005, 0.25 * q), max(0.01, 0.5 * q)),
+                  "text": f"Says {_pct(p)}, actual {_pct(q)}"}
+
+
+def fishing_card(metrics: dict, graded_24h: int, deployed: bool) -> tuple[dict, dict]:
+    """Headline: held-out recall at the champion's threshold when the run stored it, else its precision-recall
+    area in words. Status: live grades when there are any."""
+    s = (metrics.get("summary") or {}).get(str(PRIMARY_H["fishing"])) or {}
+    rec = s.get("recall") if s.get("recall") is not None else metrics.get("recall")
+    if rec is not None:
+        head = {"text": f"Spots {round(rec * 10)} in 10 protected-area fishing weeks", "value": round(rec * 10),
+                "unit": "in 10"}
+    elif s.get("auc_pr") is not None:
+        n = round(s["auc_pr"] * 10)
+        head = {"text": f"Ranks {n} in 10 correctly", "value": n, "unit": "in 10"}
+    else:
+        head = {"text": "No champion yet", "value": None, "unit": None}
+    if graded_24h:
+        return head, {"level": "ok", "text": f"{graded_24h:,} live predictions graded in 24 h"}
+    return head, {"level": "none", "text": "Not graded live yet" if deployed else "Not served live yet"}
 
 def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable[[], Optional[dict]],
                 require_login, clock: Callable[[], int] = lambda: int(time.time() * 1000)) -> APIRouter:
@@ -473,6 +604,10 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
             proposals = await _optional(con, OPTIONAL_COUNT.format("ml_proposals"), default=0)
             sources = {x["run_id"]: x["source"] for x in await _optional(con, RUN_SOURCES, default=[], rows=True)}
             events = await _optional(con, EVENTS, default=[], rows=True)
+            graded = await _fetch(con, GRADED_24H, since)
+            props_by = await _optional(con, PROPOSALS_BY, default=[], rows=True)
+            events_by = await _optional(con, EVENTS_BY, default=[], rows=True)
+            lift_rows = await _fetch(con, LIFT_ONE, since, TOP_SHARE, dark_target)
         for x in runs:
             x["metrics"] = _json(x["metrics"])
         models = []
@@ -494,8 +629,20 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                 live = route_live(rows, version, m) if key == "route" else dark_live(rows, version, dark_target, m)
                 if live is None and rows:
                     other = pick_version({x["model_version"]: x["n"] for x in rows}, version)
+            if key == "route":
+                headline, status = route_card(live, deployed)
+            elif key == "godark":
+                lr = next((x for x in lift_rows if x["model_version"] == version), None)
+                headline, status = godark_card(live, lr, deployed)
+            else:
+                g24 = next((x["n"] for x in graded if x["model"] == "fishing"), 0)
+                headline, status = fishing_card(m, g24, deployed)
+            mine = [x for x in runs if x["target"] in REG_TARGETS[key]]
             models.append({"target": key, "label": LABELS[key], "champion": champion, "offline": offline,
-                           "live": live, "deployed": deployed, "note": note(live, deployed, other)})
+                           "live": live, "deployed": deployed, "note": note(live, deployed, other),
+                           "headline": headline, "status": status, "runs_total": len(mine),
+                           "runs_gemini": sum(is_gemini(x) for x in mine),
+                           "pipeline": pipeline(key, runs, props_by, events_by, graded)})
         last = max([x["created_at"] for x in runs] + [e["ts"] for e in events
                                                        if e["kind"] in ("trained", "recalibrated")], default=None)
         for card in models:   # weekly live fishing scores (ml.fishing.score)
