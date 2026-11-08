@@ -165,3 +165,25 @@ def test_append_cycle_adds_loop_runs_proposals_and_events(tmp_path):
     assert rc["run_id"] == "route-dma90-v2" and rc["version"] == "route-dma90-v2-cal2"
     H.append_cycle(status, reg, tmp_path, out)              # appends; the importer dedupes
     assert len(H.read_bundle(out)["runs"]) == 4
+
+
+def test_deploy_events_map_versions_to_runs_and_skip_baselines():
+    vr = {"dma14-v2": "route-dma14-v3", "route-dma90-v2-cal1": "route-dma90-v2"}
+    ev = H.deploy_events([{"ts": 2, "target": "route", "version": "route-dma90-v2-cal1"},
+                          {"ts": 1, "target": "route", "version": "dma14-v2"},
+                          {"ts": 0, "target": "route", "version": "baseline-dr-v1"}], vr, "test")
+    assert [(e["run_id"], e["version"]) for e in ev] == [("route-dma14-v3", "dma14-v2"),
+                                                         ("route-dma90-v2", "route-dma90-v2-cal1")]
+    assert all(e["kind"] == "deployed" for e in ev)
+
+
+def test_recalibration_not_live_is_marked(tmp_path):
+    root = _fake_root(tmp_path / "data")
+    m = _route_model("route-dma90-v2", 0.36)
+    _write(root / "route/artifacts/dl-dma90-v2/route-dma90-v2/model.json", m)
+    b = H.collect(root)
+    rc = next(e for e in b["events"] if e["kind"] == "recalibrated")
+    assert rc["run_id"] == "route-dma90-v2" and rc["detail"]["deployed"] is False
+    assert "not live" in rc["detail"]["status"]
+    live = {e["version"] for e in b["events"] if e["kind"] == "deployed"}
+    assert live == {"dma14-v2", "route-dma90-v2"}

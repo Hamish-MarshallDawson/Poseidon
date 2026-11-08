@@ -1,6 +1,6 @@
 """The Model Lab history bundle: every model run we have, as run records, proposals and events.
 
-    python -m ml.core.history export [--data $POSEIDON_DATA] [--out data/lab-history]
+    python -m ml.core.history export [--data $POSEIDON_DATA] [--out data/lab-history] [--tiger]
 
 Writes `runs.jsonl`, `proposals.jsonl` and `events.jsonl` (one record per line, sorted, so a rerun on the same files
 gives the same bytes). The server imports it with `python -m dvm.lab.importer --bundle data/lab-history --allow-tiger`.
@@ -13,8 +13,8 @@ Sources under the data root (default POSEIDON_DATA, else /home/aiden/data/poseid
   they were kept or replaced are the facts in `LEGACY` below (they were decided by people, not by the rule).
 - Recalibrations (`recal/*/model.json` `recalibration` blocks, `route/artifacts/*/recalibration.json`): events of
   kind `recalibrated`.
-- Deploys: `DEPLOYS` below, the times the server's champions.json changed (from the team board and
-  docs/prediction-loop/PLAN.md).
+- Deploys: the first live prediction of each version in Tiger's ledger (`--tiger`, read-only), else `DEPLOYS` below
+  (the same query, read at LEDGER_CHECKED).
 
 `append_cycle(...)` adds one ml.auto cycle's runs, proposals and events to a bundle in the same format.
 """
@@ -108,24 +108,52 @@ LEGACY = [
                  "shown as a ranking, not a probability claim"]},
 ]
 
-# When the server's champions.json changed (team board posts; times UTC on 8 Nov).
+# When each version first predicted live on the server: the first `mode = 'live'` row under that model_version in
+# Tiger's ledger (route_predictions, scores), read 8 Nov 09:10 UTC. `export --tiger` reads it again (read-only), so a
+# version that goes live later (the cal1 pair, released 08:20, not live at 09:10) appears without editing this.
+LEDGER_CHECKED = "2026-11-08 09:10 UTC"
 DEPLOYS = [
-    {"ts": utc("07:01"), "target": "route", "run_id": "route-dma14-v3", "version": "dma14-v2",
-     "label": "route dma14-v2 live (PREDICT=1)", "detail": {"by": "Hamish's laptop agent", "evidence": "board 07:01"}},
-    {"ts": utc("07:01"), "target": "godark", "run_id": "godark-lgbm-20261108T051156",
-     "version": "godark-lgbm-20261108T051156", "label": "go-dark godark-lgbm-20261108T051156 live (PREDICT=1)",
-     "detail": {"by": "Hamish's laptop agent", "evidence": "board 07:01"}},
-    {"ts": utc("07:32"), "target": "route", "run_id": "route-dma90-v2", "version": "route-dma90-v2",
-     "label": "route route-dma90-v2 live", "detail": {"by": "Hamish's laptop agent", "evidence": "board 07:32"}},
-    {"ts": utc("08:38"), "target": "route", "run_id": "route-dma90-v2", "version": "route-dma90-v2-cal1",
-     "label": "route route-dma90-v2-cal1 live (wider circles)",
-     "detail": {"by": "Hamish's laptop agent", "evidence": "released 08:20 (models-recal-v1), live by 08:38 (board)",
-                "time": "approximate: installed between 08:20 and 08:38"}},
-    {"ts": utc("08:38"), "target": "godark", "run_id": "godark-lgbm-20261108T051156",
-     "version": "godark-lgbm-20261108T051156-cal1", "label": "go-dark godark-lgbm-20261108T051156-cal1 live",
-     "detail": {"by": "Hamish's laptop agent", "evidence": "released 08:20 (models-recal-v1), live by 08:38 (board)",
-                "time": "approximate: installed between 08:20 and 08:38"}},
+    {"ts": 1794121077030, "target": "route", "version": "dma14-v2"},
+    {"ts": 1794121200000, "target": "godark", "version": "godark-lgbm-20261108T051156"},
+    {"ts": 1794123211672, "target": "route", "version": "route-dma90-v2"},
 ]
+LEDGER_SQL = {"route": "SELECT model_version, min(made_at) AS first FROM route_predictions WHERE mode = 'live' "
+                       "AND made_at >= $1 GROUP BY 1",
+              "godark": "SELECT model_version, min(made_at) AS first FROM scores WHERE mode = 'live' "
+                        "AND made_at >= $1 GROUP BY 1"}
+LEDGER_SINCE = utc("00:00", "2026-11-07")   # the predictor first ran on 8 Nov; bounds the scan
+
+
+def ledger_deploys(url: str) -> list[dict]:
+    """First live prediction per model version, from Tiger, read-only."""
+    import asyncio
+
+    import asyncpg
+
+    async def go():
+        con = await asyncpg.connect(url, server_settings={"default_transaction_read_only": "on",
+                                                          "statement_timeout": "60000"}, timeout=30)
+        try:
+            return [{"ts": int(r["first"]), "target": t, "version": r["model_version"]}
+                    for t, sql in LEDGER_SQL.items() for r in await con.fetch(sql, LEDGER_SINCE)]
+        finally:
+            await con.close()
+    return asyncio.run(go())
+
+
+def deploy_events(deploys: list[dict], version_run: dict[str, str], evidence: str) -> list[dict]:
+    """deployed events for the versions we know (baselines like baseline-dr-v1 are not runs and are left out)."""
+    out = []
+    for d in sorted(deploys, key=lambda d: (d["ts"], d["version"])):
+        run_id = version_run.get(d["version"])
+        if not run_id:
+            continue
+        name = {"route": "route", "godark": "go-dark"}.get(d["target"], d["target"])
+        out.append({"ts": d["ts"], "target": d["target"], "kind": "deployed", "run_id": run_id,
+                    "version": d["version"], "label": f"{name} {d['version']} live on the server",
+                    "detail": {"evidence": evidence, "how": "first live prediction under this version"}})
+    return out
+
 
 # Recalibrations that were made but not put live, and why.
 RECAL_KEPT = {"route-dma90-v2-cal1": True, "godark-lgbm-20261108T051156-cal1": True,
@@ -362,7 +390,7 @@ def proposal_events(props: list[dict]) -> list[dict]:
              "detail": {"id": p["id"], "rationale": p.get("rationale"), "errors": p.get("errors")}} for p in props]
 
 
-def collect(root: Path = DATA) -> dict[str, list[dict]]:
+def collect(root: Path = DATA, tiger_url: str | None = None) -> dict[str, list[dict]]:
     runs: dict[str, dict] = {}
     for leg in LEGACY:
         r = legacy_run(leg, root, runs)
@@ -376,8 +404,20 @@ def collect(root: Path = DATA) -> dict[str, list[dict]]:
         raw_props.append(json.loads(p.read_text()))
     props = [proposal_record(p, runs, "pc-aiden") for p in raw_props]
     events = [e for r in runs.values() for e in run_events(r)]
-    events += recal_events(root)
-    events += [d | {"kind": "deployed"} for d in DEPLOYS if d["run_id"] in runs]
+    recal = recal_events(root)
+    version_run = {r.get("version") or r["run_id"]: r["run_id"] for r in runs.values()}
+    version_run |= {r["run_id"]: r["run_id"] for r in runs.values()}
+    version_run |= {e["version"]: e["run_id"] for e in recal if e["run_id"] in runs}
+    if tiger_url:
+        deployed = deploy_events(ledger_deploys(tiger_url), version_run, "Tiger ledger, read at export")
+    else:
+        deployed = deploy_events(DEPLOYS, version_run, f"Tiger ledger, read {LEDGER_CHECKED}")
+    live = {e["version"] for e in deployed}
+    for e in recal:
+        e["detail"]["deployed"] = e["version"] in live
+        if e["detail"]["kept"] and not e["detail"]["deployed"]:
+            e["detail"]["status"] = "released, not live yet (no live predictions under this version)"
+    events += recal + deployed
     events += proposal_events(props)
     return {"runs": sorted(runs.values(), key=lambda r: (r["created_at"], r["run_id"]), reverse=True),
             "proposals": sorted(props, key=lambda p: (p["created_at"] or 0, p["id"]), reverse=True),
@@ -454,8 +494,14 @@ def main(argv=None) -> None:
     ex = sub.add_parser("export", help="write the bundle from every run on this machine")
     ex.add_argument("--data", type=Path, default=DATA)
     ex.add_argument("--out", type=Path, default=Path("data/lab-history"))
+    ex.add_argument("--tiger", action="store_true",
+                    help="read deploy times from Tiger's prediction ledger (read-only; TIGER_DATABASE_URL)")
     a = ap.parse_args(argv)
-    counts = write_bundle(collect(a.data), a.out)
+    url = None
+    if a.tiger:
+        from ml.core import env  # noqa: F401  (repo .env; never printed)
+        url = os.environ["TIGER_DATABASE_URL"]
+    counts = write_bundle(collect(a.data, url), a.out)
     print(json.dumps({"out": str(a.out), **counts}))
 
 
