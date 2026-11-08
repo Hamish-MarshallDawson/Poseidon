@@ -64,3 +64,17 @@ grader (own AIS reappearance and closed gaps grade route predictions; our detect
 until a champion exists). Without a champion, run the baseline so the ledger and graders work from the start. Add
 `lightgbm` to `backend/requirements.txt` only if the predictor needs it (it does for LightGBM text models). Test with
 a local server (no AISStream key) and a toy artifact.
+
+## Addendum 05:00 UTC: route training runs on Hamish's desktop (for `ml-route` and `ml-data`)
+Hamish's own agent runs the route training on his desktop (RTX 5080), from a command we post on the board; we have no
+access to that machine. So `ml-route` must ship a self-contained entry point that works on a fresh checkout:
+1. `ml/.venv` setup from `ml/requirements.txt` (Python 3.12), no access to our desktop, Tiger optional (read-only).
+2. Data: `python -m ml.data.dma --days 14 --out <dir>` downloads and converts the Danish archive itself (anonymous).
+3. Train: one command, for example `python -m ml.route.train --data <dir> --out <artifact dir>`, that builds examples,
+   trains the baseline and LightGBM per horizon, evaluates on the frozen held-out set, and writes the artifact
+   directory (`model.json` plus model files) and a `metrics.json`.
+4. State the expected run time, peak memory and disk, and the output files, so we can post them. The first version is
+   LightGBM on CPU and needs no PyTorch. If you add a GPU challenger, note that the 5080 needs a CUDA 12.8+ PyTorch
+   build (sm_120) and pin the version.
+5. Outputs come back to us as a small artifact (model text files and metrics) that we attach to a draft GitHub
+   release; never commit model files.
