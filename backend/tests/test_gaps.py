@@ -145,8 +145,9 @@ def test_resume_carries_versions_on_and_warm_closes_a_gap_whose_ship_came_back()
 
 # ---- the map state (dvm/live.py) ----
 
-def gap(mmsi, state="open", version=1, end=None):
-    return {"id": f"gap-{mmsi}-{T0}", "version": version, "mmsi": mmsi, "state": state, "start_ts": T0, "end_ts": end}
+def gap(mmsi, state="open", version=1, end=None, flag="deliberate_candidate"):
+    return {"id": f"gap-{mmsi}-{T0}", "version": version, "mmsi": mmsi, "state": state, "start_ts": T0, "end_ts": end,
+            "coverage_flag": flag}
 
 
 def test_open_gap_keeps_the_ship_on_the_map_marked_gap_open():
@@ -218,3 +219,13 @@ def test_a_ship_whose_speed_jitters_but_stays_put_gets_no_gap():
                 continue
             versions += det.observe(fix(m, t, lat, lon if m == TARGET else lon + (t - T0) / 3.6e6 / 6, 2.5))
     assert not [g for g in versions if g["mmsi"] == TARGET] and det.stats["not_moving"] >= 1
+
+
+def test_only_a_deliberate_gap_marks_the_ship_gap_open_other_open_gaps_are_silent():
+    live = Live()
+    live.apply(fix(TARGET, T0, 60.0, 25.0))
+    for version, (flag, status) in enumerate((("own_stall", "silent"), ("coverage_gap", "silent"),
+                                              ("unknown", "silent"), ("deliberate_candidate", "gap_open")), 1):
+        live.apply_gaps([gap(TARGET, version=version, flag=flag)])
+        v = live.view(TARGET)
+        assert (v["status"], v["open_gap_id"]) == (status, f"gap-{TARGET}-{T0}"), flag
