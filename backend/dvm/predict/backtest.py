@@ -75,6 +75,8 @@ DETECT_FLOOR_S, DETECT_K = 1800, 20
 # Target reads.
 LIVE_HOURS = ("SELECT DISTINCT made_at FROM scores WHERE mode = 'live' AND time >= to_timestamp($1::bigint / 1000.0) "
               "AND time <= to_timestamp($2::bigint / 1000.0)")
+DONE_GAPS = ("SELECT DISTINCT gap_id, model_version FROM route_predictions WHERE gap_id IS NOT NULL "
+             "AND time > to_timestamp($1::bigint / 1000.0) AND time <= to_timestamp($2::bigint / 1000.0)")
 COUNT_ROUTES = ("SELECT count(*) FROM route_predictions WHERE mode = 'backtest' "
                 "AND time >= to_timestamp($1::bigint / 1000.0) AND time <= to_timestamp($2::bigint / 1000.0)")
 COUNT_SCORES = ("SELECT count(*) FROM scores WHERE mode = 'backtest' "
@@ -165,12 +167,42 @@ class Gaps:
                    and self.first_seen[gid] <= known_at and g["coverage_flag"] == "deliberate_candidate")
 
 
+RETRY_ERRORS = (asyncpg.ConnectionDoesNotExistError, asyncpg.InterfaceError, asyncpg.AdminShutdownError,
+                asyncpg.CannotConnectNowError, ConnectionError, OSError, asyncio.TimeoutError)
+
+
+class Source:
+    """The read-only history pool, retrying a read when Tiger drops the connection ("terminating connection due to
+    administrator command" happens under load). Reads are pure, so a retry is safe."""
+
+    def __init__(self, pool: asyncpg.Pool, tries: int = 5):
+        self.pool, self.tries = pool, tries
+
+    async def _call(self, name: str, *args):
+        for i in range(self.tries):
+            try:
+                return await getattr(self.pool, name)(*args)
+            except RETRY_ERRORS as e:
+                if i == self.tries - 1:
+                    raise
+                wait = 2 ** i * 3
+                log.warning("Source read failed (%s: %s), retry in %s s", type(e).__name__, e, wait)
+                await asyncio.sleep(wait)
+
+    async def fetch(self, *args):
+        return await self._call("fetch", *args)
+
+    async def fetchval(self, *args):
+        return await self._call("fetchval", *args)
+
+
 class Backtest:
     def __init__(self, source: asyncpg.Pool, target: asyncpg.Pool, model_dir: Optional[Path], step_ms: int,
                  sample_n: int = 150):
         if H_MS % step_ms:
             raise ValueError("--step-min must divide 60")
-        self.src, self.dst, self.step_ms, self.sample_n = source, target, step_ms, sample_n
+        self.src = source if isinstance(source, Source) else Source(source)
+        self.dst, self.step_ms, self.sample_n = target, step_ms, sample_n
         self.k = H_MS // step_ms
         self.champions = artifact.Champions(model_dir)
         self.forecast = FC.Forecast()
@@ -261,6 +293,9 @@ class Backtest:
         t0 = -(-t_from // self.step_ms) * self.step_ms     # first step on the grid
         self.gaps = Gaps(await self.src.fetch(GAPS, t0 - P.GAP_WINDOW_MS, t_to + 2 * P.GAP_WINDOW_MS),
                          await self.src.fetchval(GAPS_START))
+        # Gaps already predicted (by live or an earlier backtest) are skipped, as the live predictor does at start.
+        self.done_gaps |= {(r["gap_id"], r["model_version"])
+                           for r in await self.dst.fetch(DONE_GAPS, t0 - 2 * P.GAP_WINDOW_MS, t_to + P.GAP_WINDOW_MS)}
         live_hours = {r["made_at"] for r in await self.dst.fetch(LIVE_HOURS, t0 - H_MS, t_to + H_MS)}
         # Hours on the grid whose whole previous hour is scored: (H - 1h, H] needs every slot from H - 1h + step.
         emit_from = t0 - self.step_ms
@@ -393,7 +428,7 @@ async def run(args) -> dict:
         w0 = time.monotonic()
         stats = await bt.walk(t_from, t_to, lambda t, s: log.info("%s: %s", iso(t), s))
         walk_s = time.monotonic() - w0
-        data_end = args.data_end and parse_ts(args.data_end) or await src.fetchval(DATA_END)
+        data_end = args.data_end and parse_ts(args.data_end) or await bt.src.fetchval(DATA_END)
         g0 = time.monotonic()
         graded = await bt.grade(t_from, t_to + H_MS, data_end)
         grade_s = time.monotonic() - g0
