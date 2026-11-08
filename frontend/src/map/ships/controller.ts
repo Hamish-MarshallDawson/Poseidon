@@ -316,7 +316,7 @@ export class ShipController {
   }
 
   // Ghost circles (open could-be-within regions as ForecastOverlay draws them, plus every open gap ship, at least 14 px) in
-  // screen px. A stack chip anchored inside one moves to its edge; a cell count centred inside one is blanked. Runs per slot
+  // screen px. A stack chip over a gap's last fix moves off it (max 40 px); a cell count centred inside a ghost is blanked. Runs per slot
   // pass (moveend / 1 Hz data), never per frame.
   private avoidGhosts(res: ReturnType<typeof computeSlots>, map: MapLibreMap, view: View): void {
     const s = ui.get(), t = shownNow()
@@ -333,14 +333,14 @@ export class ShipController {
     }
     if (!zones.length) return
     const inside = (x: number, y: number, pad: number) => zones.find((z) => Math.hypot(x - z.x, y - z.y) < z.r + pad)
+    // Chips stay near their ships: only the gap's last fix (24 px disc) is protected, and a chip moves at most 40 px.
+    const disc = (x: number, y: number) => zones.find((z) => Math.hypot(Math.max(Math.abs(x - z.x) - 22, 0), Math.max(Math.abs(y - z.y) - 10, 0)) < 24)
     for (const c of res.chips) {
-      const p = map.project([c.lon, c.lat])
-      let x = p.x, y = p.y
-      for (let i = 0, z = inside(x, y, 14); z && i < 4; i++, z = inside(x, y, 14)) {
-        const d = Math.hypot(x - z.x, y - z.y)
-        if (d < 1) { x = z.x; y = z.y - z.r - 28 } else { const k = (z.r + 28) / d; x = z.x + (x - z.x) * k; y = z.y + (y - z.y) * k }
-      }
-      if (x !== p.x || y !== p.y) { const a = map.unproject([x, y]); c.lon = a.lng; c.lat = a.lat }
+      const p = map.project([c.lon, c.lat]), z = disc(p.x, p.y)
+      if (!z) continue
+      const d = Math.hypot(p.x - z.x, p.y - z.y), ux = d < 1 ? 0 : (p.x - z.x) / d, uy = d < 1 ? -1 : (p.y - z.y) / d
+      const move = Math.min(40, 48 - d)       // 48: far enough for the chip box to clear the disc along the line
+      const a = map.unproject([p.x + ux * move, p.y + uy * move]); c.lon = a.lng; c.lat = a.lat
     }
     for (const f of res.cells.features) {
       const props = f.properties
