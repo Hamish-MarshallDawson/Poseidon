@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
@@ -9,8 +10,18 @@ from pydantic import BaseModel, Field
 from dvm.briefing import gather, gemini, voice
 
 
+class Origin(BaseModel):
+    """Why a ship is in the briefing: `system` (the prediction model flagged it, with reason codes and risk p),
+    `user` (a person added it; `added_by` is their name, or "you"), `selected` (just the open ship window)."""
+    kind: Literal["system", "user", "selected"]
+    reasons: list[str] = Field(default=[], max_length=10)
+    risk_p: float | None = Field(None, ge=0, le=1)
+    added_by: str | None = Field(None, max_length=80)
+
+
 class BriefingRequest(BaseModel):
     mmsis: list[int] = Field(min_length=1, max_length=gather.MAX_SHIPS)
+    origins: dict[int, Origin] = {}   # optional, keyed by mmsi
 
 
 class SpeechRequest(BaseModel):
@@ -25,7 +36,7 @@ def make_router(hub, require_login) -> APIRouter:
     async def briefing(req: BriefingRequest) -> dict:
         now = int(time.time() * 1000)
         try:
-            facts = gather.gather(hub.live, req.mmsis, now)
+            facts = gather.gather(hub.live, req.mmsis, now, {m: o.model_dump(exclude_none=True) for m, o in req.origins.items()})
         except KeyError as e:
             raise HTTPException(404, f"ship {e.args[0]} is not in the live picture")
         try:

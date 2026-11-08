@@ -137,3 +137,19 @@ def test_route_requires_login():
         raise HTTPException(401)
     router = make_router(SimpleNamespace(live=make_live()), deny)
     assert all(d.dependency is deny for d in router.dependencies)
+
+
+def test_origin_reaches_the_facts_and_the_prompt():
+    origins = {244000001: {"kind": "system", "reasons": ["gap_in_coverage"], "risk_p": 0.4},
+               244000002: {"kind": "user", "added_by": "Aiden"}}
+    f = gather.gather(make_live(), [244000001, 244000002, 636000003], NOW, origins)
+    assert [s["origin"] for s in f["ships"]] == [origins[244000001], origins[244000002], None]
+    assert "flagged by the model" in gemini.SYSTEM and "added by <name>" in gemini.SYSTEM
+
+
+def test_request_accepts_origins_by_mmsi_and_rejects_bad_ones():
+    r = BriefingRequest.model_validate({"mmsis": [1], "origins": {"1": {"kind": "user", "added_by": "you"}}})
+    assert r.origins[1].added_by == "you"
+    assert BriefingRequest.model_validate({"mmsis": [1]}).origins == {}
+    with pytest.raises(ValueError):
+        BriefingRequest.model_validate({"mmsis": [1], "origins": {"1": {"kind": "bot"}}})
