@@ -144,7 +144,8 @@ export class TrackRenderer {
   private askFollow(mmsi: number): void {
     if (this.followTracks.has(mmsi) || this.asked.has(-mmsi)) return
     this.asked.add(-mmsi)
-    getTrack(mmsi, 24).then((t) => { this.followTracks.set(mmsi, t); this.touch(true) }, () => { this.asked.delete(-mmsi) })
+    // a failed read is not retried: draw() runs at 4 Hz while following
+    getTrack(mmsi, 24).then((t) => { this.followTracks.set(mmsi, t); this.touch(true) }, () => {})
   }
 
   // The 24 h read, once per ship per session (getTrack caches it for a minute); failures keep the live trail.
