@@ -41,10 +41,17 @@ export function ModelPage({ target, tab, summary, runs, proposals, events, metri
         <p>{model.question}</p>
       </div>
       {summary && runs ? <PipelineStrip stages={stages} /> : null}
-      <div className="lab-tabs" role="tablist" aria-label={`${model.name} views`}>
+      <div className="lab-tabs" role="tablist" aria-label={`${model.name} views`} onKeyDown={(e) => {
+        const i = TABS.indexOf(tab), d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+        if (!d) return
+        e.preventDefault()
+        const next = TABS[(i + d + TABS.length) % TABS.length]
+        openLab({ model: target, tab: next })
+        requestAnimationFrame(() => document.getElementById(`lab-tab-${next}`)?.focus())
+      }}>
         {TABS.map((t) => (
           <button key={t} type="button" role="tab" id={`lab-tab-${t}`} aria-selected={t === tab} aria-controls="lab-tabpanel"
-            className={t === tab ? 'on' : ''} onClick={() => openLab({ model: target, tab: t })}>{TAB_LABEL[t]}</button>
+            tabIndex={t === tab ? 0 : -1} className={t === tab ? 'on' : ''} onClick={() => openLab({ model: target, tab: t })}>{TAB_LABEL[t]}</button>
         ))}
       </div>
       <div className="lab-tabpanel" role="tabpanel" id="lab-tabpanel" aria-labelledby={`lab-tab-${tab}`}>
