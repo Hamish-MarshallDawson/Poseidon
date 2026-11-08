@@ -12,7 +12,6 @@ import { bindDetailSender, receiveDetail } from './windows/detail'
 import { BriefingPanel } from './briefing/BriefingPanel'
 import { bindBriefingAuth } from './briefing/store'
 import { bindYachtsAuth } from './yachts/store'
-import { bindPopularAuth } from './data/popular'
 import { Review } from './review/ReviewPanel'
 import { Channel } from './collab/docs/Channel'
 import { AUTH_OFF, bindCollabAuth, devUser } from './collab/client'
@@ -66,12 +65,11 @@ export function Monitor({ getToken, onLogout, profile }: { getToken: () => Promi
     bindDetailSender((m) => adapter?.send(m))
     bindBriefingAuth(getToken)
     bindYachtsAuth(getToken)
-    bindPopularAuth(getToken)
     bindCollabAuth(getToken)
     const unbindSocket = bindSocket()
     if (profile) void loadMe(profile)
     const off = onDetail(receiveDetail)
-    return () => { off(); bindDetailSender(null); bindBriefingAuth(null); bindYachtsAuth(null); bindPopularAuth(null); bindCollabAuth(null); unbindSocket() }
+    return () => { off(); bindDetailSender(null); bindBriefingAuth(null); bindYachtsAuth(null); bindCollabAuth(null); unbindSocket() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (

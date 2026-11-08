@@ -23,5 +23,9 @@ async function run(f: (id: string) => Promise<unknown>) {
 // The list changes arrive back as list_delta over the socket (applied idempotently by the store), so nothing to set here.
 export const listAdd = (mmsi: number) => run((id) => api.listAdd(id, mmsi))
 export const listSetStatus = (mmsi: number, status: Status) => run((id) => api.listSet(id, mmsi, status))
-export const listRemove = (mmsi: number) => run((id) => api.listRemove(id, mmsi))
+// Applied here as well as by the echo: with the socket down the row would otherwise stay on the list.
+export const listRemove = (mmsi: number) => run(async (id) => {
+  await api.listRemove(id, mmsi)
+  collab.set((s) => ({ list: s.list.filter((e) => e.mmsi !== mmsi) }))
+})
 export type { Entry as ListEntry }
