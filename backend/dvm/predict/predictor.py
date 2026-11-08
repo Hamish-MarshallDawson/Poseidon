@@ -5,8 +5,10 @@ Each cycle:
 2. Ships in an open gap (gaps table, opened in the last 24 h): one route prediction per gap and model version, with
    `as_of` = the gap's last fix, so the cone is "where it is h after it went silent". Never re-predicted: no new data
    arrives while a ship is dark.
-3. A random sample of Class A ships heard in the last 10 minutes and not in a gap: a route prediction with `as_of` =
-   now, and a go-dark score per horizon (target `dark_<h>h`, the 06 naming) into `scores`.
+3. A random sample of moving Class A ships (at least 1 kn, not anchored or moored) heard in the last 10 minutes and not
+   in a gap: a route prediction with `as_of` = now, and a go-dark score per horizon (target `dark_<h>h`, the 06
+   naming) into `scores`. Moving only, because gaps open only for moving ships: moored ships would make both
+   targets trivially easy and swamp the live metrics.
 4. The graders (dvm/predict/grader.py) then grade whatever has come due.
 
 Reads and writes go through its own small pool; the queries are bounded by mmsi lists and time ranges.
@@ -31,6 +33,8 @@ H_MS = 3_600_000
 ACTIVE_WINDOW_MS = 10 * 60_000
 GAP_WINDOW_MS = 24 * H_MS
 RATE_WINDOW_MS = 6 * H_MS
+RATE_DELAY_MS = 30 * 60_000      # gaps open 30 min after the last fix: the newest half hour is not counted yet
+RATE_EVERY_MS = 30 * 60_000      # the base rate is re-measured this often (the ship count takes ~2.5 s on Tiger)
 BATCH = 200
 RUN_REQUIRED = ("run_id", "target", "model", "status", "created_at")
 
@@ -38,15 +42,19 @@ OPEN_GAPS = ("SELECT DISTINCT ON (id) id, mmsi, state, start_ts, last_lat, last_
              "last_nav_status, coverage_flag FROM gaps WHERE start_ts > $1 ORDER BY id, version DESC")
 PREDICTED_GAPS = ("SELECT DISTINCT gap_id, model_version FROM route_predictions "
                   "WHERE time > to_timestamp($1::bigint / 1000.0) AND gap_id IS NOT NULL")
-ACTIVE = ("SELECT DISTINCT ON (mmsi) mmsi, ts, sog_kn FROM positions WHERE time > to_timestamp($1::bigint / 1000.0) "
+ACTIVE = ("SELECT DISTINCT ON (mmsi) mmsi, ts, sog_kn, nav_status FROM positions WHERE time > to_timestamp($1::bigint / 1000.0) "
           "AND time <= to_timestamp($2::bigint / 1000.0) AND cls = 'A' ORDER BY mmsi, time DESC")
 TRACKS = ("SELECT p.mmsi, x.ts, x.lat, x.lon, x.sog_kn, x.cog_deg, x.heading_deg, x.nav_status, x.cls "
           "FROM unnest($1::int[], $2::bigint[]) AS p(mmsi, as_of) CROSS JOIN LATERAL ("
           "  SELECT ts, lat, lon, sog_kn, cog_deg, heading_deg, nav_status, cls FROM positions"
           "  WHERE mmsi = p.mmsi AND time > to_timestamp((p.as_of - $3::bigint) / 1000.0)"
           "  AND time <= to_timestamp(p.as_of / 1000.0) AND ts <= p.as_of) x ORDER BY p.mmsi, x.ts")
-STATICS = ("SELECT DISTINCT ON (mmsi) mmsi, ship_type, length_m, draught_m FROM statics "
-           "WHERE mmsi = ANY($1::int[]) AND time > to_timestamp($2::bigint / 1000.0) ORDER BY mmsi, time DESC")
+# Per ship on statics_mmsi_time, newest first: a DISTINCT ON over the whole statics hypertable ran out of memory on Tiger.
+STATICS = ("SELECT p.mmsi, x.ship_type, x.length_m, x.draught_m FROM unnest($1::int[]) AS p(mmsi) CROSS JOIN LATERAL ("
+           "  SELECT ship_type, length_m, draught_m FROM statics WHERE mmsi = p.mmsi"
+           "  AND time > to_timestamp($2::bigint / 1000.0) ORDER BY time DESC LIMIT 1) x")
+MOVING_SHIPS = ("SELECT count(DISTINCT mmsi) FROM positions WHERE time > to_timestamp($1::bigint / 1000.0) "
+                "AND time <= to_timestamp($2::bigint / 1000.0) AND cls = 'A' AND sog_kn >= 1")
 DELIBERATE_SINCE = ("SELECT count(DISTINCT id) FROM gaps WHERE start_ts > $1 AND start_ts <= $2 "
                     "AND coverage_flag = 'deliberate_candidate'")
 
@@ -88,6 +96,11 @@ def godark_rows(model, mmsi: int, track: F.Track, made_at: int, static: Optional
             for h, p in sorted(ps.items())]
 
 
+def _moving(r) -> bool:
+    """The gap detector's first test (dvm/gaps.py): at least 1 kn and not at anchor or moored at the last fix."""
+    return (r["sog_kn"] or 0) >= 1 and r["nav_status"] not in F.AT_ANCHOR_OR_MOORED
+
+
 def tracks_from_rows(rows: Iterable) -> dict[int, F.Track]:
     by: dict[int, list] = {}
     for r in rows:
@@ -104,6 +117,7 @@ class Predictor:
         self.pool: Optional[asyncpg.Pool] = None
         self._done_gaps: set[tuple[str, str]] = set()
         self._runs_mtime: Optional[float] = None
+        self._rate_at: Optional[int] = None
         self.status = {"state": "starting", "cycles": 0, "route_rows": 0, "score_rows": 0, "graded": 0,
                        "last_cycle_ms": None, "last_cycle_s": None, "last_error": None, "rate_per_h": None}
 
@@ -151,6 +165,16 @@ class Predictor:
         self._runs_mtime = mtime
         return len(rows)
 
+    async def _base_rate(self, con, model: artifact.GodarkBaseline, now: int) -> None:
+        """Deliberate-candidate gaps per moving Class A ship-hour over the 6 h before the detector's delay."""
+        if self._rate_at is None or now - self._rate_at >= RATE_EVERY_MS:
+            t0, t1 = now - RATE_DELAY_MS - RATE_WINDOW_MS, now - RATE_DELAY_MS
+            ships = await con.fetchval(MOVING_SHIPS, t0, t1)
+            n = await con.fetchval(DELIBERATE_SINCE, t0, t1)
+            self.status["rate_per_h"] = (n or 0) / max(1, ships or 0) / (RATE_WINDOW_MS / H_MS)
+            self._rate_at = now
+        model.rate_per_h = self.status["rate_per_h"]
+
     async def _tracks(self, con, mmsis: list[int], as_ofs: list[int]) -> dict[int, F.Track]:
         out: dict[int, F.Track] = {}
         for i in range(0, len(mmsis), BATCH):
@@ -173,12 +197,10 @@ class Predictor:
             in_gap = {g["mmsi"] for g in gap_rows}
             todo = sorted((g for g in gap_rows if (g["id"], route.version) not in self._done_gaps),
                           key=lambda g: -g["start_ts"])[: self.max_gaps]
-            active = [r for r in await con.fetch(ACTIVE, now - ACTIVE_WINDOW_MS, now) if r["mmsi"] not in in_gap]
-            moving = sum(1 for r in active if (r["sog_kn"] or 0) >= 1)
+            active = [r for r in await con.fetch(ACTIVE, now - ACTIVE_WINDOW_MS, now)
+                      if r["mmsi"] not in in_gap and _moving(r)]
             if isinstance(godark, artifact.GodarkBaseline):
-                n_gaps = await con.fetchval(DELIBERATE_SINCE, now - RATE_WINDOW_MS, now)
-                godark.rate_per_h = (n_gaps or 0) / max(1, moving) / (RATE_WINDOW_MS / H_MS)
-                self.status["rate_per_h"] = godark.rate_per_h
+                await self._base_rate(con, godark, now)
             sample = self.rng.sample(active, min(self.sample_n, len(active)))
             mmsis = [g["mmsi"] for g in todo] + [r["mmsi"] for r in sample]
             statics = await self._statics(con, mmsis, now)

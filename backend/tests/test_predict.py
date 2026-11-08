@@ -50,7 +50,7 @@ def _toy_route_artifact(d, version="route-toy-1", east=500.0):
     heads = {}
     for h in artifact.ROUTE_HORIZONS_S:
         for axis, val in (("east", east), ("north", 0.0)):
-            b = lgb.train({"objective": "regression", "verbose": -1, "min_data_in_leaf": 5}, lgb.Dataset(x, np.full(200, val)),
+            b = lgb.train({"objective": "regression", "verbose": -1, "min_data_in_leaf": 5, "num_threads": 1}, lgb.Dataset(x, np.full(200, val)),
                           num_boost_round=2)
             b.save_model(str(d / f"h{h}_{axis}.txt"))
         heads[str(h)] = {"east": f"h{h}_east.txt", "north": f"h{h}_north.txt", "radius_m_80": 1000,
@@ -69,7 +69,7 @@ def _toy_godark_artifact(d):
     x, y = rng.normal(size=(300, 2)), (rng.random(300) < 0.3).astype(int)
     heads = {}
     for h in artifact.GODARK_HORIZONS_S:
-        b = lgb.train({"objective": "binary", "verbose": -1}, lgb.Dataset(x, y), num_boost_round=3)
+        b = lgb.train({"objective": "binary", "verbose": -1, "num_threads": 1}, lgb.Dataset(x, y), num_boost_round=3)
         b.save_model(str(d / f"h{h}.txt"))
         heads[str(h)] = {"model": f"h{h}.txt", "calibration": {"x": [0, 1], "y": [0, 0.5]}}
     (d / "model.json").write_text(json.dumps({
@@ -221,7 +221,7 @@ async def _db_flow(tmp_path):
             assert c1 == {"gaps": 1, "active": 1, "route_rows": 8, "score_rows": 3,
                           "graded": {"route": 0, "route_reappear": 0, "dark": 0}}
             assert (await p.cycle())["gaps"] == 0   # a gap is predicted once per model version
-            assert p.status["rate_per_h"] == pytest.approx(1 / 6)   # 1 deliberate gap, 1 moving ship, 6 h
+            assert p.status["rate_per_h"] == pytest.approx(1 / 12)   # 1 deliberate gap, 2 moving ships, 6 h
 
             # Time passes: the rest of both tracks arrives, B's gap closes when it comes back, A goes dark at T+90m.
             await _positions(con, [r for r in a_fix if r["ts"] > T] + [r for r in b_fix if r["ts"] > T])

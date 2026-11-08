@@ -56,27 +56,30 @@ def _radius(spec, sog: Optional[float]) -> float:
 
 
 class RouteBaseline:
-    """Dead reckoning (features.baseline_point). The radius is a heuristic, not calibrated: 300 m plus 20% (80%) or
-    600 m plus 40% (95%) of the distance run at the last speed, at least 1 km per hour for stopped ships. The graders
-    measure its real coverage, and a trained model's conformal radii replace it."""
+    """Dead reckoning (features.baseline_point). Radii from the distance run at the last speed: 500 m + 0.9 x run (80%)
+    and 1 km + 1.35 x run (95%), at least 1 / 2 km per hour for stopped ships. Fitted on 8 Nov 2026 to the 80th and
+    95th percentile of error / run of moving Class A ships in 8 h of our live AIS (10,496 cases at 1 h, 6,677 at
+    3 h; dead-reckoning errors are heavy-tailed, so the circles are wide); 6 and 24 h are extrapolated. A trained
+    model's conformal radii replace them."""
 
     target, kind, version, feature_version = "route", "baseline", ROUTE_BASELINE_VERSION, F.FEATURE_VERSION
     horizons_s = ROUTE_HORIZONS_S
 
     def predict(self, fix: Mapping, feats: Optional[Mapping]) -> list[dict]:
         out = []
+        stopped = F.is_stopped(fix)
         for h in self.horizons_s:
             blat, blon = F.baseline_point(fix, h)
-            run = 0.0 if F.is_stopped(fix) else fix["sog_kn"] * F.KN_MS * h
-            floor = 1000 * h / 3600 if F.is_stopped(fix) else 0
+            run = 0.0 if stopped else fix["sog_kn"] * F.KN_MS * h
+            floor = 1000 * h / 3600 if stopped else 0
             out.append({"horizon_s": h, "lat": blat, "lon": blon, "base_lat": blat, "base_lon": blon,
-                        "radius_m_80": max(300 + 0.2 * run, floor), "radius_m_95": max(600 + 0.4 * run, 2 * floor)})
+                        "radius_m_80": max(500 + 0.9 * run, floor), "radius_m_95": max(1000 + 1.35 * run, 2 * floor)})
         return out
 
 
 class GodarkBaseline:
     """The base rate: p = 1 - exp(-rate * h), with `rate` deliberate-candidate gaps per moving Class A ship-hour,
-    measured by the predictor from the recent gaps table on each cycle."""
+    measured by the predictor from the gaps table and positions every 30 minutes (same p for every ship)."""
 
     target, kind, version, feature_version = "godark", "baseline", GODARK_BASELINE_VERSION, F.FEATURE_VERSION
     horizons_s = GODARK_HORIZONS_S
