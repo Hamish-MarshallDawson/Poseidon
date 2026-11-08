@@ -127,13 +127,13 @@ profile unverified; a later step could read them from Auth0's `/userinfo` with t
 
 `invites.py`. `POST /sessions/{id}/invites` takes an optional body `{to}`: a user id or an email (lowercased; it matches
 a user once they have posted that email in `POST /me {email}`). Answer: `{id, token, session_id, expires_at}`; with no
-`to` it is the link invite as before. Owner only.
+`to` it is the link invite as before. Owner only. 409 if the addressee is already in the session (you included); 422 for a bad email or id.
 
 | Route | Answer |
 |---|---|
 | `GET /invites` | `{incoming: [{id, session_id, session_title, from: User, created_at, expires_at}], outgoing: [{id, session_id, session_title, to: User\|{email}\|null, created_at, expires_at, status: "pending"\|"accepted"\|"declined"}]}`; revoked and expired ones are left out |
-| `POST /invites/{id-or-token}/accept` | `Session`; an id works only for the addressee |
-| `POST /invites/{id}/decline` | 204; the addressee only |
+| `POST /invites/{id-or-token}/accept` | `Session`; an id works only for the addressee; the accepter's other sockets also get `invites_changed` |
+| `POST /invites/{id}/decline` | 204; the addressee only (their other sockets get `invites_changed` too) |
 | `DELETE /invites/{id}` | 204; the creator only (revoke; the link stops working too) |
 
 Server to client (any open socket of that user, no session needed; a local-dev socket says who it is with

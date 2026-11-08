@@ -30,7 +30,9 @@ def observations_sql(kinds=None, bbox=None, start_ts=None, end_ts=None, as_of=No
         where.append(f"kind = ANY({arg(list(kinds))}::text[])")
     if src:
         where.append(f"src = {arg(src)}")
-    if mmsi is not None:
+    if isinstance(mmsi, (list, tuple)):
+        where.append(f"mmsi = ANY({arg([int(m) for m in mmsi])}::int[])")   # observations_mmsi_time
+    elif mmsi is not None:
         where.append(f"mmsi = {arg(int(mmsi))}")
     if end_ts is not None:
         where.append(f"time <= to_timestamp({arg(end_ts / 1000)})")
@@ -112,8 +114,9 @@ def _ms_time(n: int) -> str:
     return f"to_timestamp({n}::bigint / 1000.0)"   # n is an int we validated; time = ts as timestamptz
 
 
-async def map_observations(con, kinds, bbox, start_ts, end_ts, limit) -> dict:
-    sql, args = observations_sql(kinds=kinds, bbox=bbox, start_ts=start_ts, end_ts=end_ts, limit=limit)
+async def map_observations(con, kinds, bbox, start_ts, end_ts, limit, mmsis=None) -> dict:
+    sql, args = observations_sql(kinds=kinds, bbox=bbox, start_ts=start_ts, end_ts=end_ts, limit=limit,
+                                 mmsi=list(mmsis) if mmsis else None)
     sql = sql.replace(f"SELECT {COLS} FROM", f"SELECT {MAP_COLS} FROM", 1)
     rows = []
     for r in await con.fetch(sql, *args, timeout=30):
@@ -123,6 +126,41 @@ async def map_observations(con, kinds, bbox, start_ts, end_ts, limit) -> dict:
             d.pop("geom", None)
         rows.append(d)
     return {"observations": rows, "attribution": attribution_for(r["src"] for r in rows)}
+
+
+HEAT_KINDS = ("ais_presence", "sar_detection")
+HEAT_MAX_CELLS = 20_000
+HEAT_ROW_SPAN_MS = 86_400_000   # GFW cell rows are one day long; bounds `time` below for chunk pruning
+
+
+def heat_sql(kind: str, bbox, start_ts: int, end_ts: int, cell_deg: float) -> tuple[str, list]:
+    """Anonymous cell rows of one kind summed into a cell_deg grid: one GROUP BY on observations_kind_time.
+
+    A source cell goes to the grid cell holding its south-west corner (its lat/lon); the answer gives the grid cell's
+    centre. Biggest cells first, HEAT_MAX_CELLS + 1 rows so the caller can tell it was cut."""
+    x0, y0, x1, y1 = (float(v) for v in bbox)
+    eps = 1e-7   # 55.7 / 0.1 is 556.9999...: nudge so a corner on a grid line lands in the cell it starts
+    sql = ("SELECT floor(lat / $5::float8 + $6::float8) AS gy, floor(lon / $5::float8 + $6::float8) AS gx, sum(value) AS value, sum(n) AS n, "
+           "min(src) AS src_lo, max(src) AS src_hi "
+           "FROM observations WHERE kind = $1 AND mmsi IS NULL AND cell_deg IS NOT NULL "
+           "AND time >= to_timestamp($2::bigint / 1000.0) AND time <= to_timestamp($3::bigint / 1000.0) "
+           "AND coalesce(end_ts, ts + 1) > $4 "   # end_ts is exclusive: yesterday's cells stop at start
+           "AND lon >= $7 AND lon <= $8 AND lat >= $9 AND lat <= $10 "
+           f"GROUP BY gy, gx ORDER BY value DESC NULLS LAST, gy, gx LIMIT {HEAT_MAX_CELLS + 1}")
+    return sql, [kind, int(start_ts) - HEAT_ROW_SPAN_MS, int(end_ts), int(start_ts), float(cell_deg), eps,
+                 x0, x1, y0, y1]
+
+
+async def heat(con, kind: str, bbox, start_ts: int, end_ts: int, cell_deg: float) -> dict:
+    sql, args = heat_sql(kind, bbox, start_ts, end_ts, cell_deg)
+    rows = await con.fetch(sql, *args, timeout=30)
+    cut = len(rows) > HEAT_MAX_CELLS
+    half = cell_deg / 2
+    cells = [{"lat": round(r["gy"] * cell_deg + half, 6), "lon": round(r["gx"] * cell_deg + half, 6),
+              "value": round(r["value"], 4) if r["value"] is not None else 0.0, "n": int(r["n"] or 0)}
+             for r in rows[:HEAT_MAX_CELLS]]
+    return {"cells": cells, "cell_deg": cell_deg, "kinds": [kind], "truncated": cut,
+            "attribution": attribution_for({s for r in rows[:HEAT_MAX_CELLS] for s in (r["src_lo"], r["src_hi"])})}
 
 
 async def model_observations_page(con, as_of, kinds, bbox, start_ts, end_ts, after, limit) -> tuple[list[dict], bool]:

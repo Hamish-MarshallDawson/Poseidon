@@ -223,6 +223,23 @@ class Predictor:
         rows = await con.fetch(STATICS, mmsis, now - GAP_WINDOW_MS) if mmsis else []
         return {r["mmsi"]: dict(r) for r in rows}
 
+    def _predict_rows(self, route, godark, todo, to_score, sample, gap_tracks, act_tracks, statics, now: int):
+        """Route and go-dark rows for one cycle. Pure: reads its arguments only, so it is safe in a worker thread."""
+        routes, scores = [], []
+        for g in todo:
+            t = gap_tracks.get(g["mmsi"])
+            if t is not None:   # no stored track (e.g. older than our data): nothing to predict from
+                routes += route_rows(route, g["mmsi"], t, g["start_ts"], now, statics.get(g["mmsi"]), g["id"],
+                                     self.mode)
+        for r in to_score:
+            t = act_tracks.get(r["mmsi"])
+            if t is None:
+                continue
+            if r["mmsi"] in sample:
+                routes += route_rows(route, r["mmsi"], t, now, now, statics.get(r["mmsi"]), None, self.mode)
+            scores += godark_rows(godark, r["mmsi"], t, now, statics.get(r["mmsi"]), self.mode)
+        return routes, scores
+
     async def cycle(self) -> dict:
         """One predict-and-grade pass. Returns counts (also kept in status)."""
         t0, now = time.monotonic(), self.clock()
@@ -246,20 +263,12 @@ class Predictor:
             gap_tracks = await self._tracks(con, [g["mmsi"] for g in todo], [g["start_ts"] for g in todo])
             act_tracks = await self._tracks(con, [r["mmsi"] for r in to_score], [now] * len(to_score))
 
-            routes, scores = [], []
-            for g in todo:
-                t = gap_tracks.get(g["mmsi"])
-                if t is not None:   # no stored track (e.g. older than our data): nothing to predict from
-                    routes += route_rows(route, g["mmsi"], t, g["start_ts"], now, statics.get(g["mmsi"]), g["id"],
-                                         self.mode)
+            # Features and model predictions are pure CPU work (seconds per cycle with a LightGBM champion): run them
+            # in a worker thread so the event loop keeps serving the 1 s ship tick and the WebSocket meanwhile.
+            routes, scores = await asyncio.to_thread(self._predict_rows, route, godark, todo, to_score, sample,
+                                                     gap_tracks, act_tracks, statics, now)
             for r in to_score:
-                t = act_tracks.get(r["mmsi"])
                 self._scored_at[r["mmsi"]] = now
-                if t is None:
-                    continue
-                if r["mmsi"] in sample:
-                    routes += route_rows(route, r["mmsi"], t, now, now, statics.get(r["mmsi"]), None, self.mode)
-                scores += godark_rows(godark, r["mmsi"], t, now, statics.get(r["mmsi"]), self.mode)
             self.forecast.update(scores, routes, {g["id"] for g in gap_rows}, now)
             hour = now // H_MS * H_MS
             frozen = self.forecast.frozen_set(hour) if self._frozen_h is None or hour > self._frozen_h else []

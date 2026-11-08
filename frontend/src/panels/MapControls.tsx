@@ -1,27 +1,29 @@
-import { useEffect, useRef } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import { SessionBar, InvitePanelSlot } from '../collab/entry/SessionBar'
 import { collab } from '../collab/store'
 import { ui, type UIState } from '../store/ui'
 import { Switch } from '../ui'
 import { useMapInstance } from '../map/context'
 import { reducedMotion, usePresence } from '../motion'
-import { fmtInt } from '../windows/format'
+import { popular } from '../data/popular'
+import { ThemeSettings } from '../theme/ThemeMenu'
 import { ReviewChip } from '../review/ReviewPanel'
+import { DelayedLayers } from './DelayedLayers'
 import { ChannelChip } from '../collab/docs/Channel'
 import { SHOW_FILTERS, showFilter } from '../show/registry'
 import { setShow, startShow } from '../show/state'
 
-// Top-right buttons (watchlist chip, Layers, log out), zoom on the right edge and the scale bar bottom-right
-// (Figma 66:21908). The Layers pop-over follows the density report's layers panel (41:432).
+// Top-right buttons (Review, Display, log out), zoom on the right edge and the scale bar bottom-right
+// (Figma 66:21908). The Display panel holds Show, Layers and Settings.
 
 type LayerKey = keyof UIState['layers']
-const LAYERS: { key: LayerKey; label: string; note: string }[] = [
-  { key: 'density', label: 'Heat map (zoomed out)', note: 'traffic density; ships appear as you zoom in' },
-  { key: 'coverage', label: 'Coverage gaps', note: 'hatch where no receiver heard anything in 10 min' },
-  { key: 'forecast', label: 'Forecast', note: 'rank tags and could-be-in-here regions' },
-  { key: 'inland', label: 'Inland vessels', note: 'Rhine, Danube and other inland waterways' },
-  { key: 'labels', label: 'Labels', note: 'place and water names' },
-  { key: 'depth', label: 'Depth', note: 'contours only · off by default' },
+const LAYERS: { key: LayerKey; label: string }[] = [
+  { key: 'density', label: 'Heat map' },
+  { key: 'coverage', label: 'Coverage gaps' },
+  { key: 'forecast', label: 'Forecast' },
+  { key: 'inland', label: 'Inland vessels' },
+  { key: 'labels', label: 'Labels' },
+  { key: 'depth', label: 'Depth contours' },
 ]
 
 // Single choice: which set of ships the map shows. Native radios give the arrow-key behaviour for free.
@@ -44,24 +46,43 @@ function ShowChoice() {
   )
 }
 
-function LayersPanel() {
-  const layers = ui.use((s) => s.layers)
-  const view = ui.use((s) => s.view)
-  const hidden = Math.max(0, view.inView - view.shown)
+// Live traffic, or where ships go most over time. The note is the data's own label (range, or illustrative).
+function HeatChoice() {
+  const heat = ui.use((s) => s.heat)
+  const label = popular.use((s) => s.label)
+  const loading = popular.use((s) => s.loading)
   return (
-    <div className="panel layers" id="layers-panel" role="region" aria-label="Layers">
-      <div className="ly-cap">
-        <span className="kicker">Ships</span>
-        <span className="ly-showing">Showing {fmtInt(view.shown)} of {fmtInt(view.inView)} ships in view</span>
-        <span className="ly-bar"><i style={{ transform: `scaleX(${view.inView ? view.shown / view.inView : 0})` }} /></span>
-        <span className="ly-note">{fmtInt(hidden)} more in the heat map and stacks</span>
+    <div className="heat-choice">
+      <div role="radiogroup" aria-label="Heat map data" className="show-group heat-group">
+        {([['live', 'Live'], ['popular', 'Popular places']] as const).map(([id, text]) => (
+          <label key={id} className={`show-opt ${heat === id ? 'on' : ''}`}>
+            <input type="radio" name="heat" value={id} checked={heat === id} onChange={() => ui.set({ heat: id })} />
+            <span>{text}</span>
+          </label>
+        ))}
       </div>
+      {heat === 'popular' && <span className="ly-note heat-note">{loading ? 'Loading…' : label?.replace('Popular places · ', '')}</span>}
+    </div>
+  )
+}
+
+// One panel for everything about how the map looks: Show, Layers, Settings.
+function DisplayPanel() {
+  const layers = ui.use((s) => s.layers)
+  return (
+    <div className="panel layers" id="layers-panel" role="region" aria-label="Display">
       <ShowChoice />
-      <span className="kicker ly-head">Map</span>
-      {LAYERS.map(({ key, label, note }) => (
-        <Switch key={key} checked={layers[key]} label={label} hint={note}
-          onChange={(on) => ui.set((s) => ({ layers: { ...s.layers, [key]: on } }))} />
+      <span className="kicker ly-head">Layers</span>
+      {LAYERS.map(({ key, label }) => (
+        <Fragment key={key}>
+          <Switch checked={layers[key]} label={label}
+            onChange={(on) => ui.set((s) => ({ layers: { ...s.layers, [key]: on } }))} />
+          {key === 'density' && layers.density && <HeatChoice />}
+        </Fragment>
       ))}
+      <DelayedLayers />
+      <span className="kicker ly-head">Settings</span>
+      <ThemeSettings />
     </div>
   )
 }
@@ -112,12 +133,12 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
         <ChannelChip />
         <button type="button" className={`chip ${layersOpen ? 'on' : ''}`} aria-expanded={layersOpen} aria-controls="layers-panel"
           onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, reviewOpen: false }))}>
-          <span className="chip-square" aria-hidden />Layers
+          <span className="chip-square" aria-hidden />Display
         </button>
         {onLogout && !me && <button type="button" className="chip chip-quiet" onClick={onLogout}>Log out</button>}
       </div>
       <InvitePanelSlot />
-      {mounted && <div className="layers-wrap" data-zone ref={attach}><LayersPanel /></div>}
+      {mounted && <div className="layers-wrap" data-zone ref={attach}><DisplayPanel /></div>}
       <div className="zoom" data-zone role="group" aria-label="Zoom">
         <button type="button" aria-label="Zoom in" onClick={() => zoom(1)}>+</button>
         <button type="button" aria-label="Zoom out" onClick={() => zoom(-1)}>−</button>

@@ -61,9 +61,12 @@ export interface RiskScore {
 export interface Observation {
   id: string; src: string; kind: string; ts: number; end_ts: number | null; mmsi: number | null;
   lat: number | null; lon: number | null; value: number | null;   // value = hours for events
+  matched?: boolean | null; geom?: GeoJSON.Geometry;   // radar detections: matched to AIS; radar scenes: the footprint
   attrs?: { name?: string; other_vessel?: { name?: string } } & Record<string, unknown>;
 }
-export interface ObservationQuery { kinds: string[]; start: number; end: number; mmsi?: number; bbox?: [number, number, number, number] }
+export interface ObservationQuery { kinds: string[]; start: number; end: number; mmsi?: number; bbox?: [number, number, number, number]; limit?: number }
+// GET /sources: freshness per source (age of its newest event).
+export interface SourcesReply { now: number; sources: { src: string; age_s: number | null }[] }
 export interface ObservationReply { observations: Observation[]; attribution?: Record<string, unknown> }
 
 // 06 section 2.10: what happened after a forecast.
@@ -114,3 +117,10 @@ export type ClientMsg =
   | { type: "session_leave" }
   | { type: "auth"; dev_user: string }                                  // local dev only (VITE_AUTH=off)
   | { type: "presence"; viewing: number | null; following: number[]; bbox: [number, number, number, number] | null; private: boolean };
+
+// GET /model/leaderboard (#121): live skill from the graded ledger, last `hours`. Loose: only what the UI reads.
+export interface LeaderboardRoute { target: string; model_version: string; horizon_s: number; n: number;
+  median_err_m: number; baseline_median_err_m: number | null; skill: number | null; coverage_80: number | null; coverage_95: number | null }
+export interface LeaderboardDark { target: string; model_version: string; horizon_s: number; n: number; positives: number;
+  brier: number; base_rate_brier: number; brier_skill: number | null }
+export interface Leaderboard { hours: number; live_route: LeaderboardRoute[]; live_godark: LeaderboardDark[] }

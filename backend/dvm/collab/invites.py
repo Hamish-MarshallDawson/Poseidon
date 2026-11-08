@@ -8,9 +8,34 @@ address and see invites sent to it; upgrade by reading the verified email from A
 """
 from __future__ import annotations
 
+import functools
+import inspect
 import re
 import time
 import uuid
+
+import asyncpg
+
+# A pooled Tiger connection can be dropped under us (admin shutdown, network): the next query on it fails once and the
+# pool then hands out a fresh one, so each store call is tried a second time.
+DROPPED = (asyncpg.ConnectionDoesNotExistError, asyncpg.exceptions.AdminShutdownError, asyncpg.InterfaceError,
+           ConnectionError, OSError)
+
+
+def retry_dropped(cls):
+    """Class decorator: every public coroutine method retries once on a dropped connection."""
+    def wrap(fn):
+        @functools.wraps(fn)
+        async def run(*a, **k):
+            try:
+                return await fn(*a, **k)
+            except DROPPED:
+                return await fn(*a, **k)
+        return run
+    for name, fn in list(vars(cls).items()):
+        if inspect.iscoroutinefunction(fn) and not name.startswith("_"):
+            setattr(cls, name, wrap(fn))
+    return cls
 
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -103,6 +128,7 @@ class MemInvites:
         return {"to_user": i["to_user"], "to_email": i["to_email"]}
 
 
+@retry_dropped
 class PgInvites:
     def __init__(self, pool):
         self.pool = pool

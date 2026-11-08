@@ -19,6 +19,10 @@
 .session-bar__faces { display: inline-flex; }
 .session-bar__faces .collab-avatar { margin-left: -6px; border: 1px solid var(--dvm-bg-panel); }
 .session-bar__faces .collab-avatar:first-child { margin-left: 0; }
+.session-bar__more { margin-left: 3px; align-self: center; font: 500 var(--dvm-size-caption) / 1 var(--dvm-font-data); }
+/* Only after a moment: a blip, or the socket still connecting on load, says nothing. */
+.session-bar__offline { animation: session-offline-in 0.2s 1.5s both; }
+@keyframes session-offline-in { from { opacity: 0; } to { opacity: 1; } }
 .invite-btn { cursor: pointer; }
 .invite-badge {
   min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; color: #fff;
@@ -39,18 +43,33 @@
 }
 .entry-menu button:hover { background: var(--dvm-accent-subtle); }
 .entry-menu form { display: flex; gap: 6px; padding: 4px 2px; }
+.entry-menu form .chip { width: auto; flex: none; padding: 5px 10px; }
+.entry-menu form .chip:hover { background: var(--dvm-accent-subtle); }
+.top-right:has(.entry-menu) { z-index: 30; }   /* an open menu covers the zoom buttons and panels it reaches */
 .entry-menu input[type="text"], .invite-panel input[type="text"] {
   flex: 1; min-width: 0; padding: 5px 8px; background: var(--dvm-bg-raised); color: inherit; font: inherit;
   border: 1px solid var(--dvm-border-default);
 }
 .entry-menu hr { border: 0; border-top: 1px solid var(--dvm-border-subtle); margin: 4px 0; width: 100%; }
 
+/* Narrow: the toolbar wraps, so a menu anchored to its chip runs off the screen. Hang it under the whole toolbar instead. */
+@media (max-width: 760px) {
+  .session-bar__wrap { position: static; }
+  .entry-menu { left: 0; right: 0; }
+}
+
 /* Invite / Join panel */
 .invite-panel { width: 360px; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 140px); overflow: auto; }
 .invite-panel h2 { margin: 0; font-size: var(--dvm-size-label); font-weight: 600; }
 .invite-panel section { display: flex; flex-direction: column; gap: 6px; }
+.invite-panel section:empty { display: none; }
 .invite-row { display: flex; align-items: center; gap: 8px; font-size: var(--dvm-size-label); }
 .invite-row__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .invite-row .chip { cursor: pointer; padding: 3px 8px; }
 .invite-panel .muted { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); margin: 0; }
 .invite-create { display: flex; gap: 6px; }
+
+.entry-toast.bad { border-color: var(--dvm-ship-sanctioned, #c2331c); }
+.invite-panel .muted.bad { color: var(--dvm-ship-sanctioned, #c2331c); }
+.invite-copy { align-self: flex-start; cursor: pointer; }
+.invite-panel section[aria-label="Invites for you"] .invite-row__text { white-space: normal; }

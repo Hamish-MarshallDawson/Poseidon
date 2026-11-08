@@ -9,7 +9,7 @@
 //     a watchlist, three open gaps (those ships freeze at their last fix), closed gaps, spoofs, a meeting, outcomes.
 //  3. Ships, when there is no backend (data/synthetic.ts): offline 'always' uses them at once; 'fallback' (the default)
 //     switches to them when the backend has not said hello within FALLBACK_MS, and then stays on them for the session.
-import type { ClientMsg, GapEvent, HistoryRange, Observation, ObservationQuery, ObservationReply, Outcome, RiskScore, SpoofEvent, TimelineEvent, VesselView, Watchlist, WatchlistRow } from '../types'
+import type { ClientMsg, GapEvent, HistoryRange, Observation, ObservationQuery, ObservationReply, Outcome, SourcesReply, RiskScore, SpoofEvent, TimelineEvent, VesselView, Watchlist, WatchlistRow } from '../types'
 import type { Frame } from '../store/vessels'
 import { vessels as store } from '../store/vessels'
 import type { DataAdapter, FeedHandlers, FeedStatus } from './adapter'
@@ -157,7 +157,27 @@ export interface MockOptions { offline?: 'always' | 'fallback' | 'never'; ships?
 
 const SAMPLE_PORTS: [number, number][] = [[54.40, 18.67], [57.70, 11.93], [53.54, 9.98], [55.69, 12.60]]
 // Illustrative GFW-style events for one MMSI: a port call, some loitering, an encounter. One ship in three has none.
+// Illustrative radar detections, Sentinel-1 footprints and GFW gap events spread over a bbox (no real data).
+function areaSample(q: ObservationQuery): ObservationReply {
+  const [x0, y0, x1, y1] = q.bbox!, w = x1 - x0, h = y1 - y0, kind = q.kinds[0], now = q.end
+  const at = (i: number, n: number) => [x0 + w * (((i * 0.618034) % 1) * 0.9 + 0.05), y0 + h * (((i * 0.381966 + n) % 1) * 0.9 + 0.05)]
+  const base = { src: kind === 'radar_scene' ? 'sentinel1' : 'gfw', kind, mmsi: null, end_ts: null, value: null }
+  const rows: Observation[] = []
+  for (let i = 0; i < 40; i++) {
+    const [lon, lat] = at(i, 0.2), ts = now - (i % 7) * 86_400_000 - 3_600_000
+    if (kind === 'sar_detection') rows.push({ ...base, id: `s:${i}`, ts, lat, lon, matched: i % 3 !== 0 } as Observation)
+    else if (kind === 'gap' && i < 8) rows.push({ ...base, id: `g:${i}`, ts, end_ts: ts + 20 * 3_600_000, value: 20, lat, lon, attrs: { on_lat: lat + h * 0.08, on_lon: lon + w * 0.1 } } as Observation)
+    else if (kind === 'radar_scene' && i < 4) {
+      const [cx, cy] = at(i * 5, 0.5), dx = w * 0.18, dy = h * 0.3
+      rows.push({ ...base, id: `p:${i}`, ts: now - i * 6 * 3_600_000, lat: cy, lon: cx,
+        geom: { type: 'Polygon', coordinates: [[[cx - dx, cy - dy], [cx + dx, cy - dy * 0.8], [cx + dx, cy + dy], [cx - dx, cy + dy * 0.8], [cx - dx, cy - dy]]] } } as Observation)
+    }
+  }
+  return { observations: rows, attribution: { sample: 'Illustrative sample, not real data' } }
+}
+
 function synthObservations(q: ObservationQuery): ObservationReply {
+  if (q.mmsi == null && q.bbox) return areaSample(q)
   const m = q.mmsi
   if (m == null || m % 3 === 0) return { observations: [] }
   const [lat, lon] = SAMPLE_PORTS[m % SAMPLE_PORTS.length], DAY = 86_400_000, now = q.end
@@ -296,6 +316,7 @@ export function createMockAdapter(live: DataAdapter, opts: MockOptions = {}): Da
     track: (mmsi, hours) => (src === live ? live.track(mmsi, hours) : Promise.resolve(synthTrack(mmsi, hours))),
     // The backend's rows when it is the feed; for synthetic ships a few illustrative events made up from the MMSI.
     observations: (q) => (src === live ? live.observations!(q) : Promise.resolve(synthObservations(q))),
+    sources: (): Promise<SourcesReply> => (src === live ? live.sources!() : Promise.resolve({ now: Date.now(), sources: [{ src: 'gfw', age_s: 3 * 86_400 }, { src: 'sentinel1', age_s: 13 * 3600 }] })),
     async scores(as_of?: number) { return fc ? fc.scoresAt(hourOf(as_of ?? liveNow)) : [] },
     async outcomes(from_ts, to_ts) {
       if (!fc) return []

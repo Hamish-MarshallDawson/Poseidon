@@ -115,40 +115,11 @@
 .sc-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .sc-label { color: var(--dvm-text-muted); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
 .sc-value { font: var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); }
-.sc-forecast {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 10px;
-  border-radius: 2px;
-  background: var(--dvm-bg-raised);
-  font-size: var(--dvm-size-label);
-  line-height: var(--dvm-line-label);
-}
-.sc-forecast b { font-weight: 600; }
-.sc-forecast span { color: var(--dvm-text-secondary); }
+.sc-note { margin: 0; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); color: var(--dvm-text-secondary); }
+.sc-note b { color: var(--dvm-text-primary); font-weight: 600; }
+.sc-model { color: var(--dvm-text-muted); }
 .sc-actions { display: flex; gap: 8px; }
 
-/* Evidence strip (17:32): source, confidence pips, last heard. */
-.ev {
-  display: inline-flex;
-  align-self: flex-start;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--dvm-border-subtle);
-  border-radius: 2px;
-  background: var(--dvm-bg-raised);
-  font-family: var(--dvm-font-data);
-  white-space: nowrap;
-}
-.ev-src { color: var(--dvm-text-muted); font-size: 10px; line-height: 14px; letter-spacing: 0.4px; }
-.ev-div { width: 1px; height: 14px; background: var(--dvm-border-subtle); }
-.ev-pips { display: flex; gap: 3px; }
-.ev-pips i { width: 14px; height: 4px; box-sizing: border-box; border: 1px solid var(--dvm-text-muted); }
-.ev-pips i.on { border: 0; background: var(--dvm-text-secondary); }
-.ev-conf { color: var(--dvm-text-secondary); font-weight: 600; font-size: 11px; line-height: 14px; letter-spacing: 0.5px; }
-.ev-ts { font-size: 12px; line-height: 16px; }
 
 /* Compact button variant for panel headers and the focus bar (on top of src/ui Button). */
 .dvm-btn.btn-small { display: inline-flex; gap: 6px; align-items: center; padding: 4px 8px; }

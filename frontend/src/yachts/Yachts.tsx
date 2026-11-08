@@ -44,7 +44,8 @@ function focusYacht(mmsi: number) {
 function Row({ y, now }: { y: Yacht; now: number }) {
   const [open, setOpen] = useState(false)
   const unseen = y.status === 'not_seen' || y.mmsi == null
-  const state = y.status === 'ais' ? 'AIS heard' : y.status === 'no_ais' ? `No AIS ${ago(now - (y.last_seen_ts ?? now))}` : 'Not seen'
+  // The section heading already says heard, quiet or not seen: a row adds only how long a quiet yacht has been silent.
+  const state = y.status === 'no_ais' ? ago(now - (y.last_seen_ts ?? now)) : ''
   return (
     <li>
       <button type="button" className="yl-row" aria-expanded={unseen ? open : undefined}
@@ -52,7 +53,7 @@ function Row({ y, now }: { y: Yacht; now: number }) {
         <span className={`yl-mark ${y.sanctioned ? 'is-sanctioned' : ''}`} aria-hidden />
         <span className="yl-name">{y.name ?? `IMO ${y.imo}`}</span>
         {y.sanctioned && <span className="yl-badge">Sanctioned</span>}
-        <span className={`yl-state ${y.status === 'no_ais' ? 'is-noais' : ''}`}>· {state}</span>
+        {state && <span className="yl-state is-noais">· {state}</span>}
       </button>
       {unseen && open && <YachtCard y={y} />}
     </li>
@@ -83,6 +84,7 @@ function YachtCard({ y }: { y: Yacht }) {
 // The yachts list without the toggle: three sections and a "Sanctioned only" quick toggle. Rendered under the Show choice.
 export function YachtsList() {
   const { list, error, sample } = yachts.use((s) => s)
+  const mock = ui.use((s) => s.feed.isMock)   // the ILLUSTRATIVE DATA chip already says it
   const now = useNow()
   const start = useRecordingStart(sample)
   const [onlySanctioned, setOnly] = useState(false)
@@ -101,7 +103,7 @@ export function YachtsList() {
   )
   return (
     <div className="yl">
-      {sample && <p className="yl-note">Illustrative sample: made-up yachts, no backend.</p>}
+      {sample && !mock && <p className="yl-note">Illustrative sample: made-up yachts, no backend.</p>}
       {error && <p className="yl-note">{error}</p>}
       {!list && !error && <p className="yl-note">Loading…</p>}
       {list && (
@@ -132,21 +134,20 @@ export function YachtSection({ mmsi }: { mmsi: number }) {
   useEffect(() => void loadYachts(), [])
   if (!y) return null
   return (
-    <div className="sc-forecast yc">
-      <b>Yacht</b>
-      <span>Length: {y.length_m != null ? `${Math.round(y.length_m)} m` : 'Not known'}</span>
+    <p className="sc-note yc">
+      <b>Yacht</b> {y.length_m != null ? `${Math.round(y.length_m)} m` : 'length not known'}
       {y.owner_reported && (
-        <span>
-          Owner (reported): {y.owner_reported}
+        <>
+          {' · '}owner (reported) {y.owner_reported}
           {y.owner_source_url && <> · <a href={y.owner_source_url} target="_blank" rel="noreferrer">{WP}</a></>}
-        </span>
+        </>
       )}
       {y.sanctioned && (
-        <span>
-          Sanctioned: {y.programs.join(', ') || 'listed'} (
+        <>
+          {' · '}sanctioned: {y.programs.join(', ') || 'listed'} (
           {y.sanctions_source ? <a href={y.sanctions_source} target="_blank" rel="noreferrer">OpenSanctions</a> : 'OpenSanctions'})
-        </span>
+        </>
       )}
-    </div>
+    </p>
   )
 }

@@ -21,6 +21,11 @@ from dvm.sources.common import SOURCES
 MAP_MAX_WINDOW_MS = 7 * 86_400_000
 MAP_DEFAULT_WINDOW_MS = 86_400_000
 MAP_DEFAULT_LIMIT, MAP_MAX_LIMIT = 2000, 5000
+MAP_SHIP_MAX_WINDOW_MS = 400 * 86_400_000   # with mmsi: one ship's full history
+MAP_MAX_SHIPS = 100
+HEAT_MAX_WINDOW_MS = 90 * 86_400_000
+WINDOW_SLACK_MS = 60_000   # a client asking "the last 90 days" reads its clock twice: start and end drift by ms
+HEAT_CELL_MIN, HEAT_CELL_MAX, HEAT_CELL_DEFAULT = 0.05, 1.0, 0.1
 MODEL_DEFAULT_LIMIT, MODEL_MAX_LIMIT = 10_000, 50_000
 MAX_MMSIS = 1000
 MMSI_MIN, MMSI_MAX = 100_000_000, 999_999_999   # a valid MMSI has 9 digits
@@ -109,17 +114,42 @@ def make_router(get_pool: Callable[[], object], require_login: Callable[..., Awa
 
     @front.get("/observations")
     async def observations(kinds: str | None = None, bbox: str | None = None, start: int | None = None,
-                           end: int | None = None, limit: int = Query(MAP_DEFAULT_LIMIT, ge=1, le=MAP_MAX_LIMIT)) -> dict:
-        box = parse_bbox(bbox, required=True)
+                           end: int | None = None, limit: int = Query(MAP_DEFAULT_LIMIT, ge=1, le=MAP_MAX_LIMIT),
+                           mmsi: list[int] = Query([], max_length=MAP_MAX_SHIPS)) -> dict:
+        """Map rows in a bbox over at most 7 days; or, with mmsi, those ships' history over up to 400 days (the
+        default window then), bbox optional. Newest first either way."""
+        if any(not MMSI_MIN <= m <= MMSI_MAX for m in mmsi):
+            _bad("mmsi must be 9-digit integers")
+        ships = sorted(set(mmsi))
+        box = parse_bbox(bbox, required=not ships)
         kinds_ = parse_kinds(kinds)
         check_ms("start", start), check_ms("end", end)
+        cap = MAP_SHIP_MAX_WINDOW_MS if ships else MAP_MAX_WINDOW_MS
         end = end if end is not None else int(time.time() * 1000)
-        start = start if start is not None else end - MAP_DEFAULT_WINDOW_MS
+        start = start if start is not None else end - (cap if ships else MAP_DEFAULT_WINDOW_MS)
         check_range(start, end)
-        if end - start > MAP_MAX_WINDOW_MS:
-            _bad("time window is capped at 7 days")
+        if end - start > cap:
+            _bad("time window is capped at 400 days with mmsi" if ships else "time window is capped at 7 days")
         async with pool().acquire() as con:
-            return await query.map_observations(con, kinds_, box, start, end, limit)
+            return await query.map_observations(con, kinds_, box, start, end, limit, ships)
+
+    @front.get("/observations/heat")
+    async def observations_heat(bbox: str | None = None, start: int | None = None, end: int | None = None,
+                                kinds: str = "ais_presence",
+                                cell_deg: float = Query(HEAT_CELL_DEFAULT, ge=HEAT_CELL_MIN, le=HEAT_CELL_MAX)) -> dict:
+        """Anonymous GFW cells summed into a cell_deg grid: presence hours or radar detection counts per cell."""
+        box = parse_bbox(bbox, required=True)
+        kinds_ = parse_kinds(kinds) or []
+        if len(kinds_) != 1 or kinds_[0] not in query.HEAT_KINDS:
+            _bad(f"kinds must be one of {list(query.HEAT_KINDS)}")
+        check_ms("start", start), check_ms("end", end)
+        end = end if end is not None else int(time.time() * 1000)
+        start = start if start is not None else end - MAP_MAX_WINDOW_MS
+        check_range(start, end)
+        if end - start > HEAT_MAX_WINDOW_MS + WINDOW_SLACK_MS:
+            _bad("time window is capped at 90 days")
+        async with pool().acquire() as con:
+            return await query.heat(con, kinds_[0], box, start, end, cell_deg)
 
     @front.get("/track")
     async def track(mmsi: int = Query(..., ge=MMSI_MIN, le=MMSI_MAX),

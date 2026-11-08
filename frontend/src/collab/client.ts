@@ -49,7 +49,9 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   if (token) headers.Authorization = `Bearer ${token}`
   if (devUser) headers['X-Dev-User'] = devUser
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const res = await fetch(`${base()}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+  let res: Response
+  try { res = await fetch(`${base()}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }) }
+  catch { throw new CollabError(0, `${method} ${path}: offline`) }
   if (!res.ok) throw new CollabError(res.status, `${method} ${path}: ${res.status}`)
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T)
 }

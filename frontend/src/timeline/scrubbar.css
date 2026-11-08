@@ -29,9 +29,6 @@
 .tl-text { font-family: var(--tl-mono); font-weight: 500; font-size: var(--dvm-size-data); min-width: 48px; }
 .tl-live { color: var(--dvm-accent-default); font-weight: 600; }
 
-.tl-mode { display: inline-flex; align-items: center; gap: 6px; letter-spacing: 0.06em; white-space: nowrap; }
-.is-live .tl-mode { color: var(--dvm-accent-default); }
-.tl-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dvm-accent-default); }
 
 .tl-readout { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; font-family: var(--tl-mono); }
 .tl-time { font-size: var(--dvm-size-body); font-weight: 500; font-variant-numeric: tabular-nums; }

@@ -1,26 +1,28 @@
 import { useEffect } from 'react'
 import { acceptInviteToken, collab, openSession } from '../store'
-import { entry, showJoined } from './state'
+import { entry, forgetSession, rememberedSession, showJoined, takeInvite } from './state'
 import './entry.css'
 
-// Mounted once in the logged-in app: the ?invite=<token> link flow, the one entry pop-up, and the joined toast.
-// The session bar and the Invite / Join panel live in the toolbar (SessionBar.tsx).
+// Mounted once in the logged-in app: the ?invite=<token> link flow, putting a reloaded tab back in its session, the one
+// entry pop-up, and the joined toast. The session bar and the Invite / Join panel live in the toolbar (SessionBar.tsx).
 
-/** The invite link: accept once logged in, drop the token from the address bar either way. */
-function useInviteLink(ready: boolean) {
+/** Once logged in: accept an invite link (dropped from the address bar either way), else return to this tab's session, silently. */
+function useEntry(me: string | undefined) {
   useEffect(() => {
-    if (!ready) return
-    const token = new URLSearchParams(location.search).get('invite')
-    if (!token) return
-    const u = new URL(location.href); u.searchParams.delete('invite'); history.replaceState(null, '', u)
-    entry.set({ popupDone: true })                    // an invite link replaces the pop-up
-    void acceptInviteToken(token).then((s) => { if (s) showJoined(s) })
-  }, [ready])
+    if (!me) return
+    const token = takeInvite(), back = rememberedSession(me)
+    if (!token && !back) return
+    entry.set({ popupDone: true })                    // both replace the pop-up
+    void (async () => {
+      const joined = token ? await acceptInviteToken(token) : null
+      if (joined) showJoined(joined)
+      else if (back && !(await openSession(back))) forgetSession(me)
+    })()
+  }, [me])
 }
 
 export function CollabEntry() {
-  const me = collab.use((s) => s.me)
-  useInviteLink(!!me)
+  useEntry(collab.use((s) => s.me?.id))
   return <><EntryPopup /><JoinedToast /></>
 }
 
@@ -33,7 +35,7 @@ function names(list: { name: string | null }[]): string {
 function EntryPopup() {
   const me = collab.use((s) => s.me)
   const inSession = collab.use((s) => s.session !== null)
-  const row = collab.use((s) => s.sessions[0] ?? null)
+  const row = collab.use((s) => s.sessions.find((x) => x.online.length) ?? s.sessions[0] ?? null)   // a session with people in it first
   const done = entry.use((s) => s.popupDone)
   const shown = !!me && !inSession && !!row && !done
   useEffect(() => {
@@ -61,6 +63,8 @@ function EntryPopup() {
 
 function JoinedToast() {
   const t = entry.use((s) => s.toast)
+  const n = entry.use((s) => s.notice)
+  if (n) return <div className={`panel entry-toast ${n.bad ? 'bad' : ''}`} role={n.bad ? 'alert' : 'status'}>{n.text}</div>
   if (!t) return null
   return (
     <div className="panel entry-toast" role="status">

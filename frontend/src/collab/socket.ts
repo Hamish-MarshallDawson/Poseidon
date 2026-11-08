@@ -38,8 +38,13 @@ export function joinSocket(sessionId: string) {
   send({ type: 'session_join', session_id: sessionId, ...(devUser ? { dev_user: devUser } : {}) })
 }
 export function leaveSocket() { joined = null; send({ type: 'session_leave' }) }
+let lastOut: PresenceOut | null = null
 /** The presence agent calls this (throttled ~2 s, heartbeat under 10 s). */
-export function sendPresence(p: PresenceOut) { if (joined) send({ type: 'presence', ...p }) }
+export function sendPresence(p: PresenceOut) { lastOut = p; if (joined) send({ type: 'presence', ...p }) }
+/** The server only lists a socket after its first presence, so a (re)join says it at once instead of on the next heartbeat. */
+export function resendPresence() { if (lastOut) sendPresence(lastOut) }
+/** The server's collaboration store is not ready yet (a restart): ask again rather than drop the session. */
+export function rejoinSoon() { setTimeout(() => { if (joined) joinSocket(joined) }, 2000) }
 
 export function bindSocket(): () => void {
   collabLink.onOpen = () => { identifyDev(); void collab.refreshInvites(); if (joined) joinSocket(joined) }    // after a reconnect, re-join (the server forgot us)

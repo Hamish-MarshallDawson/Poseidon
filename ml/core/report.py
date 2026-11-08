@@ -81,6 +81,8 @@ def build(spec: TargetSpec, reg: Registry) -> dict:
         "proposals": [{k: p.get(k) for k in ("id", "round", "proposer", "proposal", "valid", "errors", "run_id",
                                               "rationale", "created_at", "loop_id", "source")} for p in props],
         "notes": list(getattr(spec, "report_notes", [])),
+        # optional extra sections a target renders itself: [{"title", "html", "data"}]
+        "sections": spec.report_sections() if hasattr(spec, "report_sections") else [],
     }
 
 
@@ -234,7 +236,10 @@ def render_html(rep: dict) -> str:
                  "skill as runs complete.</p><div class='charts'>")
     for h in prim:
         parts.append(f"<div class='panel'><b>{_hlabel(h)} ahead</b>{_curve_svg(rep, h)}</div>")
-    parts.append("</div><h2>Leaderboard</h2><div class='panel scroll'><table><tr><th>#</th><th>Run</th><th>Round</th>"
+    parts.append("</div>")
+    for sec in rep.get("sections", []):
+        parts.append(f"<h2>{e(sec['title'])}</h2>{sec['html']}")
+    parts.append("<h2>Leaderboard</h2><div class='panel scroll'><table><tr><th>#</th><th>Run</th><th>Round</th>"
                  "<th>Model</th><th>Proposer</th><th>Status</th>"
                  + "".join(f"<th>Skill {_hlabel(h)}</th>" for h in prim)
                  + "".join(f"<th>{stat_word} {_hlabel(h)}</th>" for h in prim)

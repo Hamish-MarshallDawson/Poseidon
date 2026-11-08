@@ -1,7 +1,7 @@
 import { createStore } from '../store/store'
 import { api } from './client'
 import type { ActivityRow, Doc, Entry, IncomingInvite, LastSession, Member, OutgoingInvite, Session, SessionRow, User } from './client'
-import { joinSocket, leaveSocket } from './socket'
+import { joinSocket, leaveSocket, rejoinSoon, resendPresence } from './socket'
 import type { CollabMsg, PresenceUser } from './socket'
 
 // Collaboration state: me, the current session (members, list, documents), presence, activity. UI state only; ship
@@ -20,12 +20,13 @@ export interface CollabState {
   invites: { incoming: IncomingInvite[]; outgoing: OutgoingInvite[] }
   private: boolean                                      // hide me from the others (the profile menu)
   error: string | null
+  reconnecting: boolean                                  // /me failed: the session bar shows a quiet "Reconnecting…" and retries
 }
 
 export const collab = {
   ...createStore<CollabState>({
     me: null, lastSession: null, sessions: [], session: null, role: null, list: [], documents: [], presence: [],
-    activity: [], invites: { incoming: [], outgoing: [] }, private: false, error: null,
+    activity: [], invites: { incoming: [], outgoing: [] }, private: false, error: null, reconnecting: false,
   }),
   applyMessage,
   refreshInvites,
@@ -40,16 +41,21 @@ function adopt(sess: Session, role: 'owner' | 'member' | null = null) {
   collab.set({ session: head, list, documents, role: role ?? head.members.find((m) => m.id === me)?.role ?? 'member', presence: [], activity: [] })
 }
 
-/** After login: send the Auth0 profile, then read me and the last session. */
-export async function loadMe(profile?: { name?: string | null; picture?: string | null; email?: string | null }): Promise<void> {
+let retry: ReturnType<typeof setTimeout> | undefined
+/** After login: send the Auth0 profile, then read me and the last session. A failure retries with backoff (2 s up to 30 s). */
+export async function loadMe(profile?: { name?: string | null; picture?: string | null; email?: string | null }, wait = 2000): Promise<void> {
+  clearTimeout(retry)
   try {
     if (profile && (profile.name || profile.picture)) {
       await api.setMe({ name: profile.name?.slice(0, 80) ?? undefined, picture: profile.picture?.startsWith('https://') ? profile.picture : undefined, email: profile.email ?? undefined })
     }
     const { user, last_session } = await api.me()
-    collab.set({ me: user, lastSession: last_session, error: null })
+    collab.set({ me: user, lastSession: last_session, error: null, reconnecting: false })
     await Promise.all([refreshSessions(), refreshInvites()])
-  } catch (e) { fail(e) }
+  } catch (e) {
+    if (!s().me) { collab.set({ reconnecting: true }); retry = setTimeout(() => void loadMe(profile, Math.min(wait * 2, 30000)), wait) }
+    else fail(e)
+  }
 }
 
 export async function refreshSessions(): Promise<void> {
@@ -127,8 +133,19 @@ async function refetch(id: string) {
 const known = (id: string) => s().session?.members.some((m) => m.id === id)
 
 function applyMessage(m: CollabMsg) {
-  if (m.type === 'error') { if (m.for === 'session_join') collab.set({ error: 'Could not join the session', session: null }); return }
-  if (m.type === 'session_joined') { adopt(m.session, m.role); return }
+  if (m.type === 'error') {
+    if (m.for !== 'session_join' || (m.session_id && m.session_id !== s().session?.id)) return
+    if (m.code === 'unavailable') rejoinSoon()
+    else { leaveSession(); collab.set({ error: 'Could not join the session' }) }
+    return
+  }
+  if (m.type === 'session_joined') {
+    if (m.session_id !== s().session?.id) return         // late answer for a session we already left or switched from
+    adopt(m.session, m.role)
+    void refreshActivity()                               // adopt just cleared what openSession may already have fetched
+    resendPresence()
+    return
+  }
   if (m.type === 'invite' || m.type === 'invites_changed') { void refreshInvites(); return }
   if (m.session_id !== s().session?.id) return           // late message from a session we left
   switch (m.type) {
