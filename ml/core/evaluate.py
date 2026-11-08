@@ -68,6 +68,10 @@ def freeze_holdout(spec: TargetSpec, examples: pd.DataFrame, name: str = "v1", f
     lo, hi = int(examples["as_of"].min()), int(examples["as_of"].max())
     start = hi - int(frac * (hi - lo))
     block = examples[examples["as_of"] >= start]
+    bounds = getattr(spec, "holdout_bounds", None)
+    if bounds:   # a target may fix its held-out period instead (e.g. one calendar month): [start, end) in epoch ms
+        start, end = bounds(examples)
+        block = examples[(examples["as_of"] >= start) & (examples["as_of"] < end)]
     if spec.group_by_ship:
         # Half of the ships seen in the block, chosen by a stable hash of the mmsi so a re-freeze picks the same.
         ships = sorted(int(m) for m in block["mmsi"].unique()
