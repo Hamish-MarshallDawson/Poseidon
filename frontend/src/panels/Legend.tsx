@@ -86,6 +86,9 @@ function LegendPanel() {
             <G src={cross} color="--dvm-ship-dark" s={{ left: 17.3, top: 13.3, width: 11.4, height: 11.4 }} />
           </Tile>
         </Entry>
+        <Entry label="Last heard"><Tile><G src={cross} color="--dvm-ship-dark" s={{ left: 17.3, top: 13.3, width: 11.4, height: 11.4 }} /></Tile></Entry>
+        <Entry label="Estimated position"><Tile><i className="g-est" /></Tile></Entry>
+        <Entry label="Reception hole"><Tile><i className="g-hole" /></Tile></Entry>
         <Entry label={'Chance, next 6\u00a0h'}>
           <Tile><span className="g-tag"><i className="risk-3" />3</span></Tile>
         </Entry>

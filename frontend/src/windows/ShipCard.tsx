@@ -93,14 +93,15 @@ export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
         <Field label="Last speed" value={v.sog_kn !== null ? `${v.sog_kn.toFixed(1)} kn` : '—'} />
         <Field label={noAis ? 'Last heading' : 'Heading'} value={(v.heading_deg ?? v.cog_deg) !== null ? `${String(Math.round((v.heading_deg ?? v.cog_deg)!)).padStart(3, '0')}°` : 'Not known'} />
         {gap && <Field label="Ships heard nearby" value={`${gap.neighbours_heard} within 20 km`} />}
-        {gap?.radius_m ? <Field label="Could be within" value={`${(gap.radius_m / 1000).toFixed(1)} km`} /> : null}
+        {gap?.pred_r80_m ? <Field label={`Estimated now${gap.pred_model ? ` · ${gap.pred_model}` : ''}`} value={`about 80 % within ${Math.round(gap.pred_r80_m / 1000)} km`} />
+          : gap?.radius_m ? <Field label="Could be within" value={`${(gap.radius_m / 1000).toFixed(1)} km`} /> : null}
         {v.sanctioned && !yachtSanctioned && <Field label="Sanctions" value="List match" />}
         {pastGaps ? <Field label="Past silent gaps" value={`${pastGaps} in 7 days`} /> : null}
       </div>
       <YachtSection mmsi={mmsi} />
       {p && (
         <p className="sc-note">
-          <b>{noAis ? 'Forecast before the silence' : 'Chance of going dark, next 6 h:'}</b>{' '}
+          <b>{noAis ? 'Forecast before the silence' : 'Estimated chance of going dark, next 6 h:'}</b>{' '}
           {p}{rank ? ` · rank ${rank}` : ''}
           {noAis ? (score ? ` · made ${utcTime(score.made_at, false)}` : '') : decision ? ` · ${decision}` : ''}
           {raised.length > 0 && <> · raised by {raised.join(', ')}</>}

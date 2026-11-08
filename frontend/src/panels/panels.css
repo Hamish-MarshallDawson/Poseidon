@@ -303,3 +303,8 @@
   .legend { width: calc(100vw - 32px); max-height: calc(100vh - 118px - 170px); }
   .scale { bottom: 80px; }
 }
+
+/* Legend tiles: the model's estimate (dashed, no hatch) and a reception hole (faded). */
+.g-est, .g-hole { position: absolute; left: 7px; top: 3px; width: 32px; height: 32px; box-sizing: border-box; border-radius: 50%; }
+.g-est { border: 1.5px dashed var(--dvm-ship-dark); }
+.g-hole { border: 1px solid var(--dvm-text-muted); background: var(--dvm-coverage-dead); opacity: 0.5; }

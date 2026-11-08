@@ -100,18 +100,28 @@ function setup(map: MapLibreMap): () => void {
   const dark = tok('ship-dark'), muted = tok('text-muted')
   const before = map.getStyle().layers.find((l) => l.type === 'symbol')?.id   // ghosts sit under labels and ships
   for (const id of ['fc-ghost', 'fc-ghost-pt', 'fc-tags', 'fc-out']) map.addSource(id, { type: 'geojson', data: EMPTY })
-  const inner = ['!=', ['get', 'ring'], true]   // the model's 95 % ring is an outline only
+  const inner = ['all', ['!=', ['get', 'ring'], true], ['!=', ['get', 'link'], true]]   // the 95 % ring and the link are lines only
+  const est = ['==', ['get', 'est'], true], notEst = ['!=', ['get', 'est'], true]
+  const fade = (dark: number, grey: number) => ['match', ['get', 'kind'], 'dark', dark, grey] as never
   map.addLayer({ id: 'fc-ghost-fill', type: 'fill', source: 'fc-ghost', filter: inner as never,
-    paint: { 'fill-color': ['match', ['get', 'kind'], 'dark', tok('ship-ghost-fill'), tok('coverage-dead')] } }, before)
-  map.addLayer({ id: 'fc-ghost-hatch', type: 'fill', source: 'fc-ghost', filter: inner as never,
-    paint: { 'fill-pattern': ['match', ['get', 'kind'], 'dark', 'fc-hatch-dark', 'fc-hatch-grey'] } }, before)
+    paint: { 'fill-color': ['match', ['get', 'kind'], 'dark', tok('ship-ghost-fill'), tok('coverage-dead')], 'fill-opacity': fade(1, 0.45) } }, before)
+  // Hatching means "lost, could be anywhere in here"; the model's estimate has no hatch, only its dashed edge.
+  map.addLayer({ id: 'fc-ghost-hatch', type: 'fill', source: 'fc-ghost', filter: ['all', inner, notEst] as never,
+    paint: { 'fill-pattern': ['match', ['get', 'kind'], 'dark', 'fc-hatch-dark', 'fc-hatch-grey'], 'fill-opacity': fade(1, 0.45) } }, before)
   // The edge uses full ship/dark: ship/ghost-edge (75 %) fails 3:1 on water in Dark (forecast report).
-  map.addLayer({ id: 'fc-ghost-edge', type: 'line', source: 'fc-ghost', filter: inner as never,
-    paint: { 'line-color': ['match', ['get', 'kind'], 'dark', dark, muted], 'line-width': 1.5, 'line-dasharray': [3, 2] } }, before)
+  map.addLayer({ id: 'fc-ghost-edge', type: 'line', source: 'fc-ghost', filter: ['all', inner, est] as never,
+    paint: { 'line-color': ['match', ['get', 'kind'], 'dark', dark, muted], 'line-width': 1.5, 'line-dasharray': [3, 2], 'line-opacity': fade(1, 0.5) } }, before)
+  map.addLayer({ id: 'fc-ghost-edge-lost', type: 'line', source: 'fc-ghost', filter: ['all', inner, notEst] as never,
+    paint: { 'line-color': ['match', ['get', 'kind'], 'dark', dark, muted], 'line-width': 1, 'line-opacity': fade(1, 0.5) } }, before)
+  map.addLayer({ id: 'fc-ghost-link', type: 'line', source: 'fc-ghost', filter: ['==', ['get', 'link'], true],
+    paint: { 'line-color': ['match', ['get', 'kind'], 'dark', dark, muted], 'line-width': 1, 'line-dasharray': [1, 2], 'line-opacity': 0.7 } }, before)
   map.addLayer({ id: 'fc-ghost-r95', type: 'line', source: 'fc-ghost', filter: ['==', ['get', 'ring'], true],
     paint: { 'line-color': ['match', ['get', 'kind'], 'dark', dark, muted], 'line-width': 1, 'line-opacity': 0.4 } }, before)
   map.addLayer({ id: 'fc-ghost-cross', type: 'symbol', source: 'fc-ghost-pt',
-    layout: { 'icon-image': ['match', ['get', 'kind'], 'dark', 'fc-cross-dark', 'fc-cross-grey'], 'icon-allow-overlap': true, 'icon-ignore-placement': true } })
+    layout: { 'icon-image': ['match', ['get', 'kind'], 'dark', 'fc-cross-dark', 'fc-cross-grey'], 'icon-allow-overlap': true, 'icon-ignore-placement': true,
+      // "last heard 3 h ago" gives way to other labels; the cross itself always stays
+      'text-field': ['step', ['zoom'], '', 5, ['get', 'age']], 'text-font': ['Barlow Semi Condensed Medium'], 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 0.8], 'text-optional': true },
+    paint: { 'text-color': ['match', ['get', 'kind'], 'dark', tok('text-primary'), muted], 'text-halo-color': tok('bg-app'), 'text-halo-width': 1.4 } })
   map.addLayer({ id: 'fc-out', type: 'symbol', source: 'fc-out',
     layout: { 'icon-image': ['concat', 'fc-out-', ['get', 'label']], 'icon-offset': [-11, 11], 'icon-allow-overlap': true } })
   map.addLayer({ id: 'fc-tags', type: 'symbol', source: 'fc-tags',
@@ -160,9 +170,9 @@ function setup(map: MapLibreMap): () => void {
       const dark = g.coverage_flag === 'deliberate_candidate'
       return dark || picked.has(g.mmsi)
     }
-    gaps = [...vessels.gaps.values()].filter((g) => g.state === 'open' && g.start_ts <= t && g.coverage_flag !== 'own_stall' && shown(g))
+    gaps = [...vessels.gaps.values()].filter((g) => g.state === 'open' && g.start_ts <= t && t - g.start_ts < 24 * H && g.coverage_flag !== 'own_stall' && shown(g))
     map.getSource<GeoJSONSource>('fc-ghost-pt')?.setData({ type: 'FeatureCollection', features: gaps.map((g) => ({
-      type: 'Feature', geometry: { type: 'Point', coordinates: (({ lon, lat }) => [lon, lat])(ghostOf(g, t)) }, properties: { kind: kindOf(g) } })) })
+      type: 'Feature', geometry: { type: 'Point', coordinates: [g.last_lon, g.last_lat] }, properties: { kind: kindOf(g), age: `last heard ${agoText(t - g.start_ts)} ago` } })) })
     syncLabels(t)
   }
   const syncLabels = (t: number) => {
@@ -181,18 +191,23 @@ function setup(map: MapLibreMap): () => void {
       }
       const { r, model } = ghostOf(g, t)
       const dur = fmtDuration(t - g.start_ts)
-      const km = (r / 1000).toFixed(1)
-      const hz = g.pred_horizon_s ? ` (${Math.round(g.pred_horizon_s / 3600)} h)` : ''
-      const head = g.coverage_flag === 'deliberate_candidate' ? (model ? `Model estimate · 80 % within ${km} km${hz}` : `No AIS ${dur} · within ${km} km`) : `No AIS ${dur} · ${COVERAGE_FLAG_LABEL[g.coverage_flag]}`
-      const sub = g.coverage_flag === 'deliberate_candidate'
+      const km = r < 10_000 ? (r / 1000).toFixed(1) : String(Math.round(r / 1000))
+      const dark = g.coverage_flag === 'deliberate_candidate'
+      // An estimate, not a guarantee: on our own feed the rings have held the ship less often than their nominal 80 %.
+      const head = model ? `Estimated position now · about 80 % within ${km} km`
+        : dark ? `No AIS ${dur} · could be within ${km} km`
+        : g.coverage_flag === 'coverage_gap' ? 'Reception hole, not the ship' : `No AIS ${dur} · ${COVERAGE_FLAG_LABEL[g.coverage_flag]}`
+      const sub = model ? `${model} · not a sighting` : dark
         ? `Reception normal nearby (${g.neighbours_heard} ships heard within 20 km)${g.last_sog_kn != null ? ` · last ${g.last_sog_kn.toFixed(1)} kn` : ''}${g.last_cog_deg != null ? `, ${String(Math.round(g.last_cog_deg)).padStart(3, '0')}°` : ''}`
         : `${g.neighbours_heard} ships heard within 20 km. Not counted as a silence.`
       l.m.setLngLat([ghostOf(g, t).lon, ghostOf(g, t).lat])
       if (l.el.dataset.head !== head) { l.el.dataset.head = head; l.el.innerHTML = `<b></b><span></span>`; l.el.firstChild!.textContent = head; l.el.lastChild!.textContent = sub }
-      l.el.classList.toggle('hidden', open.has(g.mmsi) || (far && hoverGap !== g.id))
+      // Grey ghosts only draw for a ship with a window, so their label stays up; a dark ship's window says the same as its label.
+      l.el.classList.toggle('hidden', dark && (open.has(g.mmsi) || (far && hoverGap !== g.id)))
     }
   }
   const kindOf = (g: GapEvent) => (g.coverage_flag === 'deliberate_candidate' ? 'dark' : 'grey')
+  const agoText = (ms: number) => { const m = Math.max(1, Math.round(ms / 60_000)); return m < 60 ? `${m} min` : `${Math.round(m / 60)} h` }
   // Each rAF, but setData (a worker re-tile) only when a visible ghost grew by half a pixel or the visible set changed:
   // at 1x a 10 kn ghost grows a pixel a minute at z8, so sub-pixel updates are invisible and cost ~10 fps at 25k ships.
   let raf = 0
@@ -209,9 +224,12 @@ function setup(map: MapLibreMap): () => void {
     const same = vis.length === drawn.size && vis.every(({ g, r }) => { const r0 = drawn.get(g.id); return r0 !== undefined && Math.abs(r - r0) < mpp / 2 })
     if (same) return
     drawn = new Map(vis.map(({ g, r }) => [g.id, r]))
+    const windowed = new Set(ui.get().windows.map((w) => w.mmsi))
     const features = vis.flatMap(({ g, o }) => [
-      { type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id }, geometry: { type: 'Polygon' as const, coordinates: [circle(o.lon, o.lat, o.r)] } },
+      { type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id, est: !!o.model }, geometry: { type: 'Polygon' as const, coordinates: [circle(o.lon, o.lat, o.r)] } },
       ...(o.r95 ? [{ type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id, ring: true }, geometry: { type: 'Polygon' as const, coordinates: [circle(o.lon, o.lat, o.r95)] } }] : []),
+      // From the last-heard cross to the estimate. An open window already draws this segment (map/focus.ts).
+      ...(o.model && !windowed.has(g.mmsi) ? [{ type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id, link: true }, geometry: { type: 'LineString' as const, coordinates: [[g.last_lon, g.last_lat], [o.lon, o.lat]] } }] : []),
     ])
     map.getSource<GeoJSONSource>('fc-ghost')?.setData({ type: 'FeatureCollection', features })
   }
@@ -250,6 +268,7 @@ function setup(map: MapLibreMap): () => void {
   all()
   const offV = vessels.subscribe(all)
   const offUi = ui.subscribe((s, p) => {
+    if (s.windows !== p.windows) drawn = new Map()   // the link line depends on which ships have a window
     if (s.windows !== p.windows || s.show !== p.show) drawTags()
     if (s.windows !== p.windows || s.show !== p.show) syncGaps()
   })
@@ -262,7 +281,7 @@ function setup(map: MapLibreMap): () => void {
     map.off('zoomend', onZoom); map.off('mousemove', 'fc-ghost-fill', onEnter); map.off('mouseleave', 'fc-ghost-fill', onLeave)
     for (const l of labels.values()) l.m.remove()
     if (!map.style) return                                   // style already torn down by a swap
-    for (const id of ['fc-tags', 'fc-out', 'fc-ghost-cross', 'fc-ghost-r95', 'fc-ghost-edge', 'fc-ghost-hatch', 'fc-ghost-fill']) if (map.getLayer(id)) map.removeLayer(id)
+    for (const id of ['fc-tags', 'fc-out', 'fc-ghost-cross', 'fc-ghost-r95', 'fc-ghost-link', 'fc-ghost-edge-lost', 'fc-ghost-edge', 'fc-ghost-hatch', 'fc-ghost-fill']) if (map.getLayer(id)) map.removeLayer(id)
     for (const id of ['fc-ghost', 'fc-ghost-pt', 'fc-tags', 'fc-out']) if (map.getSource(id)) map.removeSource(id)
     for (const id of [...IMAGES, ...tagImages]) if (map.hasImage(id)) map.removeImage(id)
   }

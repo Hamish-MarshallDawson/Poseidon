@@ -15,7 +15,7 @@ export type Item =
 
 // The leading reason only, with a count of the rest, so the line stays one line.
 export const systemReason = (r: WatchlistRow) =>
-  `System · ${pct(r.p)} · ${REASON_LABEL[r.reason_codes[0]] ?? r.reason_codes[0] ?? 'Forecast'}${r.reason_codes.length > 1 ? ` +${r.reason_codes.length - 1}` : ''}`
+  `System · est. ${pct(r.p)} · ${REASON_LABEL[r.reason_codes[0]] ?? r.reason_codes[0] ?? 'Forecast'}${r.reason_codes.length > 1 ? ` +${r.reason_codes.length - 1}` : ''}`
 
 export function useReviewItems(): { items: Item[]; dismissed: number } {
   const wl = useWatchlist()
