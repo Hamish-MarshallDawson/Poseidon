@@ -53,6 +53,7 @@ Rules:
 - Where a field is listed in data_not_available, say it is not available; do not guess it.
 - A ship going silent on AIS is not proof of wrongdoing: receiver coverage holes are common. Say so when gaps appear.
 - Correlation: judge it only from the supplied "pairs" facts (distance, course and speed difference, shared destination/flag/type, gap overlap). If the facts do not support a link, set found=false, strength="none" and say plainly that no correlation was found; that is a valid result. With a single ship set found=false, strength="none" and explain that correlation needs two or more ships.
+- Each ship may carry an "origin": kind "system" means the prediction model flagged it (give its reasons and risk_p if present), "user" means a person added it (give added_by; "you" means the person reading), "selected" means they just opened it. For every ship, state this neutrally in one finding, as "flagged by the model (reasons)" or "added by <name>" or "opened by the reader"; if origin is absent, say nothing about it. Being flagged by the model or added by a person is a prompt to review, not evidence.
 - risk is your qualitative reading of the supplied facts (use the supplied risk score if present), "unknown" if there is too little data.
 - speech_script: 60 to 120 words of plain spoken English with no markdown, bullets or ship numbers read digit by digit; say ship names where known, otherwise 'the vessel with MMSI ending in' the last 4 digits."""
 

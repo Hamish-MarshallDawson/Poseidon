@@ -48,8 +48,9 @@ def pair_facts(a: dict, b: dict, now_ms: int) -> dict:
             "shared": shared, "gap_overlap_s": overlap}
 
 
-def gather(live: Live, mmsis: list[int], now_ms: int) -> dict:
-    """Raises KeyError(mmsi) for a ship not in live state. Missing data is listed, never filled in."""
+def gather(live: Live, mmsis: list[int], now_ms: int, origins: dict[int, dict] | None = None) -> dict:
+    """Raises KeyError(mmsi) for a ship not in live state. Missing data is listed, never filled in. `origins` says why
+    each ship is on the list: the model flagged it (kind system), a user added it (user), or it was just opened (selected)."""
     ships = []
     for m in dict.fromkeys(mmsis):   # drop duplicates, keep order
         if m not in live.pos:
@@ -59,7 +60,7 @@ def gather(live: Live, mmsis: list[int], now_ms: int) -> dict:
         if not d["statics"] or len(d["statics"][0]) <= 1:
             missing.append("statics")
         ships.append({"vessel": d["vessel"], "statics": d["statics"], "gaps": d["gaps"], "spoofs": d["spoofs"],
-                      "sanction": d["sanction"], "score": d["score"], "data_not_available": missing,
+                      "sanction": d["sanction"], "score": d["score"], "data_not_available": missing, "origin": (origins or {}).get(m),
                       "age_s": max(0, (now_ms - d["vessel"]["last_ts"]) // 1000)})
     pairs = [pair_facts(a, b, now_ms) for a, b in combinations(ships, 2)]
     return {"as_of_ts": now_ms, "ships": ships, "pairs": pairs}
