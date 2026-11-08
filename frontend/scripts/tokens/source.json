@@ -33,6 +33,8 @@
   },
   "signals": {
     "ship/normal": { "standard": ["#1d2529", "#eee9dc", "#000000", "#ffffff"], "cvd": ["#1d2529", "#eee9dc", "#000000", "#ffffff"] },
+    "ship/class-a": { "standard": ["#1d2529", "#eee9dc", "#000000", "#ffffff"], "cvd": ["#1d2529", "#eee9dc", "#000000", "#ffffff"] },
+    "ship/class-b": { "standard": ["#802dd2", "#9a8fe8", "#5b17a8", "#b3b0f0"], "cvd": ["#8a2bb5", "#c08ae8", "#6b1590", "#d2a8f0"] },
     "ship/selected": { "standard": ["#1c5f86", "#86c9e8", "#0b4468", "#a6dbf3"], "cvd": ["#0c63e1", "#95cee9", "#0f3f6a", "#39c1f9"] },
     "ship/dark": { "standard": ["#b3266b", "#f26aa0", "#8f0f4e", "#ff7fb0"], "cvd": ["#522a03", "#c98269", "#4e2b02", "#f59453"] },
     "ship/spoof": { "standard": ["#9a6400", "#f2b33d", "#6e4700", "#ffc24d"], "cvd": ["#807a03", "#beaf3a", "#7c7d18", "#e5cd11"] },

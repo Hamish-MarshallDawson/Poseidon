@@ -51,8 +51,11 @@ function LegendPanel() {
           <li key={label}><Tile><G src={src} color="--dvm-ship-normal" s={HULL} /></Tile><span>{label}</span></li>
         ))}
       </ul>
+      <p className="lg-note">Class A: commercial and SOLAS ships, used for gap detection. Class B: small craft and leisure, drawn smaller.</p>
       <ul className="lg-grid">
         <Entry label="Normal"><Tile><G src={hullCargo} color="--dvm-ship-normal" s={MARK} /></Tile></Entry>
+        <Entry label="Class A"><Tile><G src={hullCargo} color="--dvm-ship-class-a" s={MARK} /></Tile></Entry>
+        <Entry label="Class B"><Tile><G src={hullCargo} color="--dvm-ship-class-b" s={{ left: 19.5, top: 9, width: 9, height: 24 }} /></Tile></Entry>
         <Entry label="No AIS received"><Tile><G src={hullDark} color="--dvm-ship-dark" s={MARK} /></Tile></Entry>
         <Entry label="Possible spoofing">
           <Tile>

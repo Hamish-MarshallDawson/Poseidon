@@ -67,6 +67,10 @@ export default function ThemeMenu() {
             <p className="dvm-section-label">Motion</p>
             <Switch checked={state.reducedMotion} onChange={(v) => setTheme({ reducedMotion: v })} label="Reduce motion" hint="no crossfades or springs" />
           </div>
+          <div className="dvm-theme-menu__group">
+            <p className="dvm-section-label">Ships</p>
+            <Switch checked={state.classColour} onChange={(v) => setTheme({ classColour: v })} label="Show AIS class" hint="Class B smaller and violet" />
+          </div>
           <div className="dvm-theme-menu__foot">
             <Button variant="ghost" onClick={resetTheme}>Follow system settings</Button>
           </div>

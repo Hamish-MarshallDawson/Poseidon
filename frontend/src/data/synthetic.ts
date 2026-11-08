@@ -46,7 +46,7 @@ function makeShips(n: number): Ship[] {
       mmsi, name: `${W1[Math.floor(h01(i, 8) * W1.length)]} ${W2[Math.floor(h01(i, 9) * W2.length)]}`, imo: null,
       flag: FLAGS[Math.floor(h01(i, 10) * FLAGS.length)], type_group, length_m: Math.round(20 + 280 * h01(i, 11) ** 2),
       lat: lat0, lon: lon0, sog_kn: null, cog_deg: null, heading_deg: null, last_ts: 0, status: 'active', open_gap_id: null,
-      risk_p: null, risk_rank: null, sanctioned: h01(i, 12) < 0.004, spoof_recent: [],
+      risk_p: null, risk_rank: null, sanctioned: h01(i, 12) < 0.004, spoof_recent: [], cls: h01(i, 15) < 0.7 ? 'A' : 'B',
     }
     ships.push({ mmsi, lat0, lon0, sog, cog: 360 * h01(i, 13), phase: LEG_MS * h01(i, 14), every: anchored ? 60 : 10, base })
   }
