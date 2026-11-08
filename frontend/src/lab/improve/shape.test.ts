@@ -58,21 +58,22 @@ describe('championSteps', () => {
 })
 
 describe('liveSkill', () => {
-  it('n-weights champion rows per bucket, drops baselines, splits live and backtest', () => {
+  it("keeps only the champion's own version (and its -calN base), drops baselines, splits live and backtest", () => {
     const m = { route: [
-      { t: 1, mode: 'live', model_version: 'a', horizon_s: 10800, n: 10, skill: 0.5 },
-      { t: 1, mode: 'live', model_version: 'b', horizon_s: 10800, n: 30, skill: 0.1 },
+      // the -cal1 champion predicts under its base version's name
+      { t: 1, mode: 'live', model_version: 'route-dma90-v2', horizon_s: 10800, n: 10, skill: 0.2 },
+      { t: 1, mode: 'live', model_version: 'dma14-v2', horizon_s: 10800, n: 30, skill: 0.1 },
       { t: 1, mode: 'live', model_version: 'baseline-dr-v1', horizon_s: 10800, n: 99, skill: 0 },
-      { t: 1, mode: 'live', model_version: 'a', horizon_s: 3600, n: 99, skill: 0.9 },
-      { t: 2, mode: 'backtest', model_version: 'a', horizon_s: 10800, n: 5, skill: -0.2 },
+      { t: 1, mode: 'live', model_version: 'route-dma90-v2', horizon_s: 3600, n: 99, skill: 0.9 },
+      { t: 2, mode: 'backtest', model_version: 'route-dma90-v2', horizon_s: 10800, n: 5, skill: -0.2 },
     ] }
     const s = liveSkill(route, m)
-    expect(s.live).toEqual([{ t: 1, value: 0.2, n: 40 }])
+    expect(s.live).toEqual([{ t: 1, value: 0.2, n: 10 }])
     expect(s.backtest).toEqual([{ t: 2, value: -0.2, n: 5 }])
     expect(s.name).toBe('skill over dead reckoning at 3 h')
   })
   it('godark reads brier_skill for dark_<h>h; fishing has none', () => {
-    const gd = { ...route, target: 'godark', offline: { ...route.offline, primary_h: 21600 } }
+    const gd = { ...route, target: 'godark', champion: { run_id: 'g', version: 'g' }, offline: { ...route.offline, primary_h: 21600 } }
     const m = { godark: [{ t: 3, mode: 'live', target: 'dark_6h', model_version: 'g', n: 4, brier_skill: -0.05 }, { t: 3, mode: 'live', target: 'dark_1h', model_version: 'g', n: 4, brier_skill: 0.5 }] }
     expect(liveSkill(gd, m).live).toEqual([{ t: 3, value: -0.05, n: 4 }])
     expect(liveSkill(fishing, m)).toMatchObject({ live: [], backtest: [] })
@@ -83,7 +84,7 @@ describe('markers', () => {
   it('promoted with why, rejected from run status with the config change and the failed horizon', () => {
     const m = markers(fishing, runs, events)
     expect(m.map((x) => x.kind)).toEqual(['promoted', 'rejected'])
-    expect(m[0].why).toBe('beat the baseline at every primary horizon')
+    expect(m[0].why).toBe('beat the baseline at 7 d')
     expect(m[1]).toMatchObject({ run_id: 'f2', changed: 'leaves: 31 → none; model: lgbm → persistence', why: 'did not beat the champion at 7 d' })
   })
   it('godark includes godark_gfw runs and Gemini proposals', () => {
