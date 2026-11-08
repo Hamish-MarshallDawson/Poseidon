@@ -47,6 +47,7 @@ class CollabHub:
         self.presence: dict = {}     # client -> {viewing, following, bbox, private, ts}
         self.dirty: set[str] = set()  # sessions whose presence changed since the last fan-out
         self.expiry: dict = {}       # client -> task that closes the socket when its token expires
+        self.subs: dict = {}         # client -> the identity (token sub; dev|name without Auth0) for pushes to one user
         self._tasks: set = set()
 
     # --- lifecycle --------------------------------------------------------------------------------------------
@@ -80,11 +81,14 @@ class CollabHub:
 
     def attach(self, c) -> None:
         """A socket passed its auth check: close it when the token expires (unless it sends a fresher one)."""
+        if sub := (getattr(c, "claims", None) or {}).get("sub"):
+            self.subs[c] = sub
         exp = (getattr(c, "claims", None) or {}).get("exp")
         if exp:
             self._watch(c, exp)
 
     def detach(self, c) -> None:
+        self.subs.pop(c, None)
         if t := self.expiry.pop(c, None):
             t.cancel()
         self._leave(c)
@@ -142,7 +146,9 @@ class CollabHub:
 
     async def _reauth(self, c, msg: dict) -> None:
         """A fresher access token on an open socket (the SPA renews it silently): extends the socket's life."""
-        if not auth.ENABLED:
+        if not auth.ENABLED:   # local dev: the socket says who it is, like X-Dev-User on the routes
+            if isinstance(msg.get("dev_user"), str):
+                self.subs[c] = f"dev|{msg['dev_user']}"
             return
         try:
             claims = await auth.verify_async(msg.get("token") or "")
@@ -227,6 +233,14 @@ class CollabHub:
         targets = [c for c, (s, _) in self.joined.items() if s == sid]
         if targets:
             t = asyncio.gather(*(self._send(c, msg) for c in targets))   # scheduled now; kept so it isn't collected
+            self._tasks.add(t)
+            t.add_done_callback(self._tasks.discard)
+
+    def push_user(self, sub: str | None, msg: dict) -> None:
+        """Send to every open socket of one identity (whether or not it has joined a session)."""
+        targets = [c for c, s in self.subs.items() if s == sub]
+        if targets:
+            t = asyncio.gather(*(self._send(c, msg) for c in targets))
             self._tasks.add(t)
             t.add_done_callback(self._tasks.discard)
 

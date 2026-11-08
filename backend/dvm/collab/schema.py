@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS collab_invites (
   expires_at timestamptz NOT NULL, used_at timestamptz, used_by uuid REFERENCES users(id)
 );
 
+-- Invites with an addressee (#117): an existing user, or an email that matches a user once they log in.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE collab_invites ADD COLUMN IF NOT EXISTS id uuid NOT NULL DEFAULT gen_random_uuid();
+ALTER TABLE collab_invites ADD COLUMN IF NOT EXISTS to_user uuid REFERENCES users(id);
+ALTER TABLE collab_invites ADD COLUMN IF NOT EXISTS to_email text;
+ALTER TABLE collab_invites ADD COLUMN IF NOT EXISTS revoked_at timestamptz;
+ALTER TABLE collab_invites ADD COLUMN IF NOT EXISTS declined_at timestamptz;
+CREATE UNIQUE INDEX IF NOT EXISTS collab_invites_id ON collab_invites (id);
+
 -- The shared tracking list: one row per ship per session.
 CREATE TABLE IF NOT EXISTS collab_list (
   session_id uuid NOT NULL REFERENCES collab_sessions(id), mmsi integer NOT NULL,
