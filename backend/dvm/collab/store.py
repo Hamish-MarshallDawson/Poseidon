@@ -7,6 +7,8 @@ import time
 import uuid
 from datetime import datetime
 
+from dvm.collab.invites import MemInvites, PgInvites
+
 DOCS_IN_DETAIL = 200          # newest documents returned with a session
 
 
@@ -31,6 +33,7 @@ def _doc(r) -> dict:
 class PgStore:
     def __init__(self, pool):
         self.pool = pool
+        self.inv = PgInvites(pool)       # invites with an addressee (invites.py)
 
     async def upsert_user(self, sub: str) -> dict:
         r = await self.pool.fetchrow(
@@ -112,7 +115,7 @@ class PgStore:
         uid = uuid.UUID(user_id)
         async with self.pool.acquire() as con, con.transaction():
             r = await con.fetchrow("SELECT session_id, used_by FROM collab_invites WHERE token_hash = $1 "
-                                   "AND expires_at > now() FOR UPDATE", token_hash)
+                                   "AND expires_at > now() AND revoked_at IS NULL AND declined_at IS NULL FOR UPDATE", token_hash)
             if r is None or r["used_by"] not in (None, uid):
                 return None
             sid = r["session_id"]
@@ -173,6 +176,7 @@ class MemoryStore:
         self.lists: dict[tuple, dict] = {}          # (sid, mmsi) -> entry
         self.docs: list[dict] = []
         self.acts: list[dict] = []
+        self.inv = MemInvites(self)
         self._ids = itertools.count(1)
         self._clock = 0
 
@@ -237,7 +241,7 @@ class MemoryStore:
 
     async def accept_invite(self, token_hash: str, user_id: str):
         inv = self.invites.get(token_hash)
-        if inv is None or inv["used_by"] not in (None, user_id) or inv["expires_at"] <= time.time() * 1000:
+        if inv is None or inv.get("revoked") or inv.get("declined") or inv["used_by"] not in (None, user_id) or inv["expires_at"] <= time.time() * 1000:
             return None
         sid = inv["session_id"]
         if (sid, user_id) in self.members:
