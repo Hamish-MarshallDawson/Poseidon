@@ -412,9 +412,9 @@ def collect(root: Path = DATA, tiger_url: str | None = None) -> dict[str, list[d
     version_run |= {r["run_id"]: r["run_id"] for r in runs.values()}
     version_run |= {e["version"]: e["run_id"] for e in recal if e["run_id"] in runs}
     if tiger_url:
-        deployed = deploy_events(ledger_deploys(tiger_url), version_run, "Tiger ledger, read at export")
+        deployed = deploy_events(ledger_deploys(tiger_url), version_run, "Tiger prediction ledger")
     else:
-        deployed = deploy_events(DEPLOYS, version_run, f"Tiger ledger, read {LEDGER_CHECKED}")
+        deployed = deploy_events(DEPLOYS, version_run, "Tiger prediction ledger")
     live = {e["version"] for e in deployed}
     for e in recal:
         e["detail"]["deployed"] = e["version"] in live
