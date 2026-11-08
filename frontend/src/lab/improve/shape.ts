@@ -24,7 +24,7 @@ export interface ModelSummaryLike {
   label?: string
   champion: { run_id?: string | null; version: string; since?: number | null; proposer?: string | null }
   offline: { primary_h: number; skill: number | null; skill_lo?: number | null; skill_hi?: number | null; holdout?: string | null }
-  live?: { primary?: { name: string; value: number | null; ref_label?: string } | null } | null
+  live?: { hours?: number; n?: number; primary?: { name: string; value: number | null; ref_label?: string } | null } | null
 }
 export interface RouteRowLike { t: number; mode?: string | null; model_version: string; horizon_s: number; n: number; skill: number | null }
 export interface GodarkRowLike { t: number; mode?: string | null; target: string; model_version: string; n: number; brier_skill: number | null }
