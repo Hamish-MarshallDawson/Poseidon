@@ -18,6 +18,7 @@ from dvm import auth, collab, config, coverage, gaps, limits, predict, replay, s
 from dvm.briefing.routes import make_router as briefing_router
 from dvm.predict.routes import make_router as predict_router
 from dvm.ingest import Feed, now_ms, run_aisstream
+from dvm.lab.routes import make_router as lab_router
 from dvm.live import GAP_KEEP_MS as LIVE_GAP_KEEP_MS, Live
 from dvm.merge import FeedMerger
 from dvm.models import Envelope, PositionReport, VesselStatic
@@ -518,6 +519,7 @@ app.include_router(yachts_router(lambda: hub.store.pool if hub.store else None, 
 app.include_router(predict_router(lambda: hub.store.pool if hub.store else None, predict.health, require_login,
                                  report_dir=config.PREDICT_REPORT_DIR))   # GET /predictions, /model/leaderboard (#121)
 app.include_router(zones_router(require_login))   # GET /zones (#157)
+app.include_router(lab_router(lambda: hub.store.pool if hub.store else None, require_login))   # GET /lab/runs, /lab/proposals, /lab/events
 app.include_router(collab.make_router())   # /me, /sessions, /invites (dvm/collab/README.md)
 
 
