@@ -37,6 +37,8 @@ export function ScrubBar() {
   const paused = ui.use((s) => s.feed.paused)
   const speed = ui.use((s) => s.feed.speed)
   const range = ui.use((s) => s.time.range)
+  const follow = ui.use((s) => s.follow)
+  const nWin = ui.use((s) => s.windows.length)
   const loading = replayUi.use((s) => s.loading)
   const [wall, setWall] = useState(() => Date.now())
   const [width, setWidth] = useState(0)
@@ -221,6 +223,12 @@ export function ScrubBar() {
         )}
         {menu === 'custom' && <CustomRange view={view} onApply={(v) => { setRange(v); setMenu(null) }} onClose={() => setMenu(null)} />}
       </div>
+      {!live && nWin > 0 && (
+        <button className="tl-btn tl-text tl-follow" aria-pressed={follow} onClick={() => ui.set({ follow: !follow })}
+          title={follow ? 'Show every ship again' : 'Show only the selected ships and their tracks'}>
+          {follow ? `Following ${nWin} ${nWin === 1 ? 'ship' : 'ships'} · Show all` : `Follow selected (${nWin})`}
+        </button>
+      )}
       {!live && <button className="tl-btn tl-live" onClick={() => replay.live()} title="Back to live (L)">Back to live</button>}
     </div>
   )

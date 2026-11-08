@@ -7,6 +7,8 @@ import { useGap, useNow, useVessel, useWatchlist } from './hooks'
 import { DECISION_LABEL, TYPE_LABEL, fmtMmsi, hms, utcTime } from './format'
 import type { VesselView } from '../types'
 import { runBriefing } from '../briefing/store'
+import { fmtEta, matchDestination, usePortInfo } from '../ports'
+import type { Departure, PortIndex } from '../ports'
 import { toggleReview, useInReview } from '../review/store'
 
 // Body of a ship window: R2/Forecast/Ship card (Figma 56:4598), states No AIS and Active.
@@ -48,6 +50,29 @@ function subline(v: VesselView, flag: string | null | undefined, length: number 
     .filter(Boolean).join(' · ')
 }
 
+const portName = (p: { name: string; cc: string }) => `${p.name}, ${p.cc}`
+
+// "From <port> → To <port>": the destination is what the ship reports; the departure is inferred from its 24 h track.
+export function Route({ v, destination, eta, ports, departure }: {
+  v: VesselView; destination?: string; eta?: string; ports: PortIndex | null; departure: Departure
+}) {
+  const raw = destination?.trim()
+  const hit = raw && ports ? matchDestination(raw, ports, [v.lat, v.lon]) : null
+  const etaText = eta ? fmtEta(eta) : null
+  const to = !raw ? <><b>To:</b> not reported</>
+    : <><b>To</b> {hit ? portName(hit.port) : `"${raw}"`} (reported){etaText && ` · ETA ${etaText}`}</>
+  const from = departure === 'loading' ? <><b>From:</b> checking track…</>
+    : departure === 'error' ? <><b>Departure:</b> track unavailable</>
+    : departure ? <><b>From</b> {portName(departure.port)} (left {utcTime(departure.leftTs, false)}) <small>inferred from track</small></>
+    : <><b>Departure</b> not seen in the last 24 h</>
+  return (
+    <p className="sc-route">
+      <span className="sc-leg">{from}</span>
+      <span className="sc-leg"><span className="sc-arrow" aria-hidden>→ </span>{to}</span>
+    </p>
+  )
+}
+
 export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number; onFocus: () => void }) {
   const v = useVessel(mmsi)
   const gap = useGap(v?.open_gap_id)
@@ -56,6 +81,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
   const detail = details.use((s) => s.byMmsi[mmsi])
   const entry = useWatchlist()?.entries.find((e) => e.mmsi === mmsi)
   const inReview = useInReview(mmsi)
+  const { ports, departure } = usePortInfo(mmsi)
   if (!v) return <div className="sc"><p className="sc-sub">This ship is no longer in the feed.</p></div>
 
   const noAis = v.status === 'gap_open' || v.status === 'silent'
@@ -73,6 +99,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
         <span className={`sc-chip ${noAis ? 'noais' : ''}`}>{noAis ? 'No AIS' : 'AIS heard'}{replay && ` · as of ${utcTime(now, false)}`}</span>
       </div>
       <p className="sc-sub">{subline(v, statics?.flag_iso2 ?? v.flag, statics?.length_m ?? v.length_m)}</p>
+      <Route v={v} destination={statics?.destination} eta={statics?.eta_utc} ports={ports} departure={departure} />
       <div className="sc-timer">
         <span className="sc-clock">{hms(now - v.last_ts)}</span>
         <span className="sc-caption">since last AIS ({utcTime(v.last_ts)}){replay && ` · shown time ${utcTime(now)}`}</span>

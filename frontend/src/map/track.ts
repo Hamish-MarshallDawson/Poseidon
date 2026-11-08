@@ -2,6 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, Map as MapLibreMap } from 
 import { getTrack } from '../data/track'
 import { ui } from '../store/ui'
 import { TRAIL_MS, vessels } from '../store/vessels'
+import { shownNow } from '../timeline/replay'
 import { onTokensChange, readToken } from '../theme/tokens'
 
 // Past track of every selected ship (an open ship window, or the focused ship): one GeoJSON source, drawn as a solid
@@ -40,11 +41,27 @@ export function trackFeatures(trail: Trail, last: [number, number, number], nowM
   return out
 }
 
+/** Follow mode: one ship's track in the replay range, solid up to the head and faint (age 0, lines only) after it. */
+export function followFeatures(track: Trail, head: number, range: { from_ts: number; to_ts: number } | null): GeoJSON.Feature[] {
+  const pts = range ? track.filter((p) => p[0] >= range.from_ts && p[0] <= range.to_ts) : track
+  const i = pts.findIndex((p) => p[0] > head)
+  const past = i < 0 ? pts : pts.slice(0, i)
+  const out = past.length > 1 ? trackFeatures(past, past[past.length - 1], past[0][0] + TRAIL_MS) : []
+  const future = i < 0 ? [] : pts.slice(Math.max(0, i - 1))
+  for (let k = 1; k < future.length; k++) {
+    if (future[k][0] - future[k - 1][0] > TRACK_BREAK_MS) continue
+    out.push({ type: 'Feature', properties: { kind: 'line', age: 0 }, geometry: { type: 'LineString', coordinates: [[future[k - 1][1], future[k - 1][2]], [future[k][1], future[k][2]]] } })
+  }
+  return out
+}
+
 export class TrackRenderer {
   private map: MapLibreMap | null = null
   private last = 0
   private timer: number | undefined
   private asked = new Set<number>()
+  private followTracks = new Map<number, Trail>()   // the 24 h read per followed ship, for the replay head
+  private headTimer: number | undefined
   private unTokens = onTokensChange(() => this.recolour())
 
   attach(map: MapLibreMap): void {
@@ -71,7 +88,7 @@ export class TrackRenderer {
     if (map.getSource(ID.src)) map.removeSource(ID.src)
   }
 
-  dispose(): void { window.clearTimeout(this.timer); this.unTokens(); this.map = null }
+  dispose(): void { window.clearTimeout(this.timer); window.clearInterval(this.headTimer); this.unTokens(); this.map = null }
 
   private recolour(): void {
     const map = this.map
@@ -97,6 +114,20 @@ export class TrackRenderer {
     if (!src) return
     this.last = performance.now()
     const s = ui.get()
+    window.clearInterval(this.headTimer)
+    if (s.follow) {
+      // The head moves with the replay clock: re-split at 4 Hz, not per frame.
+      this.headTimer = window.setInterval(() => this.draw(), 250)
+      const head = s.time.dragT ?? shownNow()
+      const features: GeoJSON.Feature[] = []
+      for (const w of s.windows) {
+        const t = this.followTracks.get(w.mmsi)
+        if (t) features.push(...followFeatures(t, head, s.feed.replay))
+        else this.askFollow(w.mmsi)
+      }
+      src.setData({ type: 'FeatureCollection', features })
+      return
+    }
     const sel = new Set<number>(s.windows.map((w) => w.mmsi))
     if (s.focusMmsi != null) sel.add(s.focusMmsi)
     const features: GeoJSON.Feature[] = []
@@ -108,6 +139,13 @@ export class TrackRenderer {
       features.push(...trackFeatures(vessels.trails.get(mmsi) ?? [], [v.last_ts, v.lon, v.lat], nowMs))
     }
     src.setData({ type: 'FeatureCollection', features })
+  }
+
+  private askFollow(mmsi: number): void {
+    if (this.followTracks.has(mmsi) || this.asked.has(-mmsi)) return
+    this.asked.add(-mmsi)
+    // a failed read is not retried: draw() runs at 4 Hz while following
+    getTrack(mmsi, 24).then((t) => { this.followTracks.set(mmsi, t); this.touch(true) }, () => {})
   }
 
   // The 24 h read, once per ship per session (getTrack caches it for a minute); failures keep the live trail.
