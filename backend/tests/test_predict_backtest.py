@@ -160,3 +160,17 @@ def test_backtest_walk_grade_and_rerun():
     # Idempotent: a re-run of the same range writes nothing new.
     assert second["new_rows"] == {"route_predictions": 0, "scores": 0, "outcomes": 0}
     assert second["total_rows"] == first["total_rows"]
+
+
+def test_backtest_loads_the_champions_from_model_dir(tmp_path):
+    """The backtest must use the champions in --model-dir from its first step, like the live predictor (which
+    refreshes every cycle); without a refresh it silently ran the baselines."""
+    from tests.test_predict import _toy_godark_artifact, _toy_route_artifact
+    (tmp_path / "route-a").mkdir(); (tmp_path / "godark-a").mkdir()
+    _toy_route_artifact(tmp_path / "route-a", version="route-toy-bt")
+    _toy_godark_artifact(tmp_path / "godark-a")
+    (tmp_path / "champions.json").write_text(json.dumps({"route": "route-a", "godark": "godark-a"}))
+    bt = BT.Backtest(object(), object(), tmp_path, 10 * 60_000)
+    assert bt.champions.route.version == "route-toy-bt"
+    assert not bt.champions.errors
+    assert "baseline" not in bt.champions.godark.version
