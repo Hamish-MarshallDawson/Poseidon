@@ -6,14 +6,18 @@ import type { ShipState } from './ships/state'
 // Density caps, slot priority, separation and hysteresis from R1-AGENT3-DENSITY.md, plus the stack fold from
 // R2-AGENT1-STACKING.md. Runs on moveend (and every few seconds for new data), never per frame.
 
-export interface Band { name: 'world' | 'region' | 'sea' | 'harbour'; cap: number; cellDeg: number; breaks: number[] }
+export interface Band { name: 'world' | 'region' | 'sea' | 'harbour'; cap: number }
+// The heat map fades out and the ships fade in across HEAT_FADE (opacity only). The icon cap rises with it, so the
+// ships "spawn in" as the heat map leaves: 100 at z5 up to SEA_CAP at z7, then it holds (it was 40 with cells behind it).
+export const HEAT_FADE: [number, number] = [5, 7]
+const SEA_CAP = 300
 export function bandOf(zoom: number): Band {
-  if (zoom < 4) return { name: 'world', cap: 100, cellDeg: 2, breaks: [1, 50, 250, 1000] }
-  if (zoom < 7) return { name: 'region', cap: 100, cellDeg: 0.5, breaks: [1, 20, 80, 300] }
-  if (zoom < 10) return { name: 'sea', cap: 40, cellDeg: 0.1, breaks: [1, 3, 10, 30] }
-  return { name: 'harbour', cap: 20, cellDeg: 0, breaks: [] }
+  if (zoom < 4) return { name: 'world', cap: 100 }
+  if (zoom < 7) return { name: 'region', cap: Math.round(100 + (SEA_CAP - 100) * Math.min(1, Math.max(0, (zoom - HEAT_FADE[0]) / (HEAT_FADE[1] - HEAT_FADE[0])))) }
+  if (zoom < 10) return { name: 'sea', cap: SEA_CAP }
+  return { name: 'harbour', cap: 20 }
 }
-export const CELL_TINT = [0.05, 0.09, 0.14, 0.22]   // ink at these opacities, lightest to busiest
+export const HEAT_PX = 16   // heat points are ships bucketed on a 16 px screen grid (a few thousand points, not 25k)
 export const HOLD_S = 20
 
 export interface View { cx: number; cy: number; worldSize: number; width: number; height: number; zoom: number; hullPx: number }
@@ -34,7 +38,7 @@ export interface Chip { lon: number; lat: number; mmsis: number[]; plus: boolean
 export interface SlotResult {
   drawn: number[]                  // slots
   chips: Chip[]
-  cells: GeoJSON.FeatureCollection
+  heat: GeoJSON.FeatureCollection   // weighted points for the heat map layer; empty once zoomed past HEAT_FADE
   counts: { inView: number; shown: number; stacked: number; inCells: number }
 }
 
@@ -111,7 +115,7 @@ export function computeSlots(inp: SlotInput): SlotResult {
   for (const s of idx) {
     const t = tier[s]
     if (t === 0) { drawn.push(s); place(s); if (!pinned.has(state.mmsi[s])) shown++; continue }
-    if (t === 9 || shown >= cap) { overflow.push(s); continue }
+    if (t === 9 || (shown >= cap && t > 2)) { overflow.push(s); continue }   // gap ships (tier 2) and above always draw
     if (t > 4 && cap !== Infinity && !inp.allow && crowded(px[s], py[s])) { folded.push(s); continue }   // cap=0 stress: no fold
     drawn.push(s); place(s); shown++
   }
@@ -119,7 +123,7 @@ export function computeSlots(inp: SlotInput): SlotResult {
   if (held.size > 4 * cap + 1000) for (const [m, until] of held) if (until <= now) held.delete(m)
 
   // Folded ships: groups of 4+ within one hull length become a stack chip; at harbour zoom every leftover is a
-  // "+N" chip (no cells there); otherwise the rest go to cells.
+  // "+N" chip; otherwise the rest are only counted (and show in the heat map).
   const chips: Chip[] = []
   const toCells: number[] = band.name === 'harbour' ? [] : [...overflow]
   const harbour = band.name === 'harbour'
@@ -150,32 +154,23 @@ export function computeSlots(inp: SlotInput): SlotResult {
     stacked += c.slots.length
   }
 
-  return { drawn, chips, cells: cellsOf(state, toCells, band), counts: { inView: m, shown: drawn.length, stacked, inCells: toCells.length } }
+  return { drawn, chips, heat: heatOf(idx, px, py, view), counts: { inView: m, shown: drawn.length, stacked, inCells: toCells.length } }
 }
 
-// Aggregate cells: count per cell, 4 ink tints by the band's breaks, the count printed on the 6 busiest.
-function cellsOf(state: ShipState, slots: number[], band: Band): GeoJSON.FeatureCollection {
+// Heat points: every ship in view (traffic density, drawn or not) bucketed on a screen grid, count as the weight.
+function heatOf(slots: Uint32Array, px: Float32Array, py: Float32Array, view: View): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = []
-  if (!band.cellDeg) return { type: 'FeatureCollection', features }
-  const d = band.cellDeg
-  // Numeric cell keys (no string per ship): row/col offset so both stay positive.
-  const COLS = 4000
-  const counts = new Map<number, number>()
+  if (view.zoom >= HEAT_FADE[1]) return { type: 'FeatureCollection', features }
+  const COLS = 4096
+  const acc = new Map<number, [number, number, number]>()
   for (const s of slots) {
-    const v = state.view[s]!
-    const k = (Math.floor(v.lat / d) + 2000) * COLS + (Math.floor(v.lon / d) + 2000)
-    counts.set(k, (counts.get(k) ?? 0) + 1)
+    const k = Math.floor(py[s] / HEAT_PX + 64) * COLS + Math.floor(px[s] / HEAT_PX + 64)
+    const a = acc.get(k)
+    if (a) { a[0] += px[s]; a[1] += py[s]; a[2]++ } else acc.set(k, [px[s], py[s], 1])
   }
-  const busiest = new Set([...counts].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k))
-  for (const [k, n] of counts) {
-    const lat = (Math.floor(k / COLS) - 2000) * d, lon = ((k % COLS) - 2000) * d
-    let cls = 0
-    while (cls < 3 && n >= band.breaks[cls + 1]) cls++
-    features.push({
-      type: 'Feature',
-      properties: { n, tint: CELL_TINT[cls], label: busiest.has(k) ? n.toLocaleString('en-GB') : '' },
-      geometry: { type: 'Polygon', coordinates: [[[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]]] },
-    })
+  for (const [x, y, n] of acc.values()) {
+    const mx = view.cx + (x / n - view.width / 2) / view.worldSize, my = view.cy + (y / n - view.height / 2) / view.worldSize
+    features.push({ type: 'Feature', properties: { n }, geometry: { type: 'Point', coordinates: [lonOf(mx), latOf(my)] } })
   }
   return { type: 'FeatureCollection', features }
 }

@@ -34,6 +34,11 @@
   --dvm-coverage-ok: #2e8a6f1a;
   --dvm-coverage-degraded: #b07a1229;
   --dvm-coverage-dead: #6b727538;
+  --dvm-heat-0: #46609a00;
+  --dvm-heat-1: #6f86c266;
+  --dvm-heat-2: #4a63a89e;
+  --dvm-heat-3: #2f4488cc;
+  --dvm-heat-4: #1b2a62eb;
   --dvm-focus-dim-opacity: 0.4;
   --dvm-shadow-lift: #1d25292e;
   --dvm-signal-std-ship-normal: #1d2529;
@@ -89,6 +94,11 @@
   --dvm-coverage-ok: #4fbf9f1f;
   --dvm-coverage-degraded: #e0b65a2e;
   --dvm-coverage-dead: #8d969a3d;
+  --dvm-heat-0: #a9bdf000;
+  --dvm-heat-1: #4f6aa873;
+  --dvm-heat-2: #7390d2a6;
+  --dvm-heat-3: #a4bcf2d1;
+  --dvm-heat-4: #e6eefff2;
   --dvm-focus-dim-opacity: 0.45;
   --dvm-shadow-lift: #00000073;
   --dvm-signal-std-ship-normal: #eee9dc;
@@ -144,6 +154,11 @@
   --dvm-coverage-ok: #1c6b5524;
   --dvm-coverage-degraded: #8a5c0038;
   --dvm-coverage-dead: #3d43464d;
+  --dvm-heat-0: #2c427800;
+  --dvm-heat-1: #4d66a68c;
+  --dvm-heat-2: #31498fbf;
+  --dvm-heat-3: #1c2f70e6;
+  --dvm-heat-4: #0c1747fa;
   --dvm-focus-dim-opacity: 0.35;
   --dvm-shadow-lift: #00000040;
   --dvm-signal-std-ship-normal: #000000;
@@ -199,6 +214,11 @@
   --dvm-coverage-ok: #5fd3b029;
   --dvm-coverage-degraded: #f0c45e3d;
   --dvm-coverage-dead: #a3abaf4d;
+  --dvm-heat-0: #c9d7ff00;
+  --dvm-heat-1: #5f7cc48c;
+  --dvm-heat-2: #8aa6e6bf;
+  --dvm-heat-3: #b9ceffe6;
+  --dvm-heat-4: #fffffffa;
   --dvm-focus-dim-opacity: 0.35;
   --dvm-shadow-lift: #00000099;
   --dvm-signal-std-ship-normal: #ffffff;
