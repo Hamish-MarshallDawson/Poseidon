@@ -174,6 +174,7 @@ def test_identity_sessions_invites_list_and_documents(api):
     assert api.post(f"/invites/{inv['token']}/accept", headers=aid).status_code == 200    # its user can reopen it
     assert api.post(f"/sessions/{sid}/invites", headers=aid).status_code == 403          # owner only
     assert api.get("/sessions", headers=aid).json()["sessions"][0]["role"] == "member"
+    assert api.get("/sessions", headers=aid).json()["sessions"][0]["online"] == []
 
     e = api.post(f"/sessions/{sid}/list", json={"mmsi": SHIP}, headers=aid).json()["entry"]
     assert e["status"] == "open" and e["added_by"] == joined.json()["members"][1]["id"]

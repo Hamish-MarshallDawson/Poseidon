@@ -44,7 +44,7 @@ Session {id, title, created_by: userId, created_at, members: [Member], list: [En
 | `GET /me` | | `{user: User, last_session: {id, title, role, last_active_at} \| null}` |
 | `POST /me` | `{name?, picture?}` (name at most 80 chars; picture an `https://` URL) | `{user: User}` |
 | `POST /sessions` | `{title}` (1 to 120 chars) | 201, `Session` (you are its owner) |
-| `GET /sessions` | | `{sessions: [{id, title, role, created_at, last_active_at, members: count}]}`, most recent first |
+| `GET /sessions` | | `{sessions: [{id, title, role, created_at, last_active_at, members: count, online: [User]}]}`, most recent first; `online` = other members in it now (not private) |
 | `GET /sessions/{id}` | | `Session` |
 | `GET /sessions/{id}/activity?limit=50` | | `{activity: [{id, actor_id, kind, mmsi\|null, at}]}`, newest first |
 | `POST /sessions/{id}/invites` | | 201, `{token, session_id, expires_at}`; **owner only** (403 for a member) |
