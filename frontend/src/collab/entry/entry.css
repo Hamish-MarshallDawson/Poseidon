@@ -54,3 +54,8 @@
 .invite-row .chip { cursor: pointer; padding: 3px 8px; }
 .invite-panel .muted { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); margin: 0; }
 .invite-create { display: flex; gap: 6px; }
+
+.entry-toast.bad { border-color: var(--dvm-ship-sanctioned, #c2331c); }
+.invite-panel .muted.bad { color: var(--dvm-ship-sanctioned, #c2331c); }
+.invite-copy { align-self: flex-start; cursor: pointer; }
+.invite-panel section[aria-label="Invites for you"] .invite-row__text { white-space: normal; }
