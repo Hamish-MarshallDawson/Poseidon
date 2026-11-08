@@ -3,6 +3,7 @@ import { Marker, type GeoJSONSource, type Map as MapLibreMap } from 'maplibre-gl
 import { adapter } from '../data/index'
 import { useMapLayer } from '../map/context'
 import { ui } from '../store/ui'
+import { showFilter } from '../show/registry'
 import { vessels } from '../store/vessels'
 import { onTokensChange, readToken } from '../theme/tokens'
 import { shownNow } from '../timeline/replay'
@@ -149,8 +150,11 @@ function setup(map: MapLibreMap): () => void {
     const s = ui.get()
     const related = new Set(s.focusRelated.map((r) => r.mmsi))
     const picked = new Set(s.windows.map((w) => w.mmsi))
+    const match = showFilter(s.show).match
     const shown = (g: GapEvent) => {
       if (s.follow && !picked.has(g.mmsi)) return false
+      const v = vessels.vessels.get(g.mmsi)
+      if (match && !picked.has(g.mmsi) && g.mmsi !== s.focusMmsi && !(v && match(v))) return false   // Show filter
       const dark = g.coverage_flag === 'deliberate_candidate'
       return s.focusMmsi != null ? g.mmsi === s.focusMmsi || (dark && related.has(g.mmsi)) : dark || picked.has(g.mmsi)
     }
@@ -239,7 +243,7 @@ function setup(map: MapLibreMap): () => void {
   const offV = vessels.subscribe(all)
   const offUi = ui.subscribe((s, p) => {
     if (s.windows !== p.windows) drawTags()
-    if (s.windows !== p.windows || s.focusMmsi !== p.focusMmsi || s.focusRelated !== p.focusRelated) syncGaps()
+    if (s.windows !== p.windows || s.focusMmsi !== p.focusMmsi || s.focusRelated !== p.focusRelated || s.show !== p.show) syncGaps()
   })
   const onZoom = () => { const z = zoomTier(map.getZoom()); if (z !== tier) { tier = z; drawTags() } syncLabels(shownNow()) }
   map.on('zoomend', onZoom)

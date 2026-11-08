@@ -112,6 +112,14 @@ const STATES = [
     await p.waitForSelector('.br-body', { timeout: 8000 })
   }],
   ['10-replay-two-windows', async (p) => { await p.evaluate(() => window.__dev.replay()); await two(p, 0.5, 0.5, 0.55, 0.45) }],
+  ['11-layers-show-yachts', async (p) => {
+    await p.evaluate(() => {
+      const d = window.__dev, byMmsi = new Map(), list = []
+      for (const m of [...d.vessels.vessels.keys()].slice(0, 6)) { const y = { imo: m, name: `Yacht ${m}`, length_m: 60, owner_reported: null, owner_source_url: null, sanctioned: m % 2 === 0, programs: [], sanctions_source: null, mmsi: m, last_seen_ts: Date.now(), status: 'ais' }; list.push(y); byMmsi.set(m, y) }
+      d.yachts.set({ list, byMmsi }); d.ui.set({ layersOpen: true }); d.setShow('yachts')
+    })
+  }],
+  ['12-layers-show-dark', (p) => p.evaluate(() => { window.__dev.ui.set({ layersOpen: true }); window.__dev.setShow('dark') })],
 ]
 
 const browser = await chromium.launch({ channel: 'msedge', headless: false })

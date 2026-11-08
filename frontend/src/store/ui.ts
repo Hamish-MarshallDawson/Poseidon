@@ -42,6 +42,8 @@ export interface UIState {
   }
   // follow selected (map/follow.ts writes; replay only): only the open windows' ships and their tracks are shown
   follow: boolean
+  // Show filter (show/registry.ts): the id of the one set of ships drawn; 'all' draws everything. Persisted per viewer.
+  show: string
   // scrub bar (timeline/ writes)
   time: { range: TimeRange; dragging: boolean; dragT: number | null }
 }
@@ -64,6 +66,7 @@ export const ui = createStore<UIState>({
     sources: [], stats: { tracked: 0, msgs_per_s: 0, queue_depth: 0 }, isMock: false,
   },
   follow: false,
+  show: 'all',
   time: { range: '6h', dragging: false, dragT: null },
 })
 

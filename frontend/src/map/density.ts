@@ -27,6 +27,7 @@ export interface SlotInput {
   ranks: Map<number, Rank>
   held: Map<number, number>        // mmsi → held until (page clock s); updated in place
   capOverride?: number             // dev switch: ?cap=0 draws every ship in view (stress test)
+  allow?: (v: VesselView) => boolean   // Show filter: a ship it rejects is neither drawn nor counted (pinned ones stay)
   pad?: number                     // fraction of the viewport added on each side (culling margin)
 }
 export interface Chip { lon: number; lat: number; mmsis: number[]; plus: boolean }
@@ -65,7 +66,7 @@ export function computeSlots(inp: SlotInput): SlotResult {
   const SEC = 2 ** 20 - 1, SLOT = 2 ** 18
   for (let s = 0; s < n; s++) {
     const v = state.view[s]
-    if (!v) continue
+    if (!v || (inp.allow && !inp.allow(v) && !pinned.has(v.mmsi))) continue
     state.posAt(s, now, p)
     let dx = p[0] - view.cx
     dx -= Math.round(dx)                                          // nearest world copy
@@ -111,7 +112,7 @@ export function computeSlots(inp: SlotInput): SlotResult {
     const t = tier[s]
     if (t === 0) { drawn.push(s); place(s); if (!pinned.has(state.mmsi[s])) shown++; continue }
     if (t === 9 || shown >= cap) { overflow.push(s); continue }
-    if (t > 4 && cap !== Infinity && crowded(px[s], py[s])) { folded.push(s); continue }   // cap=0 stress: no fold
+    if (t > 4 && cap !== Infinity && !inp.allow && crowded(px[s], py[s])) { folded.push(s); continue }   // cap=0 stress: no fold
     drawn.push(s); place(s); shown++
   }
   for (const s of drawn) held.set(state.mmsi[s], now + HOLD_S)
