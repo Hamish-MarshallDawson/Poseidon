@@ -5,7 +5,7 @@ import { vessels } from '../../store/vessels'
 import { mapStore } from '../../map/context'
 import { reducedMotion } from '../../motion'
 import { openShipWindow } from '../../windows/open'
-import { collab, sendPresence, useInSession } from './core'
+import { collab, selMeId, sendPresence, useInSession } from './core'
 import { presenceUi, followUser } from './state'
 import { Avatar } from './Avatar'
 import { fanOffsets, initials, ringIndex, safePicture, shouldSend, viewersByShip, type Bbox, type PresenceOut, type PresenceUser } from './logic'
@@ -22,7 +22,7 @@ function currentPresence(): PresenceOut {
     viewing: front?.mmsi ?? null,
     following: s.follow ? s.windows.map((w) => w.mmsi).slice(0, 100) : [],
     bbox,
-    private: presenceUi.get().private,
+    private: collab.get().private,
   }
 }
 
@@ -53,7 +53,8 @@ function useMapAvatars(map: MapLibreMap | null, active: boolean) {
     if (!map || !active) return
     const marks = new Map<string, { marker: Marker; el: HTMLElement; sig: string }>()
     const draw = () => {
-      const { presence, meId } = collab.get()
+      const presence = collab.get().presence
+      const meId = selMeId(collab.get())
       const seen = new Set<string>()
       for (const [mmsi, group] of viewersByShip(presence, meId)) {
         const v = vessels.vessels.get(mmsi)
@@ -129,7 +130,7 @@ function useFollowView(map: MapLibreMap | null) {
 export function FollowBar() {
   const target = presenceUi.use((s) => s.followUser)
   const u = collab.use((s) => s.presence.find((p) => p.id === target) ?? null)
-  const m = collab.use((s) => s.members.find((x) => x.id === target) ?? null)
+  const m = collab.use((s) => s.session?.members.find((x) => x.id === target) ?? null)
   if (!target) return null
   const name = (u?.name ?? m?.name ?? 'a teammate').split(/\s+/)[0]
   return (
@@ -145,7 +146,7 @@ export function FollowBar() {
 export function Presence() {
   const inSession = useInSession()
   const map = mapStore.use((s) => s.map)
-  const priv = presenceUi.use((s) => s.private)
+  const priv = collab.use((s) => s.private)
   usePresenceOut(inSession)
   useMapAvatars(map, inSession)
   useFollowView(inSession ? map : null)

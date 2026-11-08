@@ -1,7 +1,8 @@
 import { createStore } from '../../store/store'
+import { collab } from './core'
 
-// Presence-only UI state: the private switch (the profile menu calls setPrivate) and whose view I follow.
-export const presenceUi = createStore<{ private: boolean; followUser: string | null }>({ private: false, followUser: null })
+// Whose view I follow. Private mode lives in the core store (collab.private; the profile menu sets it).
+export const presenceUi = createStore<{ followUser: string | null }>({ followUser: null })
 
-export const setPrivate = (on: boolean) => presenceUi.set({ private: on })
 export const followUser = (id: string | null) => presenceUi.set({ followUser: id })
+export const setPrivate = (on: boolean) => collab.set({ private: on })

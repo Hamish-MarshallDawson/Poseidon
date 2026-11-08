@@ -1,9 +1,10 @@
-// Self-check for presence logic. Run: node --experimental-strip-types src/collab/presence/logic.check.ts
-import { activityText, fanOffsets, initials, ringIndex, safePicture, shouldSend, trackedText, viewerText, viewersByShip, type PresenceOut, type PresenceUser } from './logic.ts'
+import { expect, test } from 'vitest'
+import { activityText, fanOffsets, initials, ringIndex, safePicture, shouldSend, trackedText, viewerText, viewersByShip, type PresenceOut, type PresenceUser } from './logic'
 
-function check(c: boolean, m: string) { if (!c) throw new Error(`presence.check: ${m}`) }
+const check = (c: boolean, m: string) => expect(c, m).toBe(true)
 const P = (o: Partial<PresenceOut> = {}): PresenceOut => ({ viewing: null, following: [], bbox: null, private: false, ...o })
 
+test('presence logic', () => {
 check(shouldSend(null, 0, P(), 0), 'first send')
 check(!shouldSend(P(), 1000, P({ viewing: 5 }), 1500), 'throttled under 2 s')
 check(shouldSend(P(), 1000, P({ viewing: 5 }), 3000), 'change after 2 s')
@@ -26,4 +27,4 @@ check(safePicture('http://x') === null && safePicture('https://x/y.png') === 'ht
 const f = fanOffsets(3)
 check(f.length === 3 && new Set(f.map((p) => `${p.x},${p.y}`)).size === 3, 'fan distinct')
 check(activityText('noted', 'Jake') === 'Jake added a note', 'activity')
-console.log('presence.check: ok')
+})

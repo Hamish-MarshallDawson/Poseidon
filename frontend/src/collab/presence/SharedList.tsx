@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { ui } from '../../store/ui'
 import { Button, Kbd } from '../../ui'
 import { useNow, useVessel } from '../../windows/hooks'
 import { TYPE_LABEL, fmtMmsi, hms } from '../../windows/format'
-import { collab, listRemove, listSetStatus, type Entry, type Member } from './core'
+import { collab, refreshActivity, listRemove, listSetStatus, selMeId, selMembers, type Entry, type Member } from './core'
 import { Avatar } from './Avatar'
 import { followUser, presenceUi } from './state'
 import { STATUS_LABEL, STATUS_ORDER, activityText, ago, trackedText, viewerText, type PresenceUser, type Status } from './logic'
@@ -52,7 +52,10 @@ function Row({ e, members, viewers, onFocus }: { e: Entry; members: Member[]; vi
 
 function Activity() {
   const activity = collab.use((s) => s.activity)
-  const members = collab.use((s) => s.members)
+  const changes = collab.use((s) => s.list)
+  // The socket carries no activity rows, so re-read when the panel opens and whenever the list changes.
+  useEffect(() => { void refreshActivity() }, [changes])
+  const members = collab.use(selMembers)
   const now = useNow()
   if (activity.length === 0) return null
   return (
@@ -76,7 +79,7 @@ function Activity() {
 
 function Online() {
   const presence = collab.use((s) => s.presence)
-  const meId = collab.use((s) => s.meId)
+  const meId = collab.use(selMeId)
   const target = presenceUi.use((s) => s.followUser)
   const others = presence.filter((p) => p.id !== meId)
   if (others.length === 0) return <p className="wl-meta">Nobody else is online.</p>
@@ -97,9 +100,9 @@ function Online() {
 
 export function SharedPanel({ onCompare, onFocus }: { onCompare: () => void; onFocus: (mmsi: number) => void }) {
   const list = collab.use((s) => s.list)
-  const members = collab.use((s) => s.members)
+  const members = collab.use(selMembers)
   const presence = collab.use((s) => s.presence)
-  const meId = collab.use((s) => s.meId)
+  const meId = collab.use(selMeId)
   const byShip = useMemo(() => {
     const m = new Map<number, PresenceUser[]>()
     for (const u of presence) if (u.id !== meId && u.viewing != null) m.set(u.viewing, [...(m.get(u.viewing) ?? []), u])
@@ -139,9 +142,9 @@ export function SharedPanel({ onCompare, onFocus }: { onCompare: () => void; onF
 /** "Aiden and Jake are viewing" and "Tracked by Mano" for a ship window. Nothing when nobody is. */
 export function ShipPresence({ mmsi }: { mmsi: number }) {
   const presence = collab.use((s) => s.presence)
-  const meId = collab.use((s) => s.meId)
+  const meId = collab.use(selMeId)
   const entry = collab.use((s) => s.list.find((e) => e.mmsi === mmsi) ?? null)
-  const members = collab.use((s) => s.members)
+  const members = collab.use(selMembers)
   const viewers = presence.filter((u) => u.id !== meId && u.viewing === mmsi)
   // Tracking = following it in Follow selected, or having added it to the shared list.
   const trackerIds = new Set(presence.filter((u) => u.id !== meId && u.following.includes(mmsi)).map((u) => u.id))

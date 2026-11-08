@@ -32,16 +32,16 @@
 
 .pr-online { margin: 0; padding: 4px 12px 8px; list-style: none; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--dvm-border-subtle); }
 .pr-online li { display: flex; align-items: center; gap: 8px; }
-.pr-online li span { flex: 1; }
+.pr-online li > span:not(.pr-av) { flex: 1; }
 .pr-activity { padding: 8px 12px; border-top: 1px solid var(--dvm-border-subtle); font-size: var(--dvm-size-label); }
 .pr-activity summary { cursor: pointer; color: var(--dvm-text-secondary); }
 .pr-activity ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
 .pr-activity li { display: flex; align-items: center; gap: 6px; }
-.pr-activity li span { flex: 1; min-width: 0; }
+.pr-activity li > span:not(.pr-av) { flex: 1; min-width: 0; }
 .pr-activity time { color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
 
 /* Follow bar: above the scrub bar, centred (a data-zone, so ship windows avoid it). */
 .pr-follow {
-  position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%); z-index: 4;
+  position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%); z-index: 35;
   display: flex; align-items: center; gap: 8px; padding: 6px 10px; white-space: nowrap;
 }

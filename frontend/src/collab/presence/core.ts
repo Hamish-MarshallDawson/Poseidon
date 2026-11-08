@@ -1,28 +1,27 @@
-import { createStore } from '../../store/store'
-import type { PresenceOut, PresenceUser, Status } from './logic'
+import { api } from '../client'
+import type { Entry, Status } from '../client'
+import { collab, refreshActivity, type CollabState } from '../store'
+import { sendPresence } from '../socket'
 
-// TEMPORARY STUB of the entry agent's core (collab/store.ts, client.ts, socket.ts). This file is the only place the
-// presence UI touches the core; when that PR merges, replace the body with re-exports and delete the stub state.
+// The presence UI's one door to the collab core (client.ts, store.ts, socket.ts). Selectors keep the shapes stable.
+export { collab, refreshActivity, sendPresence }
+export type { Entry, Member } from '../client'
+export type { Status }
 
-export interface Member { id: string; name: string | null; picture: string | null; role: 'owner' | 'member' }
-export interface Entry { mmsi: number; status: Status; added_by: string; added_at: number; updated_by: string; updated_at: number }
-export interface Activity { id: number; actor_id: string; kind: string; mmsi: number | null; at: number }
+const NO_MEMBERS: never[] = []
+export const selMeId = (s: CollabState) => s.me?.id ?? null
+export const selMembers = (s: CollabState) => s.session?.members ?? NO_MEMBERS
+export const inSession = () => collab.get().session != null
+export const useInSession = () => collab.use((s) => s.session != null)
 
-export interface CollabState {
-  meId: string | null
-  sessionId: string | null
-  members: Member[]
-  presence: PresenceUser[]
-  list: Entry[]
-  activity: Activity[]
+const sid = () => collab.get().session?.id
+async function run(f: (id: string) => Promise<unknown>) {
+  const id = sid()
+  if (!id) return
+  try { await f(id) } catch (e) { collab.set({ error: e instanceof Error ? e.message : String(e) }) }
 }
-
-export const collab = createStore<CollabState>({ meId: null, sessionId: null, members: [], presence: [], list: [], activity: [] })
-
-export const inSession = () => collab.get().sessionId != null
-export const useInSession = () => collab.use((s) => s.sessionId != null)
-
-export function sendPresence(_p: PresenceOut): void { /* stub */ }
-export async function listAdd(_mmsi: number): Promise<void> { /* stub */ }
-export async function listSetStatus(_mmsi: number, _status: Status): Promise<void> { /* stub */ }
-export async function listRemove(_mmsi: number): Promise<void> { /* stub */ }
+// The list changes arrive back as list_delta over the socket (applied idempotently by the store), so nothing to set here.
+export const listAdd = (mmsi: number) => run((id) => api.listAdd(id, mmsi))
+export const listSetStatus = (mmsi: number, status: Status) => run((id) => api.listSet(id, mmsi, status))
+export const listRemove = (mmsi: number) => run((id) => api.listRemove(id, mmsi))
+export type { Entry as ListEntry }

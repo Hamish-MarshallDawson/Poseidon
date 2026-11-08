@@ -23,6 +23,6 @@ export const removeReview = (mmsi: number) => review.set((s) => ({ list: s.list.
 export const clearReview = () => review.set({ list: [] })
 export const useInReview = (mmsi: number) => {
   const mine = review.use((s) => s.list.includes(mmsi))
-  const shared = collab.use((s) => s.sessionId != null && s.list.some((e) => e.mmsi === mmsi))
-  return collab.use((s) => s.sessionId != null) ? shared : mine
+  const shared = collab.use((s) => s.session != null && s.list.some((e) => e.mmsi === mmsi))
+  return collab.use((s) => s.session != null) ? shared : mine
 }
