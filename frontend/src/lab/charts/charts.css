@@ -1,0 +1,44 @@
+/* Lab charts: inline SVG, coloured only with --dvm-* tokens; each mark sets currentColor through a tone class. */
+.lab-chart { position: relative; width: 100%; min-width: 0; }
+.lab-chart svg { display: block; overflow: visible; font: 400 var(--dvm-size-caption) / 1 var(--dvm-font-data); }
+.lab-chart__axis text { fill: var(--dvm-text-muted); }
+.lab-chart__label { fill: var(--dvm-text-secondary); font-family: var(--dvm-font-ui); }
+.lab-chart__base { stroke: var(--dvm-border-default); }
+.lab-chart__grid { stroke: var(--dvm-border-subtle); }
+.lab-chart__line { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.lab-chart__line.dashed, .lab-chart__ref.dashed { stroke-dasharray: 4 3; }
+.lab-chart__dot { fill: currentColor; }
+.lab-chart__band { fill: currentColor; fill-opacity: 0.16; stroke: none; }
+.lab-chart__bar { fill: currentColor; fill-opacity: 0.75; }
+.lab-chart__bar.soft { fill-opacity: 0.3; }
+.lab-chart__marker { fill: currentColor; stroke: var(--dvm-bg-panel); stroke-width: 1; }
+.lab-chart__marker.stroke { fill: none; stroke: currentColor; stroke-width: 2; }
+.lab-chart__rule { stroke: currentColor; stroke-opacity: 0.25; }
+.lab-chart__ref { stroke: currentColor; stroke-width: 1.25; }
+.lab-chart__reflabel { fill: currentColor; font-family: var(--dvm-font-data); }
+.lab-chart__hits circle { fill: transparent; cursor: default; outline: none; }
+.lab-chart__hits circle:focus-visible { stroke: var(--dvm-accent-default); stroke-width: 2; }
+.lab-chart__tip {
+  position: absolute; z-index: 2; pointer-events: none;
+  max-width: min(260px, calc(100vw - 8px)); width: max-content; padding: 6px 8px; box-sizing: border-box;
+  background: var(--dvm-bg-raised); color: var(--dvm-text-primary); border: 1px solid var(--dvm-border-default);
+  border-radius: var(--dvm-radius-panel); box-shadow: var(--dvm-shadow-lift);
+  font: 400 var(--dvm-size-label) / var(--dvm-line-label) var(--dvm-font-ui);
+}
+.lab-chart__tip b { font-weight: 600; }
+
+.lab-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 0; padding: 0; list-style: none;
+  color: var(--dvm-text-secondary); font: 400 var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-ui); }
+.lab-legend li { display: inline-flex; align-items: center; gap: 5px; }
+.lab-legend svg { overflow: visible; }
+
+/* Tones. good/bad/warn are the app's signal colours; they're always paired with words on screen. */
+.lab-tone-accent { color: var(--dvm-accent-default); }
+.lab-tone-ink { color: var(--dvm-text-primary); }
+.lab-tone-muted { color: var(--dvm-text-muted); }
+.lab-tone-dark { color: var(--dvm-ship-dark); }
+.lab-tone-bad { color: var(--dvm-risk-3); }
+.lab-tone-warn { color: var(--dvm-risk-2); }
+.lab-tone-good { color: var(--lab-good); }
+:root, [data-theme="light"], [data-theme="light-hc"] { --lab-good: #2e8a6f; }
+[data-theme="dark"], [data-theme="dark-hc"] { --lab-good: #4fbf9f; }

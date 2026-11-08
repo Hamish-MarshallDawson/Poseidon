@@ -35,3 +35,20 @@ Data lives under `/home/aiden/data/poseidon/fishing/` (`FISHING_DATA`): `events/
   compute these GFW features yet.
 
 Fishing inside an MPA is not by itself illegal (many MPAs allow some fishing); the score says where to look.
+
+## Live scores (`ml.fishing.score`)
+
+Served without the GFW ingest: once a week (or per `ml.auto` cycle with `ML_FISHING_SCORE=1`) the scorer fetches the
+GFW fishing events of our regions for the last ~13 weeks, builds this week's features with `dataset.features`
+(`available_ts <= as_of`), scores every vessel with an event in the last 8 weeks using the champion in
+`<POSEIDON_DATA>/models/fishing/champion.json`, and grades past weeks.
+
+    ml/.venv/bin/python -m ml.fishing.score                         # dry run: Tiger read-only, prints counts
+    ml/.venv/bin/python -m ml.fishing.score --write --allow-tiger   # server only: writes scores and outcomes
+    ML_FISHING_SCORE=1 ML_FISHING_SCORE_WRITE=1 python -m ml.auto    # as a cycle step (write only with both)
+
+Rows: `scores` (target `fishing_mpa_7d`, mode `live`, made_at = time = the week's Monday, horizon 7 d, model_version
+= champion run id, features snapshot), id `fishing_mpa_7d:<mmsi>:<made_at>`; `outcomes` once the week ends before the
+label frontier (newest event minus 2 days): label = a fishing event inside an MPA starting that week. Inserts are
+`ON CONFLICT DO NOTHING`, so a rerun in the same week is harmless. `/lab/metrics.fishing` and
+`/lab/summary` (fishing card `fishing_live`) count them.

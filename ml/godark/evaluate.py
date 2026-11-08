@@ -21,6 +21,7 @@ import hashlib
 import html
 import json
 import time
+import os
 from pathlib import Path
 
 import numpy as np
@@ -35,7 +36,7 @@ HOLDOUT_FRAC = 0.25
 B = 1000
 SEED = 7
 OUT = D.OUT / "report"
-ARTIFACTS = Path("/home/aiden/data/poseidon/models")
+ARTIFACTS = (Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "models")
 
 
 def iso(ms: int) -> str:

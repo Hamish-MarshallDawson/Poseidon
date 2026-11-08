@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_OUT = Path(os.getenv("GODARK_GFW_DATA", "/home/aiden/data/poseidon/godark_gfw"))
+DEFAULT_OUT = Path(os.getenv("GODARK_GFW_DATA") or Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "godark_gfw")
 READ_ONLY = {"default_transaction_read_only": "on"}
 
 _EVENT = "mmsi, ts, end_ts, available_ts, recv_ts, value AS hours"

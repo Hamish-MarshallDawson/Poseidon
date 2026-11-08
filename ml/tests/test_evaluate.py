@@ -125,3 +125,12 @@ def test_skill_table_baseline_is_zero(spec):
 def test_examples_deterministic():
     a, b = make_examples(n_ships=3, days=1), make_examples(n_ships=3, days=1)
     pd.testing.assert_frame_equal(a, b)
+
+
+def test_holdout_is_not_frozen_without_enough_history(spec, examples, tmp_path):
+    """A set frozen too early would leave nothing to train on forever (the server's first cycle on a young feed)."""
+    span = int(examples["as_of"].max() - examples["as_of"].min())
+    short = examples[examples["as_of"] >= examples["as_of"].max() - min(span, ev.embargo_ms(spec))]
+    with pytest.raises(ValueError, match="not enough history"):
+        ev.freeze_holdout(spec, short, root=tmp_path)
+    assert not list((tmp_path / "holdout").glob("*.json")) if (tmp_path / "holdout").exists() else True

@@ -1,0 +1,44 @@
+/* "How it improved" (lab-improve). Tokens only; marks are told apart by shape as well as colour. */
+.lab-improve {
+  color: var(--dvm-text-primary);
+  font: 400 var(--dvm-size-body) / var(--dvm-line-body) var(--dvm-font-ui);
+}
+.lab-improve h2 { margin: 0; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); font-weight: 600; }
+.lab-improve h3 { margin: 20px 0 4px; font-size: var(--dvm-size-body); font-weight: 600; }
+.lab-improve p { margin: 6px 0; }
+.lab-improve b { font-weight: 600; }
+.lab-improve__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 8px; }
+.lab-improve__muted { color: var(--dvm-text-muted); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.lab-improve__note { color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); }
+
+.lab-improve__tabs { display: flex; border: 1px solid var(--dvm-border-default); border-radius: var(--dvm-radius-panel); overflow: hidden; }
+.lab-improve__tabs button {
+  padding: 3px 12px; border: 0; border-left: 1px solid var(--dvm-border-default); background: var(--dvm-bg-panel);
+  color: var(--dvm-text-secondary); font: 500 var(--dvm-size-label) / var(--dvm-line-label) var(--dvm-font-ui); cursor: pointer;
+}
+.lab-improve__tabs button:first-child { border-left: 0; }
+.lab-improve__tabs button[aria-selected='true'] { background: var(--dvm-text-primary); color: var(--dvm-bg-panel); }
+.lab-improve__tabs button:focus-visible { outline: 2px solid var(--dvm-accent-default); outline-offset: -2px; }
+.lab-improve__lede { max-width: 72ch; }
+.lab-improve__lede b { font-family: var(--dvm-font-data); font-size: var(--dvm-size-data); }
+
+/* chart: marks come from lab/charts; extra entries in a merged marker's tooltip get a rule above */
+.lab-improve__tip-more { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--dvm-border-subtle); }
+
+/* recalibration log */
+.lab-improve__recal ol { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.lab-improve__recal > ol > li { padding: 8px 10px; border: 1px solid var(--dvm-border-default); border-radius: var(--dvm-radius-panel); background: var(--dvm-bg-panel); }
+.lab-improve__recal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.lab-improve__recal-head b { font: 600 var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); overflow-wrap: anywhere; }
+.lab-improve__chip { padding: 0 6px; border: 1px solid var(--lab-good); font: 500 var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); text-transform: uppercase; letter-spacing: 0.6px; }
+.lab-improve__chip[data-kept='no'] { border-color: var(--dvm-risk-3); }
+.lab-improve__factors { margin: 4px 0; padding: 0; list-style: none; font: 400 var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); }
+.lab-improve__factors li { display: grid; grid-template-columns: minmax(120px, 1fr) 90px 2fr; gap: 8px; padding: 1px 0; }
+.lab-improve__factors li[data-kept='no'] { color: var(--dvm-text-muted); }
+.lab-improve__cov { color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); }
+
+@media (max-width: 600px) {
+  .lab-improve__factors li { grid-template-columns: 1fr auto; }
+  .lab-improve__factors li span:last-child { grid-column: 1 / -1; padding-left: 12px; }
+  .lab-improve__factors li[data-kept='yes'] span:last-child { display: none; }
+}

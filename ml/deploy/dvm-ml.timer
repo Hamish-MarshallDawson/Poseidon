@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the POSEIDON ML improvement cycle every 3 hours
+
+[Timer]
+OnBootSec=15min
+OnUnitInactiveSec=3h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

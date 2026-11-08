@@ -24,7 +24,7 @@ import pandas as pd
 
 import ml  # noqa: F401  (backend on sys.path)
 
-DEFAULT_OUT = Path(os.getenv("FISHING_DATA", "/home/aiden/data/poseidon/fishing"))
+DEFAULT_OUT = Path(os.getenv("FISHING_DATA") or Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "fishing")
 DATASET = "public-global-fishing-events:latest"
 LIST_COLS = {"eez": "eez", "eez12Nm": "eez12nm", "mpa": "mpa", "mpaNoTake": "mpa_no_take",
              "mpaNoTakePartial": "mpa_no_take_partial", "protectedseas": "protectedseas", "rfmo": "rfmo",
