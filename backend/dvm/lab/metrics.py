@@ -5,15 +5,16 @@
   baseline's median error on the same cases, skill = 1 - median / baseline median. Go-dark: per target, n, positives,
   mean p, hit rate, Brier and Brier skill over the observed base rate. Plus the go-dark reliability diagram (fixed p
   bins) and the top-10% lift of one model per target (the running champion, else the most graded non-baseline one).
-- `GET /lab/data?hours=168&bucket=3600`: graded outcomes per bucket and mode with a running total (counted from the
-  start of the ledger), history depth per external source (`source_windows`) and our own AIS feed, training examples
+- `GET /lab/data?hours=168&bucket=3600`: graded outcomes per bucket, one row per mode, each with its own mode's
+  running total (counted from the start of the ledger), history depth per external source (`source_windows`) and our own AIS feed, training examples
   per run and the frozen held-out sets (`model_runs` metrics).
 - `GET /lab/summary`: one card per model (route, godark, fishing): champion, offline skill from its run record, live
   skill and calibration over the last 24 h, whether the backend serves it, plus totals and the improvement cycle.
 
 Everything is read-only, bounded by `made_at` (indexed) or the hypertables' `time`, and grouped in SQL. Route
 outcomes join `route_predictions` and go-dark outcomes join `scores` on (id, time = made_at), which is one index
-probe per outcome. Gap-reappearance grades have no prediction row of their own, so their mode is `unknown`.
+probe per outcome. A gap-reappearance grade takes the mode of its gap's first route prediction (`unknown` when
+there is none).
 """
 from __future__ import annotations
 
@@ -65,20 +66,32 @@ LIFT = ("SELECT target, model_version, count(*) AS n, avg(y) AS all_hit_rate, "
         "avg(y) FILTER (WHERE rk <= $2) AS top_hit_rate FROM (SELECT o.target, s.model_version, o.label::int AS y, "
         "percent_rank() OVER (PARTITION BY o.target, s.model_version ORDER BY s.p DESC) AS rk "
         f"{_DARK_FROM}) x GROUP BY 1, 2 ORDER BY 1, 2")
-# One branch per ledger: each target joins only its own prediction table (a LEFT JOIN on both was 2.3 s on Tiger).
-_T = "(o.made_at / $2::bigint) * $2::bigint"
-OUTCOME_COUNT = (
-    f"SELECT t, mode, sum(n)::bigint AS n FROM ("
-    f"SELECT {_T} AS t, r.mode, count(*) AS n FROM outcomes o JOIN route_predictions r ON r.id = o.score_id "
-    "AND r.time = to_timestamp(o.made_at / 1000.0) AND r.time >= to_timestamp($1::bigint / 1000.0) "
-    "WHERE o.target = 'route' AND o.made_at >= $1 GROUP BY 1, 2 UNION ALL "
-    f"SELECT {_T} AS t, s.mode, count(*) AS n FROM outcomes o JOIN scores s ON s.id = o.score_id "
-    "AND s.time = to_timestamp(o.made_at / 1000.0) AND s.time >= to_timestamp($1::bigint / 1000.0) "
-    "WHERE o.target LIKE 'dark\\_%' AND o.made_at >= $1 GROUP BY 1, 2 UNION ALL "
-    f"SELECT {_T} AS t, 'unknown' AS mode, count(*) AS n FROM outcomes o "
-    "WHERE o.target NOT IN ('route') AND o.target NOT LIKE 'dark\\_%' AND o.made_at >= $1 GROUP BY 1, 2"
-    f") x GROUP BY 1, 2 ORDER BY 1, 2 LIMIT {MAX_ROWS}")
-OUTCOMES_BEFORE = "SELECT count(*) FROM outcomes WHERE made_at < $1"
+# Graded outcomes per bucket and mode. One branch per ledger: each target joins only its own prediction table (a LEFT
+# JOIN on both was 2.3 s on Tiger). A reappearance grade has no prediction row of its own: the grader stamps it with
+# the earliest made_at of the gap's route predictions for that model, so it takes that row's mode (`unknown` if none).
+def _by_mode(cmp: str) -> str:
+    """(t, mode, n) of the outcomes with made_at {cmp} $1, bucketed by $2 ms."""
+    t = "(o.made_at / $2::bigint) * $2::bigint"
+    at = "to_timestamp(o.made_at / 1000.0)"
+    bound = f"to_timestamp($1::bigint / 1000.0)"
+    return (
+        f"SELECT {t} AS t, r.mode, count(*) AS n FROM outcomes o JOIN route_predictions r ON r.id = o.score_id "
+        f"AND r.time = {at} AND r.time {cmp} {bound} WHERE o.target = 'route' AND o.made_at {cmp} $1 "
+        "GROUP BY 1, 2 UNION ALL "
+        f"SELECT {t} AS t, s.mode, count(*) AS n FROM outcomes o JOIN scores s ON s.id = o.score_id "
+        f"AND s.time = {at} AND s.time {cmp} {bound} WHERE o.target LIKE 'dark\\_%' AND o.made_at {cmp} $1 "
+        "GROUP BY 1, 2 UNION ALL "
+        f"SELECT {t} AS t, coalesce((SELECT r.mode FROM route_predictions r WHERE r.gap_id = o.event_id "
+        f"AND r.model_version = o.model_version AND r.time = {at} AND r.time {cmp} {bound} LIMIT 1), 'unknown') "
+        f"AS mode, count(*) AS n FROM outcomes o WHERE o.target = 'route_reappear' AND o.made_at {cmp} $1 "
+        "GROUP BY 1, 2 UNION ALL "
+        f"SELECT {t} AS t, 'unknown' AS mode, count(*) AS n FROM outcomes o WHERE o.target NOT IN "
+        f"('route', 'route_reappear') AND o.target NOT LIKE 'dark\\_%' AND o.made_at {cmp} $1 GROUP BY 1, 2")
+
+
+OUTCOME_COUNT = (f"SELECT t, mode, sum(n)::bigint AS n FROM ({_by_mode('>=')}) x "
+                 f"GROUP BY 1, 2 ORDER BY 1, 2 LIMIT {MAX_ROWS}")
+OUTCOMES_BEFORE = f"SELECT mode, sum(n)::bigint AS n FROM ({_by_mode('<')}) x GROUP BY 1"
 SOURCES = ("SELECT src, stream, min(start_ts) AS oldest, max(end_ts) AS newest, count(*) AS windows, "
            "sum(rows)::bigint AS rows FROM source_windows WHERE status = 'ok' GROUP BY 1, 2 ORDER BY 1, 2")
 AIS_RANGE = ("SELECT (SELECT ts FROM positions ORDER BY time LIMIT 1) AS oldest, "
@@ -176,12 +189,13 @@ def lift(rows: list[dict], champion: Optional[str]) -> list[dict]:
     return out
 
 
-def cumulative(rows: list[dict], before: int) -> list[dict]:
-    """Per-bucket counts per mode with the running total over all modes (rows ordered by t)."""
-    total, out = before, []
+def cumulative(rows: list[dict], before: dict[str, int]) -> list[dict]:
+    """Per-bucket counts, one row per mode, each with its own mode's running total since the start of the ledger
+    (`before`: per mode, what was graded before the window). Rows ordered by t."""
+    total, out = dict(before), []
     for r in rows:
-        total += r["n"]
-        out.append({"t": r["t"], "mode": r["mode"], "n": r["n"], "cumulative": total})
+        total[r["mode"]] = total.get(r["mode"], 0) + r["n"]
+        out.append({"t": r["t"], "mode": r["mode"], "n": r["n"], "cumulative": total[r["mode"]]})
     return out
 
 
@@ -328,7 +342,7 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
         since -= since % b
         async with _pool().acquire() as con:
             counts = await _fetch(con, OUTCOME_COUNT, since, b)
-            before = await con.fetchval(OUTCOMES_BEFORE, since)
+            before = {x["mode"]: x["n"] for x in await _fetch(con, OUTCOMES_BEFORE, since, b)}
             sources = await _fetch(con, SOURCES)
             ais = await con.fetchrow(AIS_RANGE)
             ais_rows = await _optional(con, AIS_ROWS)
@@ -350,7 +364,7 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                 seen.add(key)
                 holdouts.append({"target": x["target"], "name": h.get("name"), "n": h.get("n"),
                                  "start": h.get("start"), "end": h.get("end"), "hash": h.get("hash")})
-        return {"bucket": b, "outcomes": cumulative(counts, before or 0), "sources": src, "training": training,
+        return {"bucket": b, "outcomes": cumulative(counts, before), "sources": src, "training": training,
                 "holdouts": holdouts}
 
     @r.get("/lab/summary")

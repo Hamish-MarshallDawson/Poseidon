@@ -45,8 +45,9 @@ def test_pick_version_prefers_champion_then_its_base_then_real_models():
 
 
 def test_cumulative_counts_from_before():
-    rows = [{"t": 1, "mode": "backtest", "n": 5}, {"t": 1, "mode": "live", "n": 2}, {"t": 2, "mode": "live", "n": 3}]
-    assert [x["cumulative"] for x in M.cumulative(rows, 10)] == [15, 17, 20]
+    rows = [{"t": 1, "mode": "backtest", "n": 5}, {"t": 1, "mode": "live", "n": 2}, {"t": 2, "mode": "live", "n": 3},
+            {"t": 2, "mode": "unknown", "n": 1}]
+    assert [x["cumulative"] for x in M.cumulative(rows, {"live": 10})] == [5, 12, 15, 1]
 
 
 def test_offline_skill_and_find_run():
@@ -109,9 +110,14 @@ async def _seed(con):
                    "f1", "backtest", None, None, None, None))
     outs.append(("route-9-b", 9, "route", T + H, 3600, T + 3 * H, None, None, None, None, "baseline-dr-v1", "ais",
                  T + 2 * H, 55.0, 11.0, 50.0, 50.0, False, True))
-    # a gap reappearance grade (no prediction row of its own)
-    outs.append(("reappear-gap-1-x", 1, "route_reappear", T, 3000, T + H, None, None, None, 3000, "route-x", "gap_close",
-                 T + 3000_000, 55.0, 11.0, 10.0, 20.0, True, True))
+    # gap reappearance grades: one of a gap with a live route prediction (made_at T, the gap's first), one of a gap
+    # whose predictions are gone (mode unknown)
+    routes.append((f"route-1-{T}-3600-route-x-g", 1, T, T, "route-x", 3600, 55.0, 11.0, 1.0, 2.0, 55.0, 11.0,
+                   f"gap-1-{T}", "f1", "live", None, None, None, None))
+    outs.append((f"reappear-gap-1-{T}-route-x", 1, "route_reappear", T, 3000, T + H, None, None, f"gap-1-{T}", 3000,
+                 "route-x", "gap_close", T + 3000_000, 55.0, 11.0, 10.0, 20.0, True, True))
+    outs.append(("reappear-gap-2-x", 2, "route_reappear", T, 3000, T + H, None, None, "gap-2-x", 3000, "route-x",
+                 "gap_close", T + 3000_000, 55.0, 11.0, 10.0, 20.0, True, True))
     # 10 live go-dark dark_1h scores: the top one went dark, the rest did not
     scores = []
     for i in range(10):
@@ -176,12 +182,11 @@ async def _db_flow():
     (lf,) = m["lift"]
     assert lf["top_hit_rate"] == 1.0 and lf["all_hit_rate"] == pytest.approx(0.1)
 
-    by = {(x["t"], x["mode"]): x for x in d["outcomes"]}
-    assert by[(T, "live")]["n"] == 4 and by[(T, "unknown")]["n"] == 1
-    assert by[(T + H, "backtest")]["n"] == 1 and by[(T + H, "live")]["n"] == 10
-    assert d["outcomes"][-1]["cumulative"] == 16
-    assert early["outcomes"][0]["cumulative"] - early["outcomes"][0]["n"] == 5   # 5 graded before the window
-    assert early["outcomes"][-1]["cumulative"] == 16
+    # one row per bucket and mode, each mode with its own running total: live 4 route + 1 reappear at T, 10 dark at T+1h
+    assert [(x["t"], x["mode"], x["n"], x["cumulative"]) for x in d["outcomes"]] == [
+        (T, "live", 5, 5), (T, "unknown", 1, 1), (T + H, "backtest", 1, 1), (T + H, "live", 10, 15)]
+    # a window from T + 1 h counts what came before it per mode
+    assert [(x["mode"], x["cumulative"]) for x in early["outcomes"]] == [("backtest", 1), ("live", 15)]
     (src,) = d["sources"]   # positions is empty here, and the failed window does not count
     assert src == {"src": "gfw", "stream": "gaps", "label": "GFW AIS gap events", "oldest": T - 48 * H,
                    "newest": T - 24 * H, "windows": 1, "rows": 7}
@@ -198,7 +203,7 @@ async def _db_flow():
     assert godark["live"]["target"] == "dark_1h"   # no 6 h grades yet: the 1 h card
     assert godark["live"]["n"] == 10 and godark["champion"]["run_id"] is None
     assert fishing["deployed"] is False and fishing["live"] is None
-    assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 16, "graded_last_hour": 0}
+    assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 17, "graded_last_hour": 0}
     assert s["cycle"] == {"state": "manual", "last": T - H / 2, "next": None}
 
     # lab-store's columns and tables (dvm/lab/schema.py) arrive: source, since and the cycle come from them.
