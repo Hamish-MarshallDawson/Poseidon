@@ -1,0 +1,18 @@
+/* Sanctioned and notable yachts (#101): the Layers list and the ship window section. Tokens only. */
+.yl { padding: 0 16px 8px 36px; }
+.yl-list { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; }
+.yl-row {
+  display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 3px 0; border: 0; background: none;
+  font: inherit; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); color: inherit; text-align: left;
+}
+button.yl-row { cursor: pointer; }
+button.yl-row:hover .yl-name { text-decoration: underline; }
+.yl-row.is-off { color: var(--dvm-text-secondary); }
+.yl-mark { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dvm-text-muted); align-self: center; }
+.yl-mark.is-sanctioned { background: var(--dvm-ship-sanctioned); }
+.yl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.yl-state { flex: none; color: var(--dvm-text-secondary); font-family: var(--dvm-font-data); }
+.yl-state.is-noais { color: var(--dvm-ship-dark); }
+.yl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.yl-note { margin: 4px 0 0; color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
+.yc a { color: inherit; }
