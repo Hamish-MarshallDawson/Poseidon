@@ -62,7 +62,7 @@ Indexes: `(id, time)` unique, `(kind, time DESC)`, `(mmsi, time DESC)` where mms
 
 ### Global Fishing Watch (`gfw.py`)
 
-Each window is one region and one UTC day. It takes 9 calls, about 10 s in all. Checked live on 7 Nov:
+Each window is one region and one UTC day. `fetch_day` takes 9 calls or more: about 10 s in the Gulf of Oman, but 55 s in the Danish straits, where about 5,800 port visits overlap every day and take six pages. `fetch_range` (below) gets a block of days with far fewer calls. Checked live on 7 Nov:
 
 - **Per-vessel positions are unavailable**: 4Wings `group-by=VESSEL_ID` with `spatial-aggregation=false` returns 404 "temporarily unavailable". So the adapter takes what works:
   - `ais_presence` cells: anonymous 0.01° cells with `value` = hours and `n` = vessels.
@@ -74,6 +74,27 @@ Each window is one region and one UTC day. It takes 9 calls, about 10 s in all. 
 - `User-Agent: hacktheburgh-poseidon/1.0`, because Cloudflare blocks Python's default. The token comes from `GFW_API_TOKEN` or `~/.config/hedged-bets/wave.env`, and is never logged.
 - **Licence**: CC BY-NC 4.0, non-commercial. The attribution travels with every query answer (`query.observations`).
 - GFW gaps go into `observations`, not into `gaps`. That table is our own detector's output, and GFW can't fill its required fields (neighbours, cell, coverage flag).
+
+**Block fetch** (`fetch_range(client, region, bbox, start_day, end_day, recv_ts, raw_sink)`, end inclusive) returns `{day: (observations, statics, info)}`, the same per-day windows `fetch_day` gives, with the same ids and fields, so the ledger and the upserts work as before. Checked live on 8 Nov against single-day requests:
+
+- The 3 cell reports (`temporal-resolution=DAILY` over the block) give every row a `date`. Split by `date`, each day's rows equal the single-day request's.
+- Events over the block: a one-day request lists exactly the events whose `[start, end)` overlaps the day, so `event_days` puts each block event on those days, and the per-day sets match. The block request lifts the 20,000-event cap to 20,000 per day of the block, and is processed page by page.
+- **The 2 vessel reports stay one call per day.** Over a block, GFW gives each vessel one `entryTimestamp` and `exitTimestamp` for the whole block, not for the day (hours and identity do match). Those fields are the radar detection times, so they must stay per day.
+- A whole-path live comparison (fetch_day vs fetch_range, no database) was identical for 3 Gulf of Oman days. For 2 Danish days (36,000 rows) it was identical except one vessel's `speed` per day, differing in the 16th digit. That row comes from the same single-day request in both paths, so it's GFW's float noise. Tests: `tests/sources/test_gfw_range.py`, including a database check that both paths leave the same rows.
+- raw_sink gets each block response once (`presence_cells`, `events_port_visit_p0`, `events_port_visit_p1`, ...) and the per-day vessel responses as `<day>_presence_vessels` and `<day>_sar_vessels`.
+- One failed call fails the whole block, so record every day of it as an error.
+
+Measured live on 8 Nov (one request in flight, sharing the token with the Vultr backfill, so latency is noisy). Seconds per region-day, with peak process memory:
+
+| Block | Danish straits | Gulf of Oman |
+|---|---|---|
+| 1 day (`fetch_day`) | 54–55 s | 8.4–9.5 s |
+| 2–3 days | 27 s, 147 MB | 4.6 s, 72 MB |
+| 7 days | 24 s, 584 MB | 6.6 s, 86 MB |
+| 14 days (calls only) | about 17 s | — |
+| 30 days | 16.8 s, **2.2 GB** | 5.6 s, 283 MB |
+
+In the Danish straits the block's port visits dominate: 23,600 for 7 days, 34,600 for 14 and 51,500 for 30, about 5 s per 1,000-event page. Elsewhere the per-day vessel calls dominate (about 2.5 s a day). Memory grows with the block, because every day holds its own copy of the long port visits until the block returns. **Recommended block: 7 days** (2 to 3 times faster, under 0.6 GB even in the Danish straits, so regions can run side by side). Use 14 days only with memory to spare. Responses stay small for the 170 s timeout: the largest single one was 20 MB in 5 s (Danish presence cells, 30 days).
 
 ### Sentinel-1 (`sentinel1.py`)
 
