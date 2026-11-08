@@ -29,7 +29,7 @@ export class CourseLine {
     for (const id of [L_LABEL, L_LINE]) if (map.getLayer(id)) map.removeLayer(id)
     if (map.getSource(SRC)) map.removeSource(SRC)
     map.addSource(SRC, { type: 'geojson', data: EMPTY })
-    const ink = readToken('ship-dark') || '#f26aa0'
+    const ink = readToken('text-primary') || '#eee9dc'
     map.addLayer({
       id: L_LINE, type: 'line', source: SRC, filter: ['==', ['get', 'k'], 'dash'],
       layout: { 'line-cap': 'butt' }, paint: { 'line-color': ink, 'line-width': 2, 'line-opacity': ['get', 'op'] },
