@@ -32,6 +32,8 @@ GAP_TICK_S = 5                 # the gap detector's clock (dvm/gaps.py)
 WARM_FULL_S = 2 * 3600         # warm start: every Class A fix of the last 2 h (neighbours and rhythms) ...
 WARM_LAST_S = 6 * 3600         # ... and each Class A ship's last fix of the last 6 h (ships already silent)
 WARM_BATCH = 5000
+WARM_WAIT_S = 120              # longest the warm start waits for the store's setup; the detector starts empty after
+WARM_POLL_S = 0.5
 
 
 def _dt(ms: int) -> datetime:
@@ -262,6 +264,17 @@ class Hub:
         gaps that were open carry on, ships already silent get their gap, and the restart itself counts as our own
         outage. Best-effort: on failure the detector simply starts empty."""
         t0 = self.started_ms
+        # The store sets its pool only once its setup has created the tables (gaps included), so wait for that first:
+        # on a new database the warm start used to run before setup and fail with "relation gaps does not exist".
+        # Bounded, because the detector doesn't tick while the warm start is pending.
+        waited = 0.0
+        while self.store.pool is None:
+            if waited >= WARM_WAIT_S:
+                self.gaps_warm = f"failed: Tiger Data not set up after {WARM_WAIT_S:.0f} s"
+                log.warning("Gap warm start skipped: %s", self.gaps_warm)
+                return
+            await asyncio.sleep(WARM_POLL_S)
+            waited += WARM_POLL_S
         try:
             con = await asyncpg.connect(self.store.url, command_timeout=300,
                                         server_settings={"default_transaction_read_only": "on"})
