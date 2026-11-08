@@ -9,8 +9,6 @@ import { fmtInt, utcTime } from '../windows/format'
 // Live: "LIVE · 18,432 ships". Replay: "REPLAY · Sat 19:03Z · 9,214 ships". A Show filter replaces the count.
 export function StatusLine() {
   const feed = ui.use((s) => s.feed)
-  const focus = ui.use((s) => s.focusMmsi)   // focus wording stays until cl-ship removes focus mode
-  const related = ui.use((s) => s.focusRelated.length)
   const show = ui.use((s) => s.show)
   ui.use((s) => s.view)   // re-render with each map pass, which follows the data
   yachts.use((s) => s.byMmsi)   // the yachts filter counts from this list
@@ -21,7 +19,7 @@ export function StatusLine() {
 
   const parts = [
     ...(replay ? [`${day} ${utcTime(feed.now_ts)}`] : []),
-    focus !== null ? `Nearby ships · ${related} shown` : show === 'all' ? ships : null,
+    show === 'all' ? ships : null,
     replay && feed.paused ? 'paused' : null,
     stalled ? 'our feed paused' : null,
   ].filter(Boolean)

@@ -7,14 +7,13 @@ import { readToken } from '../../theme/tokens'
 import { themeStore } from '../../theme/theme'
 import { rgba } from '../colour'
 import { computeSlots, deadCells, bandOf, HEAT_FADE, type Chip, type View } from '../density'
-import { findNearby, focusGeometry, openGap } from '../focus'
-import { getTrack } from '../../data/track'
+import { inferredSegment, openGap } from '../focus'
 import { headingOf, lonOf, latOf, mercX, mercY, sizeTier, type SizeTier } from '../geo'
 import { isFull, OPACITY, ringOffsets, sortKey, zTier, FAN_RADIUS, type Rank } from '../stacking'
-import { openShipWindow, setFocus } from '../actions'
+import { openShipWindow } from '../actions'
 import { BASEMAP_FIRST_LABEL_LAYER } from '../../basemap'
 import { Colour, createShipLayer, InstanceBuffer, N_COLOURS, writeMotion, type ShipLayerHooks } from './layer'
-import { buildAtlas, hullKey, LETTER_PX, TIERS, TYPES, type HullType, type Sprite } from './sprites'
+import { buildAtlas, hullKey, TIERS, TYPES, type HullType, type Sprite } from './sprites'
 import { CourseLine } from './course'
 import { shownNow } from '../../timeline/replay'
 import { ghostRadius } from '../../forecast/geo'
@@ -26,7 +25,7 @@ import { ATTRIBUTION, popular, popularCells, popularFeatures } from '../../data/
 setShownClock(shownNow)
 
 // Owns everything ship-shaped on the map: per-ship motion state (typed arrays), the slot pass (caps, priority,
-// separation, hysteresis), the GPU layer, heat map, stack chips, fan-out, focus mode and hit-testing.
+// separation, hysteresis), the GPU layer, heat map, stack chips, fan-out and hit-testing.
 // Nothing here runs per ship per frame on the CPU: the vertex shader animates; the CPU rebuilds the (capped) instance
 // list only when a fix arrives for a drawn ship, a slot changes, or the selection changes.
 
@@ -37,15 +36,13 @@ const SPOOF_OFFSET: Record<SizeTier, number> = { far: 5, mid: 7, near: 10 }
 const CLASS_B_SCALE = 0.75              // Class B hull size: the non-colour cue next to the violet colour
 const SLOT_FADE_S = 0.15, DIM_FADE_S = 0.2
 const DATA_PASS_MS = 2000               // slot pass for new data at most this often while the map is still
-const FOCUS_PASS_MS = 2000
 const PAD = 0.15                        // fraction of the viewport added on each side for culling
 
 const L = {
   heat: 'dvm-heat', dead: 'dvm-dead', deadEdge: 'dvm-dead-edge',
-  ghost: 'dvm-focus-ghost', ghostEdge: 'dvm-focus-ghost-edge', inferred: 'dvm-focus-inferred',
-  nTrack: 'dvm-nearby-track', cpaLink: 'dvm-nearby-link', cpa: 'dvm-nearby-cpa', cpaLabel: 'dvm-nearby-label', cross: 'dvm-focus-cross', chips: 'dvm-chips', fan: 'dvm-fan', ships: 'dvm-ships',
+  inferred: 'dvm-inferred', chips: 'dvm-chips', fan: 'dvm-fan', ships: 'dvm-ships',
 }
-const S = { heat: 'dvm-heat', dead: 'dvm-dead', focus: 'dvm-focus', chips: 'dvm-chips', fan: 'dvm-fan' }
+const S = { heat: 'dvm-heat', dead: 'dvm-dead', inferred: 'dvm-inferred', chips: 'dvm-chips', fan: 'dvm-fan' }
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 const FONT = ['Barlow Semi Condensed Medium']   // served from public/basemap/fonts (scripts/basemap/glyphs.py)
 
@@ -79,11 +76,7 @@ export class ShipController {
   private ranks = new Map<number, Rank>()
   private fan: Fan | null = null
   private lastPass = 0
-  private lastFocusPass = 0
   private passTimer: number | undefined
-  private focusTimer: number | undefined
-  private nearbyFor: number | null = null          // the ship the running or finished nearby search belongs to
-  private nearbyFeatures: GeoJSON.Feature[] = []   // its tracks, closest-approach markers and labels
   private fadeTimer: number | undefined
   private colourCache = { list: new Float32Array(N_COLOURS * 4), key: new Float32Array(3), dim: 0.45 }
   private unsubs: (() => void)[] = []
@@ -133,7 +126,7 @@ export class ShipController {
     this.readColours()
     this.addImages(map)
     const add = (id: string, data = EMPTY) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data }) }
-    add(S.heat); add(S.dead, deadCells(vessels.coverage.values())); add(S.focus); add(S.chips); add(S.fan)
+    add(S.heat); add(S.dead, deadCells(vessels.coverage.values())); add(S.inferred); add(S.chips); add(S.fan)
     const ink = readToken('text-primary') || '#eee9dc'
     // Density and no-receiver fills go under the basemap's land, so cells never tint land (dashboard map, layer 2 of 4).
     const underLand = map.getLayer('coast-land') ? 'coast-land' : undefined
@@ -159,22 +152,8 @@ export class ShipController {
       id: L.deadEdge, type: 'line', source: S.dead,
       paint: { 'line-color': readToken('coverage-dead') || '#888', 'line-width': 1, 'line-dasharray': [3, 2] },
     })
-    const kind = (k: string) => ['==', ['get', 'kind'], k] as ['==', ['get', string], string]
-    map.addLayer({ id: L.ghost, type: 'fill', source: S.focus, filter: kind('ghost'), paint: { 'fill-color': readToken('ship-ghost-fill') || '#f26aa033' } })
-    map.addLayer({ id: L.ghostEdge, type: 'line', source: S.focus, filter: kind('ghost'), paint: { 'line-color': readToken('ship-ghost-edge') || '#f26aa0', 'line-width': 1, 'line-dasharray': [4, 3], 'line-opacity': 0.5 } })
     this.track.attach(map)
-    map.addLayer({ id: L.inferred, type: 'line', source: S.focus, filter: kind('inferred'), paint: { 'line-color': readToken('accent-default') || '#86c9e8', 'line-width': 1.5, 'line-dasharray': [3, 3] } })
-    // Nearby ships: the others' 6 h tracks (thin, muted: the accent is the focal ship's own track), a link and a marker at
-    // each closest approach, and a "13:40Z · 1.2 km" label that is dropped where it would collide.
-    map.addLayer({ id: L.nTrack, type: 'line', source: S.focus, filter: kind('ntrack'), layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': readToken('text-muted') || ink, 'line-width': 1, 'line-opacity': 0.55 } })
-    map.addLayer({ id: L.cpaLink, type: 'line', source: S.focus, filter: kind('cpa-link'), paint: { 'line-color': ink, 'line-width': 1, 'line-opacity': 0.6 } })
-    map.addLayer({ id: L.cpa, type: 'circle', source: S.focus, filter: kind('cpa'), paint: { 'circle-radius': 3, 'circle-color': readToken('bg-app') || '#000', 'circle-stroke-color': ink, 'circle-stroke-width': 1.5 } })
-    map.addLayer({
-      id: L.cpaLabel, type: 'symbol', source: S.focus, filter: kind('cpa-label'),
-      layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-anchor': 'left', 'text-offset': [0.8, 0], 'text-allow-overlap': false },
-      paint: { 'text-color': ink, 'text-halo-color': readToken('bg-app') || '#000', 'text-halo-width': 1.5 },
-    })
-    map.addLayer({ id: L.cross, type: 'symbol', source: S.focus, filter: kind('cross'), layout: { 'icon-image': 'dvm-cross', 'icon-allow-overlap': true, 'icon-ignore-placement': true } })
+    map.addLayer({ id: L.inferred, type: 'line', source: S.inferred, paint: { 'line-color': readToken('accent-default') || '#86c9e8', 'line-width': 1.5, 'line-dasharray': [3, 3] } })
     map.addLayer({
       id: L.chips, type: 'symbol', source: S.chips,
       layout: {
@@ -200,7 +179,7 @@ export class ShipController {
       map.on('mouseout', this.onMouseOut)
     }
     this.slotPass()
-    this.focusPass(true)
+    this.drawInferred()
   }
 
   detach(): void {
@@ -215,7 +194,7 @@ export class ShipController {
     this.unsubs = []
     this.track.dispose()
     window.clearTimeout(this.popTimer); this.popAbort?.abort()
-    window.clearTimeout(this.passTimer); window.clearTimeout(this.focusTimer); window.clearTimeout(this.fadeTimer)
+    window.clearTimeout(this.passTimer); window.clearTimeout(this.fadeTimer)
   }
 
   /** Signal set or text size changed on the same basemap: re-add our layers with the new token colours. */
@@ -254,7 +233,7 @@ export class ShipController {
     if (touched) this.gpu.invalidate()
     else if (moved) this.gpu.patch()
     this.schedulePass()
-    if (ui.get().focusMmsi != null) this.scheduleFocusPass()
+    this.drawInferred()
     this.track.touch()
   }
 
@@ -280,18 +259,15 @@ export class ShipController {
   // ---- ui ---------------------------------------------------------------------------------------------------------
 
   private onUi(s: UIState, p: UIState): void {
-    if (s.focusMmsi !== p.focusMmsi) {
-      if (s.focusMmsi == null) this.clearFocusGeometry()
-      this.focusPass(true)
-    }
+    if (s.windows !== p.windows) this.drawInferred()
     if (s.heat !== p.heat || s.layers.density !== p.layers.density) {
       this.applyLayerVisibility(s.layers)
       if (s.heat === 'popular') this.schedulePopular(); else { this.popAbort?.abort(); popular.set({ loading: false }); this.slotPass() }
     }
     if (s.show !== p.show) { this.applyLayerVisibility(s.layers); this.selectionChanged = true; this.slotPass() }
     if (s.follow !== p.follow) { this.applyLayerVisibility(s.layers); this.selectionChanged = true; this.gpu.invalidate() }
-    if (s.windows !== p.windows || s.focusMmsi !== p.focusMmsi || s.follow !== p.follow) this.track.touch(true)
-    if (s.windows !== p.windows || s.focusRelated !== p.focusRelated || s.focusMmsi !== p.focusMmsi) { this.selectionChanged = true; this.slotPass() }
+    if (s.windows !== p.windows || s.follow !== p.follow) this.track.touch(true)
+    if (s.windows !== p.windows) { this.selectionChanged = true; this.slotPass() }
     else if (s.hoverMmsi !== p.hoverMmsi) this.gpu.invalidate()
     if (s.layers !== p.layers) this.applyLayerVisibility(s.layers)
   }
@@ -327,10 +303,8 @@ export class ShipController {
     const t0 = this.lastPass
     const s = ui.get()
     const pinned = new Set<number>(s.windows.map((w) => w.mmsi))
-    if (s.focusMmsi != null) pinned.add(s.focusMmsi)
-    const related = new Set(s.focusRelated.map((r) => r.mmsi))
     const res = computeSlots({
-      state: this.state, view, nowMs: vessels.now_ts || Date.now(), now: clock(), pinned, related,
+      state: this.state, view, nowMs: vessels.now_ts || Date.now(), now: clock(), pinned,
       ranks: this.ranks, held: this.held, capOverride: this.opts.capOverride, pad: PAD, allow: showFilter(s.show).match,
     })
     const drawn = res.drawn.map((slot) => this.state.mmsi[slot])
@@ -361,7 +335,6 @@ export class ShipController {
   private avoidGhosts(res: ReturnType<typeof computeSlots>, map: MapLibreMap, view: View): void {
     const s = ui.get(), t = shownNow()
     const picked = new Set<number>(s.windows.map((w) => w.mmsi))
-    if (s.focusMmsi != null) picked.add(s.focusMmsi)
     const zones: { x: number; y: number; r: number }[] = []
     for (const g of vessels.gaps.values()) {
       if (g.state !== 'open' || g.start_ts > t || g.coverage_flag === 'own_stall') continue
@@ -424,9 +397,7 @@ export class ShipController {
     const tier = view ? sizeTier(view.zoom) : 'far'
     const reduce = st.reducedMotion
     const windows = new Map(s.windows.map((w) => [w.mmsi, w]))
-    const focusing = s.focusMmsi != null
     const following = s.follow
-    const related = new Set(s.focusRelated.map((r) => r.mmsi))
     const nowMs = vessels.now_ts || Date.now()
     const fanned = this.fan ? new Set(this.fan.mmsis) : null
 
@@ -444,13 +415,12 @@ export class ShipController {
       const v = slot === undefined ? undefined : st.view[slot]
       if (slot === undefined || !v) { this.fades.delete(mmsi); continue }
       const holds = this.drawnSet.has(mmsi) || mmsi === s.hoverMmsi || !!fanned?.has(mmsi)
-      const top = windows.has(mmsi) || mmsi === s.focusMmsi || mmsi === s.hoverMmsi
+      const top = windows.has(mmsi) || mmsi === s.hoverMmsi
       const rank = this.ranks.get(mmsi)
-      const zt = zTier(v, related.has(mmsi), rank)
+      const zt = zTier(v, rank)
       let target: number
       if (!holds || (following && !windows.has(mmsi))) target = 0
-      else if (top) target = mmsi === s.focusMmsi && v.status === 'gap_open' ? 0.35 : 1
-      else if (focusing) target = related.has(mmsi) ? OPACITY.full : this.colourCache.dim
+      else if (top) target = 1
       else target = isFull(zt) ? OPACITY.full : OPACITY.routine
       let f = this.fades.get(mmsi)
       if (!f) { f = { from: 0, to: target, t: now, dur: reduce ? 0 : SLOT_FADE_S, leaving: false }; this.fades.set(mmsi, f) }
@@ -499,7 +469,7 @@ export class ShipController {
       if (to > 0) hits.push({ mmsi: it.mmsi, slot: it.slot, offX: off?.[0] ?? 0, offY: off?.[1] ?? 0, r: Math.max(8, (len * scale) / 2) })
     }
 
-    // Upright overlays above every hull: brackets + letter for windows (and focus, hover), sanctioned badges.
+    // Upright overlays above every hull: brackets for windows (and hover), sanctioned badges.
     const box = OVERLAY_BOX[tier]
     for (const it of sorted) {
       const yacht = yachtBadge(it.mmsi)
@@ -513,12 +483,9 @@ export class ShipController {
         buf.push(it.slot, `ovl:sanctioned:${tier}`, c, false, ox + d, oy - d, 1, from, to, t, dur)
       }
       const w = windows.get(it.mmsi)
-      if (w || it.mmsi === s.focusMmsi || it.mmsi === s.hoverMmsi) {
-        const hoverOnly = !w && it.mmsi !== s.focusMmsi
+      if (w || it.mmsi === s.hoverMmsi) {
+        const hoverOnly = !w
         buf.push(it.slot, `ovl:selected:${tier}`, Colour.Selected, false, ox, oy, 1, hoverOnly ? 0.55 : 1, hoverOnly ? 0.55 : 1, 0, 0)
-      }
-      if (w && w.letter.length === 1) {
-        buf.push(it.slot, `letter:${w.letter}`, Colour.Selected, false, ox + box / 2 + LETTER_PX / 2 + 3, oy - box / 2 + LETTER_PX / 2, 1, 1, 1, 0, 0)
       }
     }
     this.hits = hits
@@ -575,16 +542,14 @@ export class ShipController {
 
   private onClick = (e: MapMouseEvent): void => {
     const hit = this.pick(e.point.x, e.point.y)
-    const s = ui.get()
     if (hit) {
       this.closeFan()
-      if (s.focusMmsi != null) setFocus(hit.mmsi === s.focusMmsi ? null : hit.mmsi)   // click the focused ship again: leave
-      else openShipWindow(hit.mmsi, hit)
+      openShipWindow(hit.mmsi, hit)
       return
     }
     const chip = this.map?.queryRenderedFeatures(e.point, { layers: [L.chips] })[0]
     if (chip) { this.openChip(this.chips[Number(chip.properties?.i)], e.point); return }
-    this.closeFan()                                // a click on water closes a fan or list; it never leaves focus
+    this.closeFan()                                // a click on water closes a fan or list
   }
 
   private hoverChip: number | null = null
@@ -631,7 +596,7 @@ export class ShipController {
       const v = vessels.vessels.get(m)
       if (!v) return -1
       const r = this.ranks.get(m)
-      return sortKey(v, zTier(v, false, r), r, nowMs)
+      return sortKey(v, zTier(v, r), r, nowMs)
     }
     return [...mmsis].sort((a, b) => key(b) - key(a) || a - b)
   }
@@ -674,10 +639,9 @@ export class ShipController {
     this.gpu.invalidate()
   }
 
-  /** Esc: close a fan or list first, then leave focus. Returns true when it did something. */
+  /** Esc: close a fan or list. Returns true when it did something. */
   escape(): boolean {
     if (this.fan || ui.get().stack) { this.closeFan(); return true }
-    if (ui.get().focusMmsi != null) { setFocus(null); return true }
     return false
   }
 
@@ -691,7 +655,7 @@ export class ShipController {
     this.lastZoomPass = performance.now()
     this.slotPass()
   }
-  private onMoveEnd = (): void => { this.slotPass(); if (ui.get().heat === 'popular') this.schedulePopular(); if (ui.get().focusMmsi != null) this.focusPass(true) }
+  private onMoveEnd = (): void => { this.slotPass(); if (ui.get().heat === 'popular') this.schedulePopular(); }
 
   // ---- popular places ---------------------------------------------------------------------------------------------
 
@@ -720,51 +684,18 @@ export class ShipController {
     }
   }
 
-  // ---- focus ------------------------------------------------------------------------------------------------------
-
-  private scheduleFocusPass(): void {
-    if (this.focusTimer !== undefined) return
-    const wait = Math.max(0, FOCUS_PASS_MS - (performance.now() - this.lastFocusPass))
-    this.focusTimer = window.setTimeout(() => { this.focusTimer = undefined; this.focusPass(false) }, wait)
-  }
-
-  private focusPass(force: boolean): void {
-    if (!force && performance.now() - this.lastFocusPass < FOCUS_PASS_MS) { this.scheduleFocusPass(); return }
-    this.lastFocusPass = performance.now()
-    const s = ui.get()
-    const f = s.focusMmsi != null ? vessels.vessels.get(s.focusMmsi) : undefined
-    if (!f || !this.map) { this.nearbyFor = null; if (s.focusRelated.length || s.focusLoading) ui.set({ focusRelated: [], focusLoading: false }); return }
-    if (this.nearbyFor !== f.mmsi) this.startNearby(f)
-    this.drawFocus(f)
-  }
-
-  /** Nearby ships search for a newly focused ship: once per focus, not every pass. */
-  private startNearby(f: VesselView): void {
-    const mmsi = f.mmsi
-    this.nearbyFor = mmsi
-    this.nearbyFeatures = []
-    ui.set({ focusRelated: [], focusLoading: true })
-    findNearby(f, vessels.vessels.values(), vessels.now_ts || Date.now(), getTrack, () => this.nearbyFor !== mmsi)
-      .then((res) => {
-        if (!res || this.nearbyFor !== mmsi) return
-        this.nearbyFeatures = res.features
-        ui.set({ focusRelated: res.relations, focusLoading: false })
-        this.drawFocus(vessels.vessels.get(mmsi))
-      })
-      .catch(() => { if (this.nearbyFor === mmsi) ui.set({ focusLoading: false }) })
-  }
-
-  private drawFocus(f: VesselView | undefined): void {
-    if (!f) return
-    const gap = f.status === 'gap_open' ? openGap(vessels.gaps.values(), f.mmsi) : undefined
-    const geo = focusGeometry(gap, vessels.now_ts || Date.now())
-    geo.features.push(...this.nearbyFeatures)
-    ;(this.map?.getSource(S.focus) as GeoJSONSource | undefined)?.setData(geo)
-  }
-
-  private clearFocusGeometry(): void {
-    this.nearbyFor = null; this.nearbyFeatures = []
-    ;(this.map?.getSource(S.focus) as GeoJSONSource | undefined)?.setData(EMPTY)
+  // Dashed dead-reckoning segment for each open window whose ship has gone dark (the ghost is ForecastOverlay's).
+  private drawInferred(): void {
+    const src = this.map?.getSource(S.inferred) as GeoJSONSource | undefined
+    if (!src) return
+    const now = vessels.now_ts || Date.now()
+    const features: GeoJSON.Feature[] = []
+    for (const w of ui.get().windows) {
+      const gap = vessels.vessels.get(w.mmsi)?.status === 'gap_open' ? openGap(vessels.gaps.values(), w.mmsi) : undefined
+      const f = gap && inferredSegment(gap, now)
+      if (f) features.push(f)
+    }
+    src.setData({ type: 'FeatureCollection', features })
   }
 
   // ---- images for MapLibre layers (built per theme) ---------------------------------------------------------------
@@ -798,14 +729,6 @@ export class ShipController {
       g.fillStyle = ink
       for (let i = 0; i < 3; i++) g.fillRect(5 + i * 1.5, 6 + i * 3, 7, 1.5)
     }), { stretchX: [[17 * ratio, 36 * ratio]], stretchY: [[5 * ratio, 15 * ratio]], content: [17 * ratio, 3 * ratio, 36 * ratio, 17 * ratio] })
-    const mag = readToken('ship-dark') || '#f26aa0'
-    put('dvm-cross', make(14, 14, (g) => {
-      g.lineCap = 'round'
-      for (const [w, c] of [[4, keyline], [2, mag]] as const) {
-        g.strokeStyle = c; g.lineWidth = w
-        g.beginPath(); g.moveTo(3, 3); g.lineTo(11, 11); g.moveTo(11, 3); g.lineTo(3, 11); g.stroke()
-      }
-    }))
   }
 
   /** Ships in the store (for status and tests). */

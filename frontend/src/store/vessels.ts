@@ -13,7 +13,7 @@ export interface Frame {
   trails?: Record<string, [number, number, number][]>
 }
 
-// How far back a ship's track history goes (focus mode draws it).
+// How far back a ship's track history goes (the selected ship's track draws it).
 export const TRAIL_MS = 24 * 3600_000   // matches the 24 h GET /track read
 
 export type VesselListener = (changed: number[], removed: number[], frame: Frame) => void
