@@ -36,6 +36,30 @@ ml/.venv/bin/python -m pytest -q ml/route/tests
 6) sets the feature pool size; LightGBM uses 4 threads per model (`num_threads`), because all-core OpenMP on a busy
 machine was 100x slower.
 
+## One command on another machine (Hamish's desktop)
+
+Fresh checkout, Python 3.12, no keys, no database, no GPU (LightGBM on CPU; no PyTorch). Works on Windows (the
+feature pool falls back to spawn with memory-mapped files):
+
+```bash
+git clone -b 121-ml-route git@github.com:Hamish-MarshallDawson/Hedged-Bets-hacktheburgh.git && cd Hedged-Bets-hacktheburgh
+python3.12 -m venv ml/.venv && ml/.venv/bin/pip install -r ml/requirements.txt          # Windows: ml\.venv\Scripts\pip
+ml/.venv/bin/python -m ml.data.dma --days 14 --until 2026-11-05 --out DATA/dma --delete-zips
+ml/.venv/bin/python -m ml.route.train --data DATA/dma --out DATA/models/route-dma14
+```
+
+Outputs in `DATA/models/route-dma14/`: `model.json` and 14 LightGBM text dumps (`h<h>_east.txt`, `h<h>_north.txt`,
+about 31 MB) that `backend/dvm/predict` loads as they are, and `metrics.json` (held-out description and hash,
+per-horizon metrics with intervals, strata, dead-zone sets, the promotion decision, run time, peak memory). The
+held-out set is frozen at `DATA/models/holdout/route-v1.json`. Attach the directory to a draft release; never
+commit it. Optional: `ROUTE_WORKERS` (feature processes, default 6), `ROUTE_THREADS` (LightGBM, default 8).
+
+Measured here (16 cores shared with other jobs): venv 16 s; `ml.data.dma` about 8 min for 14 days (37 s per day in
+a fresh 3-day run), 1.8 GB output, 15 GB peak while converting; `ml.route.train` about 3.5 min for 14 days
+(examples 75 s, fit and score about 60 s), peak 10.5 GB RAM; about 40 s for 3 days at 2.7 GB. More days scale
+roughly linearly (`--days 90`: plan about 20 min, 60 GB RAM for the examples step; use `ROUTE_WORKERS=4` if short
+on memory).
+
 ## The artifact (what the backend runs)
 
 `ml.core.registry.save_artifact` writes `model.json` plus `h<h>_east.txt` / `h<h>_north.txt` LightGBM text dumps.
@@ -55,7 +79,32 @@ horizon h must end before it starts (embargo = h, 24 h in the loop). Inside trai
 horizon's span calibrates the radii, again with an embargo. Skill = 1 - median error / median baseline error, with a
 paired bootstrap 95% interval. Strata: ship type, speed class, case kind.
 
-RESULTS_PLACEHOLDER
+### Results (8 Nov 2026, 14 Danish days 23 Oct to 5 Nov, artifact `route-dma14-v3`)
+
+Held-out `route-v1`: the newest 20% of the as_of span (from 4 Nov 04:46 UTC), 99,421 cases, hash `3e3ee05559152b66`;
+training labels end 24 h before it. Errors in metres; skill with paired-bootstrap 95% intervals. The promotion rule
+(ml/core) passes against the baseline.
+
+| horizon | n | median | baseline | p90 | skill [95% CI] | cover 80% / 95% |
+|---|---|---|---|---|---|---|
+| 1 h | 89,112 | 1,556 | 2,328 | 7,987 | 0.332 [0.323, 0.340] | 0.79 / 0.95 |
+| 3 h | 81,870 | 6,508 | 15,763 | 25,166 | 0.587 [0.582, 0.592] | 0.79 / 0.95 |
+| 6 h | 73,810 | 14,146 | 44,328 | 53,997 | 0.681 [0.677, 0.685] | 0.79 / 0.94 |
+| 24 h | 41,235 | 40,729 | 296,035 | 183,496 | 0.862 [0.860, 0.865] | 0.77 / 0.93 |
+| synthetic dead zones (median gap 69 min) | 1,052 | 2,018 | 2,953 | 12,817 | 0.317 [0.229, 0.409] | 0.81 / 0.95 |
+
+Read with care: at 24 h dead reckoning is ~300 km off, so a large skill there mostly says the baseline is weak; the
+model still misses by a median 41 km. Skill is highest for ferries (they repeat routes) and lowest for fishing boats.
+
+**Transfer to our live AIS** (the same model scored on Tiger, 7 to 8 Nov, our own fixes and closed gaps): inside the
+Danish box (lat 53.5 to 58.5, lon 7 to 16) skill is 0.39 at 1 h and 0.59 at 3 h, coverage 0.74 / 0.93; on 102 real
+gaps there, 0.23 [-0.16, 0.50] (too few to be sure). Worldwide it still beats dead reckoning (0.18 at 1 h, 0.50 at
+6 h) but the radii are too narrow (coverage 0.60 / 0.87), and on 1,154 real gaps worldwide it is no better than the
+baseline (0.03 [-0.09, 0.14]). Outside Danish waters, trust the point less and widen the circle; a worldwide model
+needs worldwide tracks (GFW, or our own feed as it accumulates).
+
+Run time on a 16-core desktop (shared with other jobs, 8 LightGBM threads): examples about 75 s for 14 days
+(6 feature workers), fitting and scoring about 60 s; peak memory about 10.5 GB while building examples.
 
 ## Options not on by default
 
