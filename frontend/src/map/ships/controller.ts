@@ -21,7 +21,6 @@ import { ghostOf } from '../../forecast/geo'
 import { clock, setShownClock, ShipState } from './state'
 import { yachts, yachtBadge } from '../../yachts/store'
 import { showFilter } from '../../show/registry'
-import { ATTRIBUTION, popular, popularCells, popularFeatures } from '../../data/popular'
 
 setShownClock(shownNow)
 
@@ -149,9 +148,6 @@ export class ShipController {
         'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], HEAT_FADE[0], HEAT_OPACITY, HEAT_FADE[1], 0],
       },
     }, map.getLayer(BASEMAP_FIRST_LABEL_LAYER) ? BASEMAP_FIRST_LABEL_LAYER : underLand)
-    // Carries the GFW attribution into the map's credits while Popular places is on (visibility follows the heat map).
-    if (!map.getSource('dvm-popular-attr')) map.addSource('dvm-popular-attr', { type: 'geojson', data: EMPTY, attribution: ATTRIBUTION })
-    map.addLayer({ id: 'dvm-popular-attr', type: 'line', source: 'dvm-popular-attr' })
     map.addLayer({ id: L.dead, type: 'fill', source: S.dead, paint: { 'fill-pattern': 'dvm-hatch', 'fill-antialias': false } }, underLand)
     map.addLayer({
       id: L.deadEdge, type: 'line', source: S.dead,
@@ -175,7 +171,6 @@ export class ShipController {
     this.course.attach(map)
     this.delayed.attach(map)
     this.applyLayerVisibility(ui.get().layers)
-    if (ui.get().heat === 'popular') this.schedulePopular()
     if (first) {
       map.on('moveend', this.onMoveEnd)
       map.on('zoom', this.onZoom)
@@ -200,7 +195,6 @@ export class ShipController {
     for (const u of this.unsubs) u()
     this.unsubs = []
     this.track.dispose()
-    window.clearTimeout(this.popTimer); this.popAbort?.abort()
     window.clearTimeout(this.passTimer); window.clearTimeout(this.fadeTimer)
   }
 
@@ -267,10 +261,7 @@ export class ShipController {
 
   private onUi(s: UIState, p: UIState): void {
     if (s.windows !== p.windows) this.drawInferred()
-    if (s.heat !== p.heat || s.layers.density !== p.layers.density) {
-      this.applyLayerVisibility(s.layers)
-      if (s.heat === 'popular') this.schedulePopular(); else { this.popAbort?.abort(); popular.set({ loading: false }); this.slotPass() }
-    }
+    if (s.layers.density !== p.layers.density) this.slotPass()
     if (s.show !== p.show) { this.applyLayerVisibility(s.layers); this.selectionChanged = true; this.slotPass() }
     if (s.follow !== p.follow) { this.applyLayerVisibility(s.layers); this.selectionChanged = true; this.gpu.invalidate() }
     if (s.windows !== p.windows || s.follow !== p.follow) this.track.touch(true)
@@ -284,11 +275,7 @@ export class ShipController {
     if (!map) return
     const vis = (ids: string[], on: boolean) => { for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none') }
     const following = ui.get().follow, filtering = ui.get().show !== 'all'   // a Show filter hides the heat map and chips like Follow selected
-    const pop = ui.get().heat === 'popular'
-    vis([L.heat], layers.density && !following && (pop || !filtering))
-    vis(['dvm-popular-attr'], layers.density && pop)
-    // Popular places is always visible; the live heat map fades out as ships fade in.
-    if (map.getLayer(L.heat)) map.setPaintProperty(L.heat, 'heatmap-opacity', pop ? HEAT_OPACITY : ['interpolate', ['linear'], ['zoom'], HEAT_FADE[0], HEAT_OPACITY, HEAT_FADE[1], 0])
+    vis([L.heat], layers.density && !following && !filtering)
     vis([L.chips], !following && !filtering)
     vis([L.dead, L.deadEdge], layers.coverage)
   }
@@ -321,7 +308,7 @@ export class ShipController {
     const map = this.map!
     this.avoidGhosts(res, map, view)
     this.chips = res.chips
-    if (ui.get().heat === 'live') (map.getSource(S.heat) as GeoJSONSource | undefined)?.setData(res.heat)
+    ;(map.getSource(S.heat) as GeoJSONSource | undefined)?.setData(res.heat)
     ;(map.getSource(S.chips) as GeoJSONSource | undefined)?.setData(this.chipFeatures())
     const b = map.getBounds()
     let dead = 0
@@ -663,34 +650,7 @@ export class ShipController {
     this.lastZoomPass = performance.now()
     this.slotPass()
   }
-  private onMoveEnd = (): void => { this.slotPass(); if (ui.get().heat === 'popular') this.schedulePopular(); }
-
-  // ---- popular places ---------------------------------------------------------------------------------------------
-
-  private popTimer: number | undefined
-  private popAbort: AbortController | undefined
-  // Debounced, and the previous request is aborted when the view moves again.
-  private schedulePopular(): void {
-    window.clearTimeout(this.popTimer)
-    this.popTimer = window.setTimeout(() => void this.popularPass(), 400)
-  }
-  private async popularPass(): Promise<void> {
-    const map = this.map
-    if (!map || ui.get().heat !== 'popular' || !ui.get().layers.density) return
-    this.popAbort?.abort()
-    const ac = this.popAbort = new AbortController()
-    const b = map.getBounds()
-    const clamp = (v: number, lim: number) => Math.max(-lim, Math.min(lim, v))
-    popular.set({ loading: true })
-    try {
-      const r = await popularCells([clamp(b.getWest(), 180), clamp(b.getSouth(), 85), clamp(b.getEast(), 180), clamp(b.getNorth(), 85)], map.getZoom(), ac.signal)
-      if (ac.signal.aborted) return
-      ;(map.getSource(S.heat) as GeoJSONSource | undefined)?.setData(popularFeatures(r.cells))
-      popular.set({ loading: false, label: r.label })
-    } catch {
-      if (!ac.signal.aborted) popular.set({ loading: false, label: 'Popular places · could not load' })
-    }
-  }
+  private onMoveEnd = (): void => { this.slotPass() }
 
   // Dashed dead-reckoning segment for each open window whose ship has gone dark (the ghost is ForecastOverlay's).
   private drawInferred(): void {
