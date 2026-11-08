@@ -3,6 +3,7 @@ import { Button, Lamp, Panel, Switch } from '../ui'
 import { ui } from '../store/ui'
 import { resetTheme, setTheme, useTheme, type ThemeState } from './theme'
 import './theme.css'
+import { ReportLink } from '../forecast/ReportLink'
 
 // Display menu, top-right: theme, signal colours, text size and motion, as lamp rows like the layers panel.
 const groups = [
@@ -39,6 +40,7 @@ export function ThemeSettings() {
       </div>
       <div className="dvm-theme-menu__foot">
         <Button variant="ghost" onClick={resetTheme}>Follow system settings</Button>
+        <ReportLink className="dvm-theme-menu__link" />
       </div>
     </>
   )

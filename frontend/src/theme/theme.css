@@ -32,4 +32,5 @@
 .dvm-theme-menu__group > legend.dvm-section-label { float: left; width: 100%; box-sizing: border-box; }
 .dvm-theme-menu__group > legend + * { clear: left; }
 .dvm-theme-menu__foot { padding: 6px 10px 4px; }
+.dvm-theme-menu__link { display: block; padding: 6px 6px 2px; color: var(--dvm-accent-default); font-size: var(--dvm-size-label); }
 .dvm-row:has(input:focus-visible) { outline: 2px solid var(--dvm-accent-default); outline-offset: -2px; }

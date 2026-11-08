@@ -261,8 +261,9 @@ const Ticks = memo(function Ticks({ view, width }: { view: View; width: number }
 })
 
 // Event markers and the coverage strip for the visible window. Only watchlisted and selected ships, plus freeze/coverage.
-function Markers({ view, width }: { view: View; width: number }) {
-  const [events, setEvents] = useState<TimelineEvent[]>([])
+// memo: the bar re-renders with the replay clock, but a live /timeline can hold 10,000 events (only the shown ships draw).
+const Markers = memo(function Markers({ view, width }: { view: View; width: number }) {
+  const [all, setEvents] = useState<TimelineEvent[]>([])
   const windows = ui.use((s) => s.windows)
   const rangeKey = `${Math.round(view.from / 30_000)}:${Math.round(spanOf(view) / 30_000)}`
   const vRef = useRef(view)
@@ -274,23 +275,29 @@ function Markers({ view, width }: { view: View; width: number }) {
       adapter?.timeline(v.from - spanOf(v) * 0.1, v.to).then((e) => { if (!dead) setEvents(e) }, () => {})
     }
     const t0 = window.setTimeout(load, 300)
-    const id = window.setInterval(load, 15_000)
+    const id = window.setInterval(load, 60_000)
     // A snapshot (first data, a seek, back to live) can bring new events: reload soon after it, coalesced.
     let soon: number | undefined
     const off = vessels.subscribe((_c, _r, f) => { if (f.type === 'snapshot') { window.clearTimeout(soon); soon = window.setTimeout(load, 300) } })
     return () => { dead = true; off(); window.clearTimeout(t0); window.clearTimeout(soon); window.clearInterval(id) }
   }, [rangeKey])
 
+  // Only watchlisted and windowed ships (plus freeze and coverage marks): the whole list is filtered once per change.
+  const shownKey = `${vessels.watchlist?.snapshot_ts ?? 0}:${windows.map((w) => w.mmsi).join(',')}`
+  const events = useMemo(() => {
+    const shown = new Set<number>([...(vessels.watchlist?.entries.map((e) => e.mmsi) ?? []), ...windows.map((w) => w.mmsi)])
+    return all.filter((e) => !('mmsi' in e) || shown.has(e.mmsi))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [all, shownKey])
+
   if (!width) return null
   const span = spanOf(view)
   const x = (t: number) => ((t - view.from) / span) * width
-  const shown = new Set<number>([...(vessels.watchlist?.entries.map((e) => e.mmsi) ?? []), ...windows.map((w) => w.mmsi)])
-  const visible = (e: TimelineEvent) => !('mmsi' in e) || shown.has(e.mmsi)
   const seekOpen = (t: number, mmsi?: number) => { replay.seek(t); if (mmsi) openShip(mmsi) }
 
   // Gaps: spans in two lanes.
   const laneEnd = [-Infinity, -Infinity]
-  const gaps = events.filter((e): e is Extract<TimelineEvent, { kind: 'gap' }> => e.kind === 'gap' && visible(e))
+  const gaps = events.filter((e): e is Extract<TimelineEvent, { kind: 'gap' }> => e.kind === 'gap')
     .sort((a, b) => a.start_ts - b.start_ts).map((g) => {
       const end = g.end_ts ?? view.to
       const lane = laneEnd[0] <= g.start_ts ? 0 : 1
@@ -300,7 +307,7 @@ function Markers({ view, width }: { view: View; width: number }) {
 
   // Point markers, merged into a count when closer than 6 px.
   type Pt = Exclude<TimelineEvent, { kind: 'gap' | 'coverage' }>
-  const pts = events.filter((e): e is Pt => e.kind !== 'gap' && e.kind !== 'coverage' && visible(e))
+  const pts = events.filter((e): e is Pt => e.kind !== 'gap' && e.kind !== 'coverage')
     .map((e) => ({ e, px: x(e.ts) })).filter((p) => p.px >= 0 && p.px <= width).sort((a, b) => a.px - b.px)
   const groups: { px: number; items: Pt[] }[] = []
   for (const p of pts) {
@@ -338,7 +345,7 @@ function Markers({ view, width }: { view: View; width: number }) {
       })}
     </>
   )
-}
+})
 
 interface Item { key: string; label: string; checked: boolean; run: () => void; keepOpen?: boolean }
 function Menu({ label, items, onClose }: { label: string; items: Item[]; onClose: () => void }) {

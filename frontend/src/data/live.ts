@@ -155,14 +155,20 @@ export function createLiveAdapter(opts: AdapterOptions): DataAdapter {
       if (!res.ok) throw new Error(`GET /sources: ${res.status}`)
       return res.json()
     },
+    async leaderboard() {
+      const token = await opts.getToken()
+      const res = await fetch(`${opts.httpBase}/model/leaderboard?hours=24`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      if (!res.ok) throw new Error(`GET /model/leaderboard: ${res.status}`)
+      return res.json()
+    },
     modelReport() {
       reportCheck ??= (async () => {
         const token = await opts.getToken()
         const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+        // The route needs the Bearer token, which a plain new-tab link cannot send: fetch it once, open it as a blob.
         try {
-          let res = await fetch(`${opts.httpBase}/model/report`, { method: 'HEAD', headers })
-          if (res.status === 405) res = await fetch(`${opts.httpBase}/model/report`, { headers })
-          return res.ok ? `${opts.httpBase}/model/report` : null
+          const res = await fetch(`${opts.httpBase}/model/report`, { headers })
+          return res.ok ? URL.createObjectURL(new Blob([await res.text()], { type: 'text/html' })) : null
         } catch { return null }
       })()
       return reportCheck

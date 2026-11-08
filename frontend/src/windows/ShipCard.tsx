@@ -5,6 +5,7 @@ import { Button } from '../ui'
 import { details } from './detail'
 import { useGap, useNow, useVessel, useWatchlist } from './hooks'
 import { DECISION_LABEL, TYPE_LABEL, fmtMmsi, hms, utcTime } from './format'
+import { raisedBy } from '../forecast/labels'
 import type { VesselView } from '../types'
 import { runBriefing } from '../briefing/store'
 import { fmtEta, matchDestination, usePortInfo } from '../ports'
@@ -73,7 +74,9 @@ export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
   const score = detail?.score
   const rank = v.risk_rank ?? score?.rank ?? null
   const decision = entry ? DECISION_LABEL[entry.decision] : ''
-  const p = v.risk_p !== null ? `${Math.round(v.risk_p * 100)} %` : null
+  const pv = v.risk_p ?? (score?.target === 'dark_6h' ? score.p : null)
+  const p = pv !== null ? `${Math.round(pv * 100)} %` : null
+  const raised = raisedBy(score?.contrib)
 
   return (
     <div className={`sc ${noAis ? 'is-noais' : ''}`}>
@@ -97,9 +100,11 @@ export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
       <YachtSection mmsi={mmsi} />
       {p && (
         <p className="sc-note">
-          <b>{noAis ? 'Forecast before the silence' : 'Forecast · next 6 h'}</b>{' '}
-          {p}{noAis ? '' : ' chance of a silence with reception normal nearby'}{rank ? ` · rank ${rank}` : ''}
+          <b>{noAis ? 'Forecast before the silence' : 'Chance of going dark, next 6 h:'}</b>{' '}
+          {p}{rank ? ` · rank ${rank}` : ''}
           {noAis ? (score ? ` · made ${utcTime(score.made_at, false)}` : '') : decision ? ` · ${decision}` : ''}
+          {raised.length > 0 && <> · raised by {raised.join(', ')}</>}
+          {score?.model_version && <span className="sc-model"> · {score.model_version}</span>}
         </p>
       )}
       <div className="sc-actions">

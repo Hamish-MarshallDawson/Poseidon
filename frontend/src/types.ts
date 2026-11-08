@@ -117,3 +117,10 @@ export type ClientMsg =
   | { type: "session_leave" }
   | { type: "auth"; dev_user: string }                                  // local dev only (VITE_AUTH=off)
   | { type: "presence"; viewing: number | null; following: number[]; bbox: [number, number, number, number] | null; private: boolean };
+
+// GET /model/leaderboard (#121): live skill from the graded ledger, last `hours`. Loose: only what the UI reads.
+export interface LeaderboardRoute { target: string; model_version: string; horizon_s: number; n: number;
+  median_err_m: number; baseline_median_err_m: number | null; skill: number | null; coverage_80: number | null; coverage_95: number | null }
+export interface LeaderboardDark { target: string; model_version: string; horizon_s: number; n: number; positives: number;
+  brier: number; base_rate_brier: number; brier_skill: number | null }
+export interface Leaderboard { hours: number; live_route: LeaderboardRoute[]; live_godark: LeaderboardDark[] }
