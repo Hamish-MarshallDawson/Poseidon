@@ -9,7 +9,19 @@ POSEIDON watches live ship tracking (AIS) and flags ships that go quiet while ot
 
 ![The live picture over the Baltic and Gulf of Finland: ships, heat map, review list and replay bar (illustrative data)](docs/readme/map-overview.jpg)
 
-*Illustrative data throughout this README.* Every picture was captured with the demo data set, and each one carries an ILLUSTRATIVE DATA banner. Ships with names such as SYN 1393 are synthetic. Named ships and sample text are demo content, not findings about real vessels, and the pictures do not show what the live feed says today.
+**The pictures in this README are illustrative.** They were captured on a demo data set. Ships named SYN are synthetic, and the sample briefing text is demo content. Nothing in a picture is a finding about a real vessel, and the pictures do not show what the live feed says today.
+
+## Contents
+
+- [The problem](#the-problem)
+- [What it does](#what-it-does): [the live picture](#the-live-picture), [dark-ship candidates](#dark-ship-candidates), [the ship window](#the-ship-window), [predictions and risk](#predictions-and-risk), [review list and briefings](#review-list-and-briefings), [replay](#replay), [collaboration](#collaboration), [extras](#extras)
+- [How it works](#how-it-works)
+- [Models and results](#models-and-results)
+- [Data sources](#data-sources)
+- [Run it locally](#run-it-locally)
+- [Project layout](#project-layout)
+- [How we built it](#how-we-built-it)
+- [Team](#team)
 
 ## The problem
 
@@ -27,9 +39,16 @@ How big is it? A 2022 study of Global Fishing Watch data for 2017 to 2019 found 
 
 A world map shows ships from AISStream and, for Finnish waters, from Digitraffic (Fintraffic). The two feeds are merged, so a ship heard by both is shown and stored once. A status line shows the connection, how many ships are on screen and the message rate. Ships are drawn as one GPU layer, so the whole world stays smooth. Class A and Class B ships use colours that are readable for people with colour-vision differences, and there is a heat map, which can show the live density or popular places.
 
-![Zoomed in on the Gulf of Finland: Class A and Class B ships in accessible colours, with headings (illustrative data)](docs/readme/ships-zoomed.jpg)
-
-*Illustrative data.* Zoomed in on the Gulf of Finland. Class A and Class B ships use different colours and headings show the direction of travel.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/readme/ships-zoomed.jpg" alt="Zoomed in on the Gulf of Finland: Class A and Class B ships in accessible colours, with headings (illustrative data)"></td>
+    <td width="50%"><img src="docs/readme/show-dark-candidates.jpg" alt="The map filtered to dark-ship candidates; the pink markers are the candidates (illustrative data)"></td>
+  </tr>
+  <tr>
+    <td>Zoomed in on the Gulf of Finland. Class A and Class B ships use different colours, and headings show the direction of travel.</td>
+    <td>The "Show" setting filtered to dark-ship candidates. The pink markers are candidates, not findings.</td>
+  </tr>
+</table>
 
 ### Dark-ship candidates
 
@@ -44,21 +63,20 @@ The gap detector runs on Class A ships. A ship is a **candidate** when it has be
 
 Silences at anchor or moored are not gaps. Our own outages are removed from the judgement. A candidate is a prompt to look, not a finding: the label says the silence *looks* deliberate.
 
-![The map filtered to dark-ship candidates; the pink markers are the candidates (illustrative data)](docs/readme/show-dark-candidates.jpg)
-
-*Illustrative data.* "Show" set to dark-ship candidates. The pink markers are candidates, not findings.
-
 ### The ship window
 
 Click a ship and a floating window opens with its name, MMSI, IMO, type, speed, course and destination. It also shows the ship's departure and arrival ports (From → To), its recent track, its open and recent gaps, its risk score and any route prediction. Leader lines tie each window to its ship on the map.
 
-![A ship window with identity, the 24 hour track and the Brief me and Add to review buttons (illustrative data)](docs/readme/ship-window.jpg)
-
-*Illustrative data.* A ship window: identity, last AIS time and speed, the 24 hour track, and the actions.
-
-![Three ship windows, each with a leader line back to its ship (illustrative data)](docs/readme/ship-windows-several.jpg)
-
-*Illustrative data.* Several ship windows at once. Leader lines tie each window to its ship.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/readme/ship-window.jpg" alt="A ship window with identity, last AIS time and speed, the 24 hour track and the Brief me and Add to review buttons (illustrative data)"></td>
+    <td width="50%"><img src="docs/readme/ship-windows-several.jpg" alt="Three ship windows, each with a leader line back to its ship (illustrative data)"></td>
+  </tr>
+  <tr>
+    <td>A ship window: identity, last AIS time and speed, the 24 hour track, and the actions.</td>
+    <td>Several ship windows at once. Leader lines tie each window to its ship.</td>
+  </tr>
+</table>
 
 ### Predictions and risk
 
@@ -69,12 +87,13 @@ Click a ship and a floating window opens with its name, MMSI, IMO, type, speed, 
 
 With no trained model loaded, every ship gets the same baseline risk, so the ranking carries no information. The ranking becomes useful once a trained champion model is loaded (see [Models and results](#models-and-results)).
 
-![A ship window with the route forecast layer on: the predicted path and the uncertainty ring (illustrative data)](docs/readme/route-forecast.jpg)
+![A ship window with its track and course line (illustrative data)](docs/readme/route-forecast.jpg)
 
-*Illustrative data.* The route forecast for a quiet ship: the predicted path and the uncertainty ring.
+The ship window with its track and course line. The offline demo data has no route forecast overlay, so the route forecast is described from the code, not shown here.
+
 ![Forecast check panel listing the top 10 ships against three baselines (illustrative data)](docs/readme/forecast-check.jpg)
 
-*Illustrative data.* The forecast check for the top 10 ships. It sets the frozen forecast against what happened and against three simple baselines. Here the ranges overlap, so the check cannot yet show that the model beats them.
+The forecast check for the top 10 ships. It sets the frozen forecast against what happened and against three simple baselines. Here the ranges overlap, so the check cannot yet show that the model beats them.
 
 ### Review list and briefings
 
@@ -83,33 +102,67 @@ With no trained model loaded, every ship gets the same baseline risk, so the ran
 - **Brief me.** A Gemini summary of the picked ships. It says whether the model flagged a ship, and why, or whether a user added it. An optional spoken version uses ElevenLabs.
 - **Session summary.** Any member can ask for a summary of the session's notes, saved briefings and listed ships.
 
-![The review list with ships added from their windows, each with who added it (illustrative data)](docs/readme/review-list.jpg)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/readme/review-list.jpg" alt="The review list with system-ranked ships, their scores, and a ship added by a user (illustrative data)"></td>
+    <td width="50%"><img src="docs/readme/compare-ships.jpg" alt="Compare panel for two ships picked in the review list, side by side (illustrative data)"></td>
+  </tr>
+  <tr>
+    <td>The review list: system-ranked ships with their scores, and a ship added by a user, with Focus on map and Dismiss.</td>
+    <td>Compare two ships picked in the review list, side by side.</td>
+  </tr>
+</table>
 
-*Illustrative data.* The review list, with ships added from their windows and who added each one.
-
-![Compare panel for two ships picked in the review list (illustrative data)](docs/readme/compare-ships.jpg)
-
-*Illustrative data.* Compare two ships side by side.
 ![A generated briefing for two ships, with the reasons for each and the note that it is a sample (illustrative data)](docs/readme/briefing.jpg)
 
-*Illustrative data.* A briefing shown in sample mode, because no live backend was connected when this was captured. The real text is written by Gemini from the ships' data. Its reasons are the signals behind each ship, and it says a silent ship is not evidence of wrongdoing.
+A briefing for two ships, shown as a sample because no live backend was connected when it was captured. In the live system, Gemini writes the text from the ships' data. Each ship's reasons are the signals behind it, and the briefing says that a silent ship is not evidence of wrongdoing.
 
 ### Replay
 
-A scrub bar takes the picture back to any moment in the stored history. Play it at 1 to 600 times real speed, or pause. Gaps, risk, the watchlist and route predictions are all shown as they were at the replay time. Seeking to a time across the whole world takes about 5 seconds.
+A scrub bar takes the picture back to any moment in the stored history. Play it at 1×, 10×, 60× or 300× real speed, or pause. Gaps, risk, the watchlist and route predictions are all shown as they were at the replay time. Seeking to a time across the whole world takes about 5 seconds.
 
-![Replay mode with the scrub bar, the replay timestamp and the speed control (illustrative data)](docs/readme/timeline-replay.jpg)
-
-*Illustrative data.* Replay mode, paused, with the scrub bar, the timestamp and the speed.
-
-![Replay with Follow selected on: the map follows the two selected ships (illustrative data)](docs/readme/timeline-follow.jpg)
-
-*Illustrative data.* Replay with "Follow selected" on. The map follows the two selected ships.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/readme/timeline-replay.jpg" alt="Replay mode with the scrub bar, the replay timestamp, the speed control and Back to live (illustrative data)"></td>
+    <td width="50%"><img src="docs/readme/timeline-follow.jpg" alt="Replay with Follow selected on for two ships: the map follows them and the button reads Following 2 ships (illustrative data)"></td>
+  </tr>
+  <tr>
+    <td>Replay mode with the scrub bar, the timestamp, the speed and Back to live.</td>
+    <td>Replay with "Follow selected" on for two ships. The button reads "Following 2 ships".</td>
+  </tr>
+</table>
 
 ### Collaboration
 
 A team works in a **session**. An owner invites people with a one-time link that lasts 7 days, or by email to someone who has signed in. Members see who is viewing and following which ship, share the review list and notes, and read an activity log. A member can set their presence to private and still see others. A session resumes when you sign in again.
 
+The collaboration pictures below come from a local run with two demo users and the demo ship set. They are illustrative too, and the names in them are demo names.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/readme/collab-invite-incoming.jpg" alt="Invites panel: Ana has invited you to a session, with Accept and Decline (illustrative data, two demo users)"></td>
+    <td width="50%"><img src="docs/readme/collab-joined-toast.jpg" alt="Confirmation after joining: You have joined the session with four other members (illustrative data, two demo users)"></td>
+  </tr>
+  <tr>
+    <td>An incoming invite, with Accept and Decline.</td>
+    <td>After joining, a short confirmation names the session and its members.</td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/readme/collab-session-bar.jpg" alt="Session bar with the session title, the Invite / Join button, member face and the Review and Channel counts (illustrative data, two demo users)"></td>
+    <td width="50%"><img src="docs/readme/collab-members-faces.jpg" alt="Invite panel with an invite waiting for a member and the session's member list with the owner marked (illustrative data, two demo users)"></td>
+  </tr>
+  <tr>
+    <td>The session bar with the session title, the Invite / Join button and the member face.</td>
+    <td>The invite panel: a pending invite, and the member list with the owner marked.</td>
+  </tr>
+</table>
+
+![The session channel, empty, with the line "A flag is a prompt to review, not an accusation" above the message box (illustrative data, two demo users)](docs/readme/collab-channel.jpg)
+
+The session channel, empty in this run. It carries the same neutral wording as the review list.
 
 ## Extras
 
@@ -121,13 +174,16 @@ These are useful, but they are not the main job of the product.
 - **Digitraffic.** A second live feed for Finnish waters.
 - **Themes.** Light, dark, high-contrast and larger text, with a colour-vision signal mode.
 
-![Delayed layers switched on: radar detections (3 days old), radar passes (13 hours old) and GFW gap events (3 days old) (illustrative data)](docs/readme/radar-gfw-layers.jpg)
-
-*Illustrative data.* The delayed layers, each with its age. Radar and gap events are never shown as live.
-
-![Show set to sanctioned and notable yachts, with sources credited in the panel (illustrative data)](docs/readme/show-yachts.jpg)
-
-*Illustrative data.* "Show" set to sanctioned and notable yachts. The panel credits OpenSanctions and Wikipedia.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/readme/radar-gfw-layers.jpg" alt="Delayed layers switched on: radar detections (3 days old), radar passes (13 hours old) and GFW gap events (3 days old) (illustrative data)"></td>
+    <td width="50%"><img src="docs/readme/show-yachts.jpg" alt="Show set to sanctioned and notable yachts, with sources credited in the panel (illustrative data)"></td>
+  </tr>
+  <tr>
+    <td>The delayed layers, each with its age. Radar and gap events are never shown as live.</td>
+    <td>"Show" set to sanctioned and notable yachts. The panel credits OpenSanctions and Wikipedia.</td>
+  </tr>
+</table>
 
 ## How it works
 
