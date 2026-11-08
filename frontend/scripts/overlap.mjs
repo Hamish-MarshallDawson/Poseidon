@@ -56,7 +56,7 @@ function collect() {
   return { count: boxes.length, overlaps: out, boxes: boxes.map((b) => ({ name: b.name, x: b.x, y: b.y, w: b.w, h: b.h })) }
 }
 
-// In-page inner check: inside Ranked rows and ship windows, leaf text/control boxes that intersect, and children
+// In-page inner check: inside Review rows and ship windows, leaf text/control boxes that intersect, and children
 // that stick out of their card's content box horizontally.
 function collectInner() {
   const out = []
@@ -99,8 +99,7 @@ async function two(p, ax, ay, bx, by) { const a = await open(p, ax, ay); const b
 
 const STATES = [
   ['01-base', async () => {}],
-  ['02-ranked', (p) => p.evaluate(() => window.__dev.ui.set({ watchlistOpen: true }))],
-  ['03-review', (p) => p.evaluate(() => window.__dev.ui.set({ reviewOpen: true }))],
+  ['02-review', (p) => p.evaluate(() => window.__dev.ui.set({ reviewOpen: true }))],
   ['04-layers', (p) => p.evaluate(() => window.__dev.ui.set({ layersOpen: true }))],
   ['05-display', (p) => p.click('.dvm-menu-toggle')],
   ['06-legend', (p) => p.evaluate(() => window.__dev.ui.set({ legendOpen: true }))],

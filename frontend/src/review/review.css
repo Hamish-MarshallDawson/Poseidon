@@ -1,4 +1,4 @@
-/* Review list and Compare. Reuses the Watchlist panel, row and bar classes (panels.css, briefing.css); only the additions are here. */
+/* Review list and Compare. Reuses the panel and bar classes in panels.css and briefing.css; only the additions are here. */
 .rv-list { margin: 0; padding: 0; list-style: none; }
 .rv-item { padding: 12px; border-bottom: 1px solid var(--dvm-border-subtle); }
 .rv-item.is-noais .rv-timer { color: var(--dvm-ship-dark); }
@@ -23,3 +23,11 @@
 .rv-colhead b { font-weight: 600; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); }
 .rv-colhead span { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); }
 .rv-colhead:hover b, .rv-colhead:focus-visible b { text-decoration: underline; }
+.rv-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 12px; border-top: 1px solid var(--dvm-border-subtle); }
+.rv-link { border: 0; background: none; padding: 0; color: var(--dvm-text-secondary); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); text-decoration: underline; cursor: pointer; }
+.rv-link:focus-visible { outline: 1px solid var(--dvm-accent-default); outline-offset: 2px; }
+.rv-actions { flex-wrap: wrap; align-items: center; }
+.rv-item .wl-name { text-overflow: ellipsis; }
+.rv-item .wl-note { display: block; min-height: 0; }
+.rv-item .rv-timer { flex: none; font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
+.rv-item .wl-pick { right: 12px; top: 12px; }
