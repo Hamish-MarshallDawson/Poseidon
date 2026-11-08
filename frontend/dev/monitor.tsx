@@ -10,7 +10,6 @@ import { openShipWindow, shipScreenPoint } from '../src/windows/open'
 import { runBriefing } from '../src/briefing/store'
 import { yachts } from '../src/yachts/store'
 import { setShow } from '../src/show/state'
-import { DelayedLayers } from '../src/panels/DelayedLayers'
 import { startClock } from '../src/timeline/replay'
 
 // The synthetic feed forces mode 'live' every second; while __hold is set, keep the replay mode a test chose.
@@ -34,8 +33,4 @@ const dev = {
 }
 ;(window as unknown as { __dev: typeof dev }).__dev = dev
 startClock()
-createRoot(document.getElementById('root')!).render(<>
-  <Monitor getToken={async () => undefined} onLogout={() => {}} />
-  {/* Temporary test mount: the lead mounts <DelayedLayers /> in the Display panel. Dev page only, with ?delayed. */}
-  {location.search.includes('delayed') && <div className="panel" style={{ position: 'fixed', left: 16, top: 70, width: 300, zIndex: 50 }}><DelayedLayers /></div>}
-</>)
+createRoot(document.getElementById('root')!).render(<Monitor getToken={async () => undefined} onLogout={() => {}} />)
