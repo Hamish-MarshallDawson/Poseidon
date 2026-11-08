@@ -43,7 +43,7 @@ export class LabBoundary extends Component<{ onClose: () => void; children: Reac
 export function LabChip() {
   const open = useLabOpen()
   return (
-    <button type="button" className={`chip ${open ? 'on' : ''}`} aria-haspopup="dialog" onClick={openLab}>
+    <button type="button" className={`chip ${open ? 'on' : ''}`} aria-haspopup="dialog" onClick={() => openLab()}>
       <span className="chip-square" aria-hidden />Model Lab
     </button>
   )
