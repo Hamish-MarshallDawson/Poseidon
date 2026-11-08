@@ -12,6 +12,7 @@ Environment=POSEIDON_DATA=/opt/dvm/ml-data
 Environment=PREDICT_MODEL_DIR=/opt/dvm/models
 Environment=ML_THREADS=3
 Environment=ML_DEPLOY_RETRAINED=0
+Environment=ML_DEPLOY_RECAL=0
 ExecStart=/opt/dvm/ml/.venv/bin/python -m ml.auto --targets godark,fishing,route --rounds 1 --proposals 3
 Nice=19
 IOSchedulingClass=idle

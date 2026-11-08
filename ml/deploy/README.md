@@ -1,10 +1,14 @@
 # The improvement loop on the server (`python -m ml.auto`)
 
 Every 3 hours (`dvm-ml.timer`), one cycle under an exclusive lock (a cycle that finds it held exits):
-1. **Recalibrate from the graded ledger** (`ml.core.recalibrate --apply`): route radius factors per horizon and
+1. **Recalibrate from the graded ledger** (`ml.core.recalibrate`): route radius factors per horizon and
    go-dark logit shifts, fitted on the older half of the graded outcomes of the live champions and kept only if the
-   newer half gets closer to nominal. A kept fit becomes `<version>-calN` in `/opt/dvm/models` and champions.json is
-   rewritten atomically; the predictor reloads it every cycle, no restart. Old folders stay for rollback.
+   newer half gets closer to nominal. A head that was measured and refused keeps its radii (factor 1.0); only a head
+   with too few graded rows takes the kept heads' median factor. A kept fit becomes `<version>-calN` in
+   `/opt/dvm/models` and is recorded (status file, Lab history), but **not installed** unless `ML_DEPLOY_RECAL=1`
+   (off by default: Hamish decides installs). With it, champions.json is rewritten atomically; the predictor reloads
+   it every cycle, no restart. To install a recorded one by hand, point champions.json at the `-calN` folder.
+   Old folders stay for rollback.
 2. **Retrain** each target (godark, fishing, route): refresh its data from Tiger read-only (and GFW for fishing,
    5 minutes, polite), then one `ml.core.loop` round: 3 Gemini proposals, only with `ML_GEMINI_API_KEY` (a separate key, so the
    briefings' `GEMINI_API_KEY` quota is never used; one call per model and cycle, capped per day), else the fixed

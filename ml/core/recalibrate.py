@@ -106,15 +106,20 @@ def write_route(src: Path, dst: Path, fit: dict, rows_info: str) -> dict:
     k95d = float(np.median([f["k95"] for f in kept.values()]))
     used = {}
     for hs, spec in m["heads"].items():
-        f = kept.get(int(hs))
-        k80, k95 = (f["k80"], f["k95"]) if f else (k80d, k95d)
+        f = fit.get(int(hs))
+        if f is None:                 # too few graded rows to measure: the kept heads' median factor
+            k80, k95 = k80d, k95d
+        elif f["keep"]:
+            k80, k95 = f["k80"], f["k95"]
+        else:                         # measured and the fit refused (already calibrated): unchanged
+            k80, k95 = 1.0, 1.0
         for key, k in (("radius_m_80", k80), ("radius_m_95", k95)):
             v = spec[key]
             if isinstance(v, dict):
                 v["r"] = [round(x * k, 1) for x in v["r"]]
             else:
                 spec[key] = round(float(v) * k, 1)
-        used[hs] = {"k80": k80, "k95": k95, "measured": bool(f)}
+        used[hs] = {"k80": k80, "k95": k95, "measured": f is not None, "kept": bool(f and f["keep"])}
     parent = m["version"]
     m["version"] = dst.name
     m.setdefault("recalibrations", []).append({"parent": parent, "method": "radius x quantile(error/radius)",

@@ -479,11 +479,16 @@ def append_cycle(status: dict, reg, root: Path, out: Path, source: str = "server
                            "label": f"{t} {st['deployed']} live", "detail": {"by": "ml.auto",
                                                                               "run": (after or {}).get("run_id")}})
     rc = status.get("recalibrate") or {}
+    installed = bool(rc.get("applied"))
     for t, version in (rc.get("changed") or {}).items():
         events.append({"ts": ms(status.get("started")), "target": t, "kind": "recalibrated",
                        "run_id": version.split("-cal")[0], "version": version,
-                       "label": f"recalibrated -> {version}", "detail": {"by": "ml.auto", "rows": rc.get("rows"),
-                                                                         "kept": True}})
+                       "label": f"recalibrated -> {version}" + ("" if installed else " (recorded, not installed)"),
+                       "detail": {"by": "ml.auto", "rows": rc.get("rows"), "kept": True, "deployed": installed}})
+        if installed:
+            events.append({"ts": ms(status.get("started")), "target": t, "kind": "deployed",
+                           "run_id": version.split("-cal")[0], "version": version, "label": f"{t} {version} live",
+                           "detail": {"by": "ml.auto", "recalibrated": True}})
     out.mkdir(parents=True, exist_ok=True)
     for name, recs in (("runs", runs), ("proposals", props), ("events", events)):
         with open(out / f"{name}.jsonl", "a") as f:

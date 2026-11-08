@@ -164,8 +164,18 @@ def test_append_cycle_adds_loop_runs_proposals_and_events(tmp_path):
     assert kinds == ["promoted", "proposal", "recalibrated", "trained"]
     rc = next(e for e in b["events"] if e["kind"] == "recalibrated")
     assert rc["run_id"] == "route-dma90-v2" and rc["version"] == "route-dma90-v2-cal2"
+    assert rc["detail"]["deployed"] is False and "not installed" in rc["label"]   # no ML_DEPLOY_RECAL: recorded only
     H.append_cycle(status, reg, tmp_path, out)              # appends; the importer dedupes
     assert len(H.read_bundle(out)["runs"]) == 4
+
+
+def test_append_cycle_installed_recalibration_is_deployed(tmp_path):
+    status = {"started": "2026-11-08T10:00:00+00:00", "targets": {},
+              "recalibrate": {"rows": {"route": 10}, "changed": {"route": "route-dma90-v2-cal2"}, "applied": True}}
+    H.append_cycle(status, FileRegistry(tmp_path / "reg"), tmp_path, tmp_path / "out")
+    ev = H.read_bundle(tmp_path / "out")["events"]
+    assert sorted(e["kind"] for e in ev) == ["deployed", "recalibrated"]
+    assert all(e["version"] == "route-dma90-v2-cal2" for e in ev)
 
 
 def test_deploy_events_map_versions_to_runs_and_skip_baselines():

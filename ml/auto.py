@@ -4,8 +4,10 @@
 
 Order, all under one exclusive lock (ML_LOCK, default <ML_ARTIFACTS>/../auto.lock; a second cycle that finds it
 held exits at once, so two trainings never overlap):
-1. Recalibrate the live champions from the graded ledger (ml.core.recalibrate, --apply). Cheap and measured on our
-   own feed; the predictor reloads champions.json every cycle, so no restart.
+1. Recalibrate the live champions from the graded ledger (ml.core.recalibrate). Cheap and measured on our own feed.
+   A kept fit is always written as a `<version>-calN` folder and recorded; it is installed (champions.json rewritten,
+   the predictor reloads it every cycle, no restart) only with ML_DEPLOY_RECAL=1. Off by default: Hamish decides
+   installs.
 2. Per target: refresh its training data (a target's refresh command, best effort), then one loop
    (ml.core.loop: proposals from Gemini only when ML_GEMINI_API_KEY is set, a key of its own so the briefings'
    GEMINI_API_KEY quota is never touched; else the fixed list; trained and scored on the
@@ -105,8 +107,11 @@ def cycle(targets: list[str], rounds: int, proposals: int, retrain: bool, do_dep
     if os.getenv("TIGER_DATABASE_URL") and (models_dir / "champions.json").exists():
         try:
             from ml.core.recalibrate import recalibrate
-            r = recalibrate(models_dir, os.environ["TIGER_DATABASE_URL"], apply=do_deploy, log=log)
-            status["recalibrate"] = {"rows": r["rows"], "changed": r["changed"]}
+            install = do_deploy and os.getenv("ML_DEPLOY_RECAL", "0") == "1"
+            r = recalibrate(models_dir, os.environ["TIGER_DATABASE_URL"], apply=install, log=log)
+            status["recalibrate"] = {"rows": r["rows"], "changed": r["changed"], "applied": install}
+            if r["changed"] and not install:
+                status["recalibrate"]["note"] = "recorded, not installed; ML_DEPLOY_RECAL=1 would put it live"
         except Exception as e:   # never stops the retraining
             status["recalibrate"] = {"error": repr(e)[:300]}
             log(f"recalibrate failed: {e!r}")
