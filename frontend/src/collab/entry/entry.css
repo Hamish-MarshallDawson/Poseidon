@@ -1,0 +1,56 @@
+@import '../collab.css';
+
+.entry-popup, .entry-toast {
+  position: fixed; left: 50%; transform: translateX(-50%); padding: 10px 14px; text-align: center;
+  font-size: var(--dvm-size-label); line-height: var(--dvm-line-label);
+}
+.entry-popup { top: 92px; display: flex; flex-direction: column; gap: 8px; max-width: min(420px, calc(100vw - 32px)); }
+.entry-popup p, .entry-toast { margin: 0; }
+.entry-toast { top: 50%; transform: translate(-50%, -50%); box-shadow: 0 4px 16px var(--dvm-shadow-lift); max-width: min(520px, calc(100vw - 32px)); }
+.entry-popup em, .entry-toast em { font-style: italic; font-weight: 600; }
+.entry-popup__actions { display: flex; gap: 8px; justify-content: center; }
+.entry-popup .chip { cursor: pointer; }
+
+/* Session bar in the toolbar */
+.session-bar { display: contents; }
+.session-bar__wrap { position: relative; display: inline-flex; }
+.session-bar__title { max-width: 220px; cursor: pointer; }
+.session-bar__title span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.session-bar__faces { display: inline-flex; }
+.session-bar__faces .collab-avatar { margin-left: -6px; border: 1px solid var(--dvm-bg-panel); }
+.session-bar__faces .collab-avatar:first-child { margin-left: 0; }
+.invite-btn { cursor: pointer; }
+.invite-badge {
+  min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; color: #fff;
+  background: var(--dvm-ship-sanctioned, #c2331c); font: 600 var(--dvm-size-caption) / 16px var(--dvm-font-data); text-align: center;
+  animation: invite-pulse 2s ease-in-out infinite;
+}
+@keyframes invite-pulse { 0%, 100% { box-shadow: 0 0 0 0 #c2331c00; } 50% { box-shadow: 0 0 0 4px #c2331c55; } }
+@media (prefers-reduced-motion: reduce) { .invite-badge { animation: none; } }
+[data-motion="reduce"] .invite-badge { animation: none; }
+
+.entry-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; min-width: 220px; padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  background: var(--dvm-bg-panel); border: 1px solid var(--dvm-border-default); box-shadow: 0 4px 16px var(--dvm-shadow-lift);
+}
+.entry-menu button, .entry-menu label {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; text-align: left; cursor: pointer; box-sizing: border-box;
+  background: none; border: 0; color: inherit; font: inherit; font-size: var(--dvm-size-label);
+}
+.entry-menu button:hover { background: var(--dvm-accent-subtle); }
+.entry-menu form { display: flex; gap: 6px; padding: 4px 2px; }
+.entry-menu input[type="text"], .invite-panel input[type="text"] {
+  flex: 1; min-width: 0; padding: 5px 8px; background: var(--dvm-bg-raised); color: inherit; font: inherit;
+  border: 1px solid var(--dvm-border-default);
+}
+.entry-menu hr { border: 0; border-top: 1px solid var(--dvm-border-subtle); margin: 4px 0; width: 100%; }
+
+/* Invite / Join panel */
+.invite-panel { width: 360px; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 12px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 140px); overflow: auto; }
+.invite-panel h2 { margin: 0; font-size: var(--dvm-size-label); font-weight: 600; }
+.invite-panel section { display: flex; flex-direction: column; gap: 6px; }
+.invite-row { display: flex; align-items: center; gap: 8px; font-size: var(--dvm-size-label); }
+.invite-row__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-row .chip { cursor: pointer; padding: 3px 8px; }
+.invite-panel .muted { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); margin: 0; }
+.invite-create { display: flex; gap: 6px; }
