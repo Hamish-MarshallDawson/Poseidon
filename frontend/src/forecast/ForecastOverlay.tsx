@@ -239,13 +239,14 @@ function setup(map: MapLibreMap): () => void {
   map.on('mouseleave', 'fc-ghost-fill', onGhostLeave)
   map.on('click', 'fc-ghost-fill', onGhostClick)
 
-  // ---- outcome marks: the newest forecast whose horizon has passed at the shown time (top 10), at each ship
+  // ---- outcome marks: the newest forecast whose horizon has passed at the shown time, only for ships with an open window
   let outKey = -1
   let outcomes: Outcome[] = []
   const drawOutcomes = () => {
+    const open = new Set(ui.get().windows.map((w) => w.mmsi))
     const features = outcomes.flatMap((o) => {
       const v = vessels.vessels.get(o.mmsi)
-      return v ? [{ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [v.lon, v.lat] }, properties: { label: o.censored ? 'censored' : o.label } }] : []
+      return v && open.has(o.mmsi) ? [{ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [v.lon, v.lat] }, properties: { label: o.censored ? 'censored' : o.label } }] : []
     })
     map.getSource<GeoJSONSource>('fc-out')?.setData({ type: 'FeatureCollection', features })
   }
@@ -270,6 +271,7 @@ function setup(map: MapLibreMap): () => void {
   const offUi = ui.subscribe((s, p) => {
     if (s.windows !== p.windows || s.show !== p.show) drawTags()
     if (s.windows !== p.windows || s.show !== p.show) syncGaps()
+    if (s.windows !== p.windows) drawOutcomes()
   })
   const onZoom = () => { const z = zoomTier(map.getZoom()); if (z !== tier) { tier = z; drawTags() } }
   map.on('zoomend', onZoom)
