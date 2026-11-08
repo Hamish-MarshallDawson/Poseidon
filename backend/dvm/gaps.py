@@ -2,14 +2,17 @@
 
 Follows 06 sections 2.4, 2.9 and 5 with the first-version numbers Jake settled (7-8 Nov):
 - Only Class A ships. A ship is Class A once it has sent any Class A fix; Class B ships are never tracked.
-- Only moving ships: no gap opens when the last fix was at anchor or moored (nav status 1 or 5) or slower than
-  min_sog_kn. In the recorded 7 Nov log those were ~95% of all silences, mostly ships in port whose slow reports
-  AISStream drops, so they looked deliberate (dozens of neighbours heard) without meaning anything.
+- Only moving ships: no gap opens when the last fix was at anchor or moored (nav status 1 or 5), slower than
+  min_sog_kn, or when the ship's real displacement over its last 5 to 60 minutes works out below min_sog_kn (in port
+  the reported speed jitters above 1 kn while the ship stays put). In the recorded 7 Nov log stopped ships were ~95%
+  of all silences, mostly in port, where AISStream drops their slow reports, so they looked deliberate.
 - A gap opens when `now - last_recv_ts > max(floor_s, k * report_interval_s)`, checked by `tick` on the recv_ts clock.
   `report_interval_s` is an exponentially weighted mean (alpha 0.2) of the time between consecutive fixes while
   moving, so the 30-minute floor decides for almost every ship.
 - `coverage_flag`, in order:
-  own_stall            the silence overlaps one of our own ingest outages (`note_stall`)
+  own_stall            our own ingest outages (`note_stall`) explain the silence: what is left of it outside them
+                       is shorter than the ship's limit. A ten-second restart does not explain two hours of silence,
+                       so that gap is judged on the rules below instead
   unknown              no other Class A ship was heard within radius_km in the baseline window (e.g. open sea)
   coverage_gap         fewer than min_neighbours heard within radius_km in the last recent_s, or most of the ships
                        that were near it before the silence have gone silent too (a receiver hole, not the ship).
@@ -27,7 +30,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Iterable, Optional
 
 from dvm.models import PositionReport
@@ -37,6 +40,8 @@ GRID_DEG = 0.2          # neighbour index buckets; a 0.1 degree coverage cell al
 SAMPLE_MS = MIN_MS      # at most one index sample per ship, bucket and minute
 AT_ANCHOR_OR_MOORED = {1, 5}   # AIS navigational status: 1 at anchor, 5 moored
 FUTURE_SLACK_MS = 5 * MIN_MS   # a fix stamped further ahead of its receive time than this is ignored
+TRACK_MS = 60 * MIN_MS         # recent track kept per ship (one point a minute) for the "really moving" test
+TRACK_MIN_SPAN_MS = 5 * MIN_MS # the track must span this long before its displacement counts
 
 # Our own ingest outages that are over and known (UTC): the team backend was down or restarting.
 KNOWN_STALLS: list[tuple[int, int]] = [
@@ -71,6 +76,7 @@ class _Ship:
     nav: Optional[int]
     interval_s: Optional[float] = None
     quiet: bool = False      # silent past its limit while not moving: no gap was opened for this silence
+    track: deque = field(default_factory=deque)   # (ts, lat, lon), one a minute, last TRACK_MS
 
 
 class _Index:
@@ -134,18 +140,21 @@ class GapDetector:
         self._meta: dict[str, dict] = {}         # gap id -> private fields (start_recv, last check, peers before)
         self.stalls: list[tuple[int, int]] = []
         self._last_prune = 0
+        self._clock = 0                           # newest receive or tick time seen
         self.stats = {"opened": 0, "closed": 0, "versions": 0, "expired": 0, "ignored_future": 0, "not_moving": 0}
 
     # ---- inputs ----
 
     def note_stall(self, start_ms: int, end_ms: int) -> list[dict]:
-        """One of our own ingest outages, known once it is over. Open gaps it overlaps become own_stall."""
+        """One of our own ingest outages, known once it is over. Open gaps it explains become own_stall."""
         if end_ms <= start_ms:
             return []
         self.stalls.append((start_ms, end_ms))
         out = []
         for mmsi, g in list(self.open.items()):
-            if g["coverage_flag"] != "own_stall" and self._stalled(self._meta[g["id"]]["start_recv"], end_ms):
+            meta = self._meta[g["id"]]
+            now = max(end_ms, self._clock)   # the silence so far, not just up to the outage's end
+            if g["coverage_flag"] != "own_stall" and self._stalled(meta["start_recv"], now, meta["limit"]):
                 out.append(self._version(mmsi, {"coverage_flag": "own_stall"}))
         return out
 
@@ -155,6 +164,7 @@ class GapDetector:
             self.class_a.add(rec.mmsi)
         elif rec.mmsi not in self.class_a:
             return []
+        self._clock = max(self._clock, rec.recv_ts)
         if rec.ts > rec.recv_ts + FUTURE_SLACK_MS:   # a future-dated fix would freeze the ship's clock
             self.stats["ignored_future"] += 1
             return []
@@ -170,8 +180,13 @@ class GapDetector:
                 moving = (rec.sog_kn or 0) >= 1 and (prev.sog or 0) >= 1
                 if moving and 0 < dt < self.floor_s:
                     interval = dt if interval is None else 0.8 * interval + 0.2 * dt
+            track = prev.track if prev else deque()
+            if not track or rec.ts - track[-1][0] >= MIN_MS:
+                track.append((rec.ts, rec.lat, rec.lon))
+            while track and rec.ts - track[0][0] > TRACK_MS:
+                track.popleft()
             self.ships[rec.mmsi] = _Ship(rec.recv_ts, rec.ts, rec.lat, rec.lon, rec.sog_kn, rec.cog_deg,
-                                         rec.nav_status, interval)
+                                         rec.nav_status, interval, track=track)
         elif rec.recv_ts > prev.recv_ts and rec.ts == prev.ts:
             prev.recv_ts, prev.quiet = rec.recv_ts, False   # the same fix heard again later: still heard
         self.index.add(rec.mmsi, rec.recv_ts, rec.lat, rec.lon)
@@ -196,7 +211,8 @@ class GapDetector:
                 continue
             g = dict(g)
             self.open[g["mmsi"]] = g
-            self._meta[g["id"]] = {"start_recv": g["start_ts"], "checked": 0, "peers": None}   # peers: at first check
+            self._meta[g["id"]] = {"start_recv": g["start_ts"], "checked": 0, "peers": None,   # peers: at first check
+                                   "limit": self.floor_s * 1000}
             out.append(dict(g))
         return out
 
@@ -205,6 +221,7 @@ class GapDetector:
     def tick(self, now_ms: int) -> list[dict]:
         """Every few seconds on the recv_ts clock: open gaps that are due, re-check open ones, drop old state."""
         out: list[dict] = []
+        self._clock = max(self._clock, now_ms)
         if now_ms - self._last_prune >= MIN_MS:
             self.index.prune(now_ms - self.history_ms)
             self._last_prune = now_ms
@@ -215,7 +232,7 @@ class GapDetector:
                     self._forget(mmsi)   # stays open in the table; the map lets the ship go
                     continue
                 meta = self._meta[g["id"]]
-                if now_ms - meta["checked"] >= self.recheck_ms and g["coverage_flag"] != "own_stall":
+                if now_ms - meta["checked"] >= self.recheck_ms:   # own_stall too: a silence can outgrow the outage
                     meta["checked"] = now_ms
                     if meta["peers"] is None:   # a resumed gap: its ship's neighbours from before, if still indexed
                         meta["peers"] = self.index.near(g["last_lat"], g["last_lon"], self.radius_km,
@@ -244,17 +261,31 @@ class GapDetector:
     # ---- internals ----
 
     def _moving(self, s: _Ship) -> bool:
-        return s.nav not in AT_ANCHOR_OR_MOORED and s.sog is not None and s.sog >= self.min_sog_kn
+        if s.nav in AT_ANCHOR_OR_MOORED or s.sog is None or s.sog < self.min_sog_kn:
+            return False
+        t0, lat0, lon0 = s.track[0] if s.track else (s.ts, s.lat, s.lon)
+        span_ms = s.ts - t0
+        if span_ms < TRACK_MIN_SPAN_MS:
+            return True   # too little track to check; the reported speed decides
+        kn = haversine_km(lat0, lon0, s.lat, s.lon) / 1.852 / (span_ms / 3_600_000)
+        return kn >= self.min_sog_kn
 
     def _limit_ms(self, s: _Ship) -> float:
         return max(self.floor_s, self.k * (s.interval_s or 0)) * 1000
 
-    def _stalled(self, start_recv: int, end_ms: int) -> bool:
-        return any(a < end_ms and b > start_recv for a, b in self.stalls)
+    def _stalled(self, start_recv: int, end_ms: int, limit_ms: float) -> bool:
+        """Our outages explain the silence [start_recv, end_ms]: what is left of it outside them is under limit_ms."""
+        covered, edge = 0, start_recv
+        for a, b in sorted(self.stalls):   # merged as we go, so overlapping outages are not counted twice
+            a, b = max(a, edge), min(b, end_ms)
+            if b > a:
+                covered += b - a
+                edge = b
+        return covered > 0 and (end_ms - start_recv) - covered < limit_ms
 
     def _assess(self, mmsi: int, s: _Ship, start_recv: int, peers: set[int], now_ms: int) -> tuple[int, str]:
         heard = len(self.index.near(s.lat, s.lon, self.radius_km, now_ms - self.recent_ms, now_ms, mmsi))
-        if self._stalled(start_recv, now_ms):
+        if self._stalled(start_recv, now_ms, self._limit_ms(s)):
             return heard, "own_stall"
         if not peers:
             return heard, "unknown"
@@ -282,7 +313,7 @@ class GapDetector:
              "neighbours_heard": heard, "neighbours_baseline": len(peers), "cell_id": cell_id(s.lat, s.lon),
              "coverage_flag": flag, "src": "derived", "gfw_intentional": None, "q": []}
         self.open[mmsi] = g
-        self._meta[gid] = {"start_recv": s.recv_ts, "checked": now_ms, "peers": peers}
+        self._meta[gid] = {"start_recv": s.recv_ts, "checked": now_ms, "peers": peers, "limit": self._limit_ms(s)}
         self.stats["opened"] += 1
         self.stats["versions"] += 1
         return dict(g)
@@ -294,9 +325,9 @@ class GapDetector:
         return dict(g)
 
     def _close(self, rec: PositionReport, g: dict) -> dict:
-        meta = self._meta.pop(g["id"], {"start_recv": g["start_ts"]})
+        meta = self._meta.pop(g["id"], {"start_recv": g["start_ts"], "limit": self.floor_s * 1000})
         hours = max(1e-9, (rec.ts - g["start_ts"]) / 3_600_000)
-        flag = "own_stall" if self._stalled(meta["start_recv"], rec.recv_ts) else g["coverage_flag"]
+        flag = "own_stall" if self._stalled(meta["start_recv"], rec.recv_ts, meta["limit"]) else g["coverage_flag"]
         closed = {**g, "version": g["version"] + 1, "state": "closed", "end_ts": rec.ts,
                   "duration_s": (rec.ts - g["start_ts"]) // 1000, "next_lat": rec.lat, "next_lon": rec.lon,
                   "implied_speed_kn": haversine_km(g["last_lat"], g["last_lon"], rec.lat, rec.lon) / 1.852 / hours,

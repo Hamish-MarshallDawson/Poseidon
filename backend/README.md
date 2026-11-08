@@ -124,9 +124,9 @@ Finds Class A ships that stop reporting, and says whether the silence looks like
 | Rule | Value |
 |---|---|
 | Ships | Class A only. A ship that has sent any Class A fix counts as Class A; Class B ships stay on the map with no gaps. |
-| Moving only | No gap if the last fix was at anchor or moored (nav status 1 or 5), slower than 1 kn, or had no speed. In the 7 Nov log those were about 95% of all silences, mostly ships in port whose slow reports AISStream drops. |
+| Moving only | No gap if the last fix was at anchor or moored (nav status 1 or 5), slower than 1 kn, had no speed, or the ship's real displacement over its last 5 to 60 min works out under 1 kn (in port the reported speed jitters above 1 kn while the ship stays put). In the 7 Nov log stopped ships were about 95% of all silences, mostly in port, where AISStream drops their slow reports. |
 | Opens | Silent for `max(1800 s, 20 x report_interval_s)`. `report_interval_s` is an exponentially weighted mean (alpha 0.2) of the time between fixes while moving, so the 30-minute floor decides for almost every ship. |
-| `own_stall` | The silence overlaps one of our own outages: 7 Nov 19:39:44-19:50:08 and 21:57:13-23:36 UTC (`gaps.KNOWN_STALLS`), and any backend restart (the time from the last stored fix to start-up). |
+| `own_stall` | Our own outages explain the silence: what is left of it outside them is shorter than the ship's limit. Outages are 7 Nov 19:39:44-19:50:08 and 21:57:13-23:36 UTC (`gaps.KNOWN_STALLS`) and any backend restart (the last stored fix to start-up). A 10 s deploy restart doesn't explain a 2 h silence, so that gap is judged on the rules below; an open `own_stall` gap is re-judged once its silence outgrows the outage. |
 | `unknown` | No other Class A ship was heard within 20 km in the 30 min before the silence (open sea). |
 | `coverage_gap` | Fewer than 3 other Class A ships heard within 20 km in the last 10 min, or at least half of the ships that were near it before have gone silent too: a receiver hole, not the ship. |
 | `deliberate_candidate` | Otherwise: the area still hears ships and this one went quiet. It is a candidate, not proof; a master may switch off lawfully for safety. |
@@ -137,7 +137,7 @@ Finds Class A ships that stop reporting, and says whether the silence looks like
 - **Warm start.** On start-up the backend reads Tiger on its own read-only connection: every Class A fix of the last 2 h (rhythms and neighbours), each Class A ship's last fix of the last 6 h (ships already silent), their latest names, and the gaps still open. Open gaps carry on with their versions, ships already silent get their gap, and the restart itself counts as `own_stall`. The detector's clock waits until this is done. About 2 s for 300,000 fixes and 22,500 ships on a local copy. A gap whose ship was last heard more than 2 h before start-up has no neighbour baseline, so it is `unknown` unless it overlaps an outage.
 - **`/health`** has a `gaps` block: `opened`, `closed`, `versions`, `open`, `not_moving` (silences skipped because the ship wasn't moving), `warm` (`pending`, `ready`, `failed: ...` or `off`) and `written`.
 
-**Measured on the recorded 7 Nov log** (16:51-21:57, 1.65 million messages, 24,615 Class A ships, replayed offline): 2,490 gaps, of which 299 `deliberate_candidate`, 343 `coverage_gap`, 177 `unknown` and 1,671 `own_stall` (the 19:39 outage). Closed deliberate gaps lasted a median of 52 min (90% under 98). The detector took 38 s of CPU for the 5 hours.
+**Measured on the recorded 7 Nov log** (16:51-21:57, 1.65 million messages, 24,615 Class A ships, replayed offline): 2,326 gaps, of which 654 `deliberate_candidate`, 1,097 `coverage_gap`, 495 `unknown` and 80 `own_stall`. Closed deliberate gaps lasted a median of 69 min (90% under 178). The detector took 56 s of CPU for the 5 hours. On the live server the first warm start opened about 2,160 gaps, using 421 MB for the whole backend.
 
 **Tests.** `tests/test_gaps.py` (rules, map state, table rows) runs with plain `pytest`. Mano's stress suite runs it too: `.venv/bin/python -m pytest tests/stress --stress --detector dvm`.
 
