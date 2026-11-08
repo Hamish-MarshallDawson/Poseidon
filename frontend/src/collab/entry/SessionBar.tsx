@@ -28,7 +28,8 @@ export function SessionBar({ onLogout }: { onLogout?: () => void }) {
   const me = collab.use((s) => s.me)
   const incoming = collab.use((s) => s.invites.incoming.length)
   const panel = entry.use((s) => s.panel)
-  if (!me) return null
+  const reconnecting = collab.use((s) => s.reconnecting)
+  if (!me) return reconnecting ? <span className="chip chip-quiet" role="status">Reconnecting…</span> : null
   return (
     <div className="session-bar">
       <SessionSwitcher />

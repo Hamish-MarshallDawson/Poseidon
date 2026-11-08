@@ -20,12 +20,13 @@ export interface CollabState {
   invites: { incoming: IncomingInvite[]; outgoing: OutgoingInvite[] }
   private: boolean                                      // hide me from the others (the profile menu)
   error: string | null
+  reconnecting: boolean                                  // /me failed: the session bar shows a quiet "Reconnecting…" and retries
 }
 
 export const collab = {
   ...createStore<CollabState>({
     me: null, lastSession: null, sessions: [], session: null, role: null, list: [], documents: [], presence: [],
-    activity: [], invites: { incoming: [], outgoing: [] }, private: false, error: null,
+    activity: [], invites: { incoming: [], outgoing: [] }, private: false, error: null, reconnecting: false,
   }),
   applyMessage,
   refreshInvites,
@@ -40,16 +41,21 @@ function adopt(sess: Session, role: 'owner' | 'member' | null = null) {
   collab.set({ session: head, list, documents, role: role ?? head.members.find((m) => m.id === me)?.role ?? 'member', presence: [], activity: [] })
 }
 
-/** After login: send the Auth0 profile, then read me and the last session. */
-export async function loadMe(profile?: { name?: string | null; picture?: string | null; email?: string | null }): Promise<void> {
+let retry: ReturnType<typeof setTimeout> | undefined
+/** After login: send the Auth0 profile, then read me and the last session. A failure retries with backoff (2 s up to 30 s). */
+export async function loadMe(profile?: { name?: string | null; picture?: string | null; email?: string | null }, wait = 2000): Promise<void> {
+  clearTimeout(retry)
   try {
     if (profile && (profile.name || profile.picture)) {
       await api.setMe({ name: profile.name?.slice(0, 80) ?? undefined, picture: profile.picture?.startsWith('https://') ? profile.picture : undefined, email: profile.email ?? undefined })
     }
     const { user, last_session } = await api.me()
-    collab.set({ me: user, lastSession: last_session, error: null })
+    collab.set({ me: user, lastSession: last_session, error: null, reconnecting: false })
     await Promise.all([refreshSessions(), refreshInvites()])
-  } catch (e) { fail(e) }
+  } catch (e) {
+    if (!s().me) { collab.set({ reconnecting: true }); retry = setTimeout(() => void loadMe(profile, Math.min(wait * 2, 30000)), wait) }
+    else fail(e)
+  }
 }
 
 export async function refreshSessions(): Promise<void> {
