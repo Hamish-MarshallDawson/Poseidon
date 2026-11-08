@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime
 
-from dvm.collab.invites import MemInvites, PgInvites
+from dvm.collab.invites import MemInvites, PgInvites, retry_dropped
 
 DOCS_IN_DETAIL = 200          # newest documents returned with a session
 
@@ -30,6 +30,7 @@ def _doc(r) -> dict:
             "created_at": _ms(r["created_at"]), "kind": r["kind"], "mmsis": list(r["mmsis"])}
 
 
+@retry_dropped
 class PgStore:
     def __init__(self, pool):
         self.pool = pool
