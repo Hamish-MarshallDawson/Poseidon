@@ -118,6 +118,7 @@ export function createSyntheticFeed(count = 25_000): SyntheticFeed {
     // No server log: the mock falls back to its own replay log's range (which includes the backfill).
     historyRange: (): Promise<HistoryRange> => Promise.reject(new Error('synthetic feed has no history log')),
     timeline: () => Promise.reject(new Error('synthetic feed has no timeline')),
+    track: () => Promise.reject(new Error('synthetic feed has no track')),
     scores: () => Promise.reject(new Error('synthetic feed has no scores')),
     outcomes: () => Promise.reject(new Error('synthetic feed has no outcomes')),
   }

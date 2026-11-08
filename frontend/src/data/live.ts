@@ -107,6 +107,13 @@ export function createLiveAdapter(opts: AdapterOptions): DataAdapter {
       if (!res.ok) throw new Error(`GET /history/range: ${res.status}`)
       return res.json()
     },
+    async track(mmsi, hours) {
+      const token = await opts.getToken()
+      const res = await fetch(`${opts.httpBase}/track?mmsi=${mmsi}&hours=${Math.min(24, Math.max(1, Math.round(hours)))}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      if (!res.ok) throw new Error(`GET /track: ${res.status}`)
+      return ((await res.json()) as { track?: [number, number, number][] }).track ?? []
+    },
     timeline: () => Promise.reject(new Error('not implemented by backend')),
     scores: () => Promise.reject(new Error('not implemented by backend')),
     outcomes: () => Promise.reject(new Error('not implemented by backend')),

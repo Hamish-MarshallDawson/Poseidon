@@ -1,6 +1,5 @@
 import type { FocusRelation } from '../store/ui'
 import type { GapEvent, VesselView } from '../types'
-import { TRAIL_MS } from '../store/vessels'
 import { haversineM, NMI_M } from './geo'
 
 // Focus mode relation rules from R1-AGENT3-DENSITY.md (same owner needs a data source: not built).
@@ -84,13 +83,10 @@ export function computeRelations(inp: FocusInput): FocusRelation[] {
 export const sameRelations = (a: FocusRelation[], b: FocusRelation[]) =>
   a.length === b.length && a.every((r, i) => r.mmsi === b[i].mmsi && r.reason === b[i].reason)
 
-// Map geometry for focus mode: heard track (solid), inferred segment (dashed), ghost circle and leaders.
-export function focusGeometry(f: VesselView, related: VesselView[], trail: Trail, gap: GapEvent | undefined, nowMs: number) {
+// Map geometry for focus mode: inferred segment (dashed), ghost circle and leaders.
+export function focusGeometry(f: VesselView, related: VesselView[], gap: GapEvent | undefined, nowMs: number) {
   const line = (coords: number[][], kind: string): GeoJSON.Feature => ({ type: 'Feature', properties: { kind }, geometry: { type: 'LineString', coordinates: coords } })
   const features: GeoJSON.Feature[] = []
-  const track = trail.filter((p) => p[0] >= nowMs - TRAIL_MS).map((p) => [p[1], p[2]])
-  if (!gap) track.push([f.lon, f.lat])
-  if (track.length > 1) features.push(line(track, 'trail'))
   for (const r of related) features.push(line([[r.lon, r.lat], [f.lon, f.lat]], 'leader'))
   if (gap) {
     const radius = gap.radius_m ?? 0

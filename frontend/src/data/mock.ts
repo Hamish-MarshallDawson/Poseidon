@@ -279,6 +279,8 @@ export function createMockAdapter(live: DataAdapter, opts: MockOptions = {}): Da
       if (msg.type === 'replay' && !serverReplay) replay(msg)
     },
     async historyRange(): Promise<HistoryRange> { return range() },
+    // The backend's track when it is the feed; for synthetic ships an illustrative one made up from the current fix.
+    track: (mmsi, hours) => (src === live ? live.track(mmsi, hours) : Promise.resolve(synthTrack(mmsi, hours))),
     async scores(as_of?: number) { return fc ? fc.scoresAt(hourOf(as_of ?? liveNow)) : [] },
     async outcomes(from_ts, to_ts) {
       if (!fc) return []
@@ -314,4 +316,19 @@ export function createMockAdapter(live: DataAdapter, opts: MockOptions = {}): Da
       return ev
     },
   }
+}
+
+// Illustrative track for a synthetic ship: one point a minute backwards along its course at its speed, with a
+// 20 min hole (no fixes from 40 to 60 min ago) so track drawing can show breaks. Moored ships stay put.
+function synthTrack(mmsi: number, hours: number): [number, number, number][] {
+  const v = store.vessels.get(mmsi)
+  if (!v) return []
+  const kn = v.sog_kn ?? 0, cog = ((v.cog_deg ?? 0) * Math.PI) / 180
+  const out: [number, number, number][] = []
+  for (let m = Math.round(hours * 60); m >= 0; m--) {
+    if (m >= 40 && m < 60) continue
+    const nm = (kn * m) / 60
+    out.push([v.last_ts - m * MIN, v.lon - (nm / 60) * Math.sin(cog) / Math.cos((v.lat * Math.PI) / 180), v.lat - (nm / 60) * Math.cos(cog)])
+  }
+  return out
 }
