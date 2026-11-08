@@ -55,3 +55,20 @@ A second go-dark model trained purely on GFW history, so it can use months of ba
   `/home/aiden/data/poseidon/godark_gfw/` and refresh incrementally; cap threads at 6.
 - The GFW backfill is still filling Tiger (about 80 days an hour, back to about June 2026 at 05:30; gap events back to
   2017 by about 09:00), so make the pipeline rerunnable and report which history it used.
+
+## `obs-routes` (branch `143-obs-routes`, port 55544, issue #143): base on origin/main, not the integration branch
+FrontEndLead is blocked on two read-only additions in `backend/dvm/sources/routes.py` and `query.py` (owned by us;
+keep the existing routes' behaviour, auth, attribution and limits):
+1. `GET /observations` gains an optional `mmsi` (repeatable, at most 100, 9-digit ints) filter that, when given, makes
+   `bbox` optional and allows a longer window (up to 400 days) for one ship's full history: port visits, loitering,
+   encounters, gaps, per-vessel presence and radar rows, newest first, with the existing limit and attribution.
+   Use the `observations_mmsi_time` index.
+2. `GET /observations/heat?bbox=&start=&end=&kinds=ais_presence&cell_deg=0.1` returns server-side aggregated cells
+   `{"cells": [{"lat", "lon", "value", "n"}], "cell_deg", "kinds", "attribution"}`: anonymous cell rows (`mmsi IS
+   NULL`, `cell_deg` set) summed into a grid of `cell_deg` (0.05 to 1), `value` = summed presence hours (or
+   detection counts for `sar_detection`), capped at about 20,000 cells, bbox required, window up to 90 days. Fast:
+   one GROUP BY on `observations_kind_time`; check the plan with EXPLAIN on a local database seeded with realistic
+   volume.
+Tests in `backend/tests/sources/` against a scratch local database (as `test_routes.py` does), the full suite, a real
+local server curl, `Closes #143`, and post the exact request and response shapes in the PR for FrontEndLead. Target:
+PR within about 30 minutes. Don't merge.
