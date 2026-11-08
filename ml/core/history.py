@@ -30,8 +30,9 @@ from typing import Any
 
 DATA = Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon"))
 FILES = ("runs", "proposals", "events")
-# Registry targets -> the Lab's three models. godark_gfw is the go-dark model on GFW's gap labels.
-LAB_TARGET = {"route": "route", "godark": "godark", "godark_gfw": "godark", "fishing": "fishing"}
+# Registry targets -> Lab targets. godark_gfw (go-dark on GFW's gap labels) stays its own target, so it never mixes
+# into the live go-dark champion line.
+LAB_TARGET = {"route": "route", "godark": "godark", "godark_gfw": "godark_gfw", "fishing": "fishing"}
 ROUTE_PRIMARY = ["3600", "10800", "21600", "86400"]
 GODARK_PRIMARY = ["21600", "3600"]
 PRIMARY = {"route": ROUTE_PRIMARY, "godark": GODARK_PRIMARY, "godark_gfw": ["2592000", "1209600"],
@@ -285,8 +286,6 @@ def registry_run(row: dict, root: Path, source: str) -> dict:
     r["artifact"] = rel(row.get("artifact"), root)
     r["source"] = row.get("source") or source
     r["version"] = row.get("version") or row["run_id"]
-    if r["target"] != row["target"]:
-        r["model"] = f"{row['model']} ({row['target']})"
     return r
 
 
@@ -420,6 +419,7 @@ def collect(root: Path = DATA, tiger_url: str | None = None) -> dict[str, list[d
         e["detail"]["deployed"] = e["version"] in live
         if e["detail"]["kept"] and not e["detail"]["deployed"]:
             e["detail"]["status"] = "released, not live yet (no live predictions under this version)"
+            e["label"] = f"{e['version']}: built from the live ledger, not yet installed"
     events += recal + deployed
     events += proposal_events(props)
     return {"runs": sorted(runs.values(), key=lambda r: (r["created_at"], r["run_id"]), reverse=True),

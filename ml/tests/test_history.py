@@ -78,7 +78,7 @@ def test_registry_run_keeps_record_and_maps_target(tmp_path):
     row = _registry_run("godark_gfw-1", "rejected", target="godark_gfw")
     row["artifact"] = str(tmp_path / "models" / "godark_gfw" / "godark_gfw-1")
     r = H.registry_run(row, tmp_path, "pc-aiden")
-    assert r["target"] == "godark" and r["registry_target"] == "godark_gfw"
+    assert r["target"] == "godark_gfw" and r["registry_target"] == "godark_gfw"
     assert r["created_at"] == 1794122362000 and r["source"] == "pc-aiden"
     assert r["artifact"] == "models/godark_gfw/godark_gfw-1"
     assert r["metrics"] == row["metrics"] and r["config"] == row["config"]
@@ -186,5 +186,6 @@ def test_recalibration_not_live_is_marked(tmp_path):
     rc = next(e for e in b["events"] if e["kind"] == "recalibrated")
     assert rc["run_id"] == "route-dma90-v2" and rc["detail"]["deployed"] is False
     assert "not live" in rc["detail"]["status"]
+    assert rc["label"] == "route-dma90-v2-cal1: built from the live ledger, not yet installed"
     live = {e["version"] for e in b["events"] if e["kind"] == "deployed"}
     assert live == {"dma14-v2", "route-dma90-v2"}
