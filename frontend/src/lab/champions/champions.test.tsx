@@ -86,7 +86,7 @@ describe('ChampionsTab renders on real data', () => {
 
 describe('the run panel checklist', () => {
   it('says the rule checks in plain words', async () => {
-    const { plainCheck } = await import('./RunPanel')
+    const { plainCheck } = await import('./shape')
     expect(plainCheck('beats the champion fishing-20261108T071922-e2db5c at 7 days')).toBe('Better than the champion at 7 days')
     expect(plainCheck('calibration ece within 0.05 of 0 at 7 days')).toBe('Its stated chances match what really happened')
     expect(plainCheck('no group of 30+ cases more than 10% worse')).toBe('No group of 30+ cases more than 10% worse')

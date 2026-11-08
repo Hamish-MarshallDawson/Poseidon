@@ -161,3 +161,14 @@ export function proposalRows(proposals: Proposal[], target: string): ProposalRow
       return { p, kind, change, reason, outcome: OUTCOME[p.outcome] ?? p.outcome }
     })
 }
+
+const plain = (s: string) => s.replace(/dead reckoning/gi, 'a straight-line guess')
+/** A rule check in plain words for the checklist (the stored wording stays under "Technical numbers"). */
+export function plainCheck(check: string): string {
+  const c = plain(check)
+  if (/calibration|\bece\b|coverage|cover\d/i.test(c)) return /coverage|cover|circle/i.test(c) ? 'Its circles hold the ship as often as they claim' : 'Its stated chances match what really happened'
+  const beat = c.match(/^beats? (the champion|the baseline|a straight-line guess)[^,]*?at (.+)$/i)
+  if (beat) return `Better than ${beat[1].toLowerCase()} at ${beat[2]}`
+  if (/second seed|confirm/i.test(c)) return 'A second training with another seed agrees'
+  return c.charAt(0).toUpperCase() + c.slice(1)
+}

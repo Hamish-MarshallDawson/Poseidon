@@ -4,19 +4,10 @@ import {
   STATUS_LABEL, calibrationChecks, calibrationOk, configDiff, decisionHeadline, fmtCalCheck, fmtCount, fmtMonth, fmtPct, fmtStat,
   fmtWhen, horizonLabel, horizonRows, lossLabel, proposerLabel, targetLabel, weakestStrata, type RunRecord,
 } from '../runs/shape'
-import { decisionSentence } from './shape'
+import { decisionSentence, plainCheck } from './shape'
 
 const show = (v: unknown) => (v == null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v))
 const plain = (s: string) => s.replace(/dead reckoning/gi, 'a straight-line guess')
-/** A rule check in plain words for the checklist (the stored wording stays under "Technical numbers"). */
-export function plainCheck(check: string): string {
-  const c = plain(check)
-  if (/calibration|\bece\b|coverage|cover\d/i.test(c)) return /coverage|cover|circle/i.test(c) ? 'Its circles hold the ship as often as they claim' : 'Its stated chances match what really happened'
-  const beat = c.match(/^beats? (the champion|the baseline|a straight-line guess)[^,]*?at (.+)$/i)
-  if (beat) return `Better than ${beat[1].toLowerCase()} at ${beat[2]}`
-  if (/second seed|confirm/i.test(c)) return 'A second training with another seed agrees'
-  return c.charAt(0).toUpperCase() + c.slice(1)
-}
 
 /** A run's story over the page: what changed, why (Gemini's reasoning), the rule as ✓/✗, then the technical numbers.
  *  Escape or the close button shuts it (Escape is consumed so the page behind stays open). */
