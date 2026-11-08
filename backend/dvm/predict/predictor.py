@@ -153,7 +153,10 @@ class Predictor:
         self.pool = await asyncpg.create_pool(self.url, min_size=1, max_size=2, command_timeout=120)
         async with self.pool.acquire() as con:
             await schema.setup(con)
-            await lab_schema.setup(con)   # Model Lab: ml_proposals, ml_events, model_runs.source...
+            try:   # Model Lab tables: an extra, never a reason for the predictor not to start
+                await lab_schema.setup(con)
+            except Exception as e:
+                log.warning("Model Lab schema setup failed: %r", e)
             since = self.clock() - GAP_WINDOW_MS
             self._done_gaps = {(r["gap_id"], r["model_version"]) for r in await con.fetch(PREDICTED_GAPS, since)}
             await self._warm_forecast(con)
