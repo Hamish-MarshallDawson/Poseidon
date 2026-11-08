@@ -20,7 +20,7 @@ export function WatchlistChip() {
   const n = useWatchlist()?.entries.length ?? 0
   return (
     <button type="button" className={`chip ${open ? 'on' : ''}`} aria-expanded={open} aria-controls="watchlist-panel"
-      onClick={() => ui.set((s) => ({ watchlistOpen: !s.watchlistOpen, layersOpen: false }))}>
+      onClick={() => ui.set((s) => ({ watchlistOpen: !s.watchlistOpen, layersOpen: false, reviewOpen: false }))}>
       <span className="lamp" aria-hidden />
       Ranked for review · next 6 h
       <span className="chip-count">{n}</span>
