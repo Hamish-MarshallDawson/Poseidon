@@ -6,8 +6,9 @@ Every 3 hours (`dvm-ml.timer`), one cycle under an exclusive lock (a cycle that 
    newer half gets closer to nominal. A kept fit becomes `<version>-calN` in `/opt/dvm/models` and champions.json is
    rewritten atomically; the predictor reloads it every cycle, no restart. Old folders stay for rollback.
 2. **Retrain** each target (godark, fishing, route): refresh its data from Tiger read-only (and GFW for fishing,
-   5 minutes, polite), then one `ml.core.loop` round: 3 Gemini proposals (the repo's `GEMINI_API_KEY`, capped per
-   day; the fixed list without a key), trained, scored on the frozen held-out set, promoted only by the rule with a
+   5 minutes, polite), then one `ml.core.loop` round: 3 Gemini proposals, only with `ML_GEMINI_API_KEY` (a separate key, so the
+   briefings' `GEMINI_API_KEY` quota is never used; one call per model and cycle, capped per day), else the fixed
+   list, trained, scored on the frozen held-out set, promoted only by the rule with a
    second-seed check.
 3. **Deploy retrained champions** only with `ML_DEPLOY_RETRAINED=1` (off: the server registry starts empty, so its
    champions have only beaten its own earlier runs, not the live models). Fishing is never deployed (no live
@@ -26,5 +27,5 @@ cp /opt/dvm/ml/deploy/dvm-ml.service /opt/dvm/ml/deploy/dvm-ml.timer /etc/system
 systemctl daemon-reload && systemctl enable --now dvm-ml.timer
 systemctl start dvm-ml.service          # first cycle now; journalctl -u dvm-ml -f to watch
 ```
-The unit needs `/opt/dvm/backend/.env` (TIGER_DATABASE_URL, GEMINI_API_KEY, GFW_API_TOKEN) and the backend
+The unit needs `/opt/dvm/backend/.env` (TIGER_DATABASE_URL, GFW_API_TOKEN; ML_GEMINI_API_KEY only if a separate Gemini key exists) and the backend
 package next to ml/ (the deploy step loads artifacts with the live loader).

@@ -7,7 +7,8 @@ held exits at once, so two trainings never overlap):
 1. Recalibrate the live champions from the graded ledger (ml.core.recalibrate, --apply). Cheap and measured on our
    own feed; the predictor reloads champions.json every cycle, so no restart.
 2. Per target: refresh its training data (a target's refresh command, best effort), then one loop
-   (ml.core.loop: proposals from Gemini when GEMINI_API_KEY is set, else the fixed list; trained and scored on the
+   (ml.core.loop: proposals from Gemini only when ML_GEMINI_API_KEY is set, a key of its own so the briefings'
+   GEMINI_API_KEY quota is never touched; else the fixed list; trained and scored on the
    frozen held-out set; promoted only by the rule, with a second-seed confirmation).
 3. Deploy (only with ML_DEPLOY_RETRAINED=1; off by default until the server registry's champions are the live
    ones, since a registry champion has only beaten earlier runs of the same registry): a run the loop promoted over an earlier registry champion (not the first run against the baseline) is
@@ -111,7 +112,13 @@ def cycle(targets: list[str], rounds: int, proposals: int, retrain: bool, do_dep
     if not retrain:
         return status | {"finished": now()}
     reg = open_registry(None)
-    dry = not os.getenv("GEMINI_API_KEY")
+    # Gemini only with a key of its own: GEMINI_API_KEY belongs to the live briefings (free-tier quota).
+    ml_key = os.getenv("ML_GEMINI_API_KEY")
+    if ml_key:
+        os.environ["GEMINI_API_KEY"] = ml_key
+    else:
+        os.environ.pop("GEMINI_API_KEY", None)
+    dry = not ml_key
     for t in targets:
         st = status["targets"][t] = {"started": now()}
         try:
@@ -120,7 +127,7 @@ def cycle(targets: list[str], rounds: int, proposals: int, retrain: bool, do_dep
             before = (reg.champion(t) or {}).get("run_id")
             out = loop(spec, rounds, reg=reg, k=proposals, dry_run=dry, data=DATA.get(t), log=log)
             after = (reg.champion(t) or {}).get("run_id")
-            st |= {"loop_id": out["loop_id"], "proposer": "default (no GEMINI_API_KEY)" if dry else "gemini",
+            st |= {"loop_id": out["loop_id"], "proposer": "default (no ML_GEMINI_API_KEY)" if dry else "gemini",
                    "rounds": out["rounds"], "champion_before": before, "champion_after": after}
             retrained_ok = os.getenv("ML_DEPLOY_RETRAINED", "0") == "1"
             if after and after != before and before and do_deploy and retrained_ok:
