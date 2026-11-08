@@ -7,7 +7,9 @@
 
 POSEIDON watches live ship tracking (AIS) and flags ships that go quiet while other ships in the same area keep reporting. It gives an analyst a short list of candidates, a risk estimate for each ship, a replay of the picture, and a shared workspace for a team. It was built at HackTheBurgh.
 
-<!-- HERO IMAGE -->
+![The live picture over the Baltic and Gulf of Finland: ships, heat map, review list and replay bar (illustrative data)](docs/readme/map-overview.jpg)
+
+*Illustrative data throughout this README.* Every picture was captured with the demo data set, and each one carries an ILLUSTRATIVE DATA banner. Ships with names such as SYN 1393 are synthetic. Named ships and sample text are demo content, not findings about real vessels, and the pictures do not show what the live feed says today.
 
 ## The problem
 
@@ -25,7 +27,9 @@ How big is it? A 2022 study of Global Fishing Watch data for 2017 to 2019 found 
 
 A world map shows ships from AISStream and, for Finnish waters, from Digitraffic (Fintraffic). The two feeds are merged, so a ship heard by both is shown and stored once. A status line shows the connection, how many ships are on screen and the message rate. Ships are drawn as one GPU layer, so the whole world stays smooth. Class A and Class B ships use colours that are readable for people with colour-vision differences, and there is a heat map, which can show the live density or popular places.
 
-<!-- IMAGE: live picture -->
+![Zoomed in on the Gulf of Finland: Class A and Class B ships in accessible colours, with headings (illustrative data)](docs/readme/ships-zoomed.jpg)
+
+*Illustrative data.* Zoomed in on the Gulf of Finland. Class A and Class B ships use different colours and headings show the direction of travel.
 
 ### Dark-ship candidates
 
@@ -40,25 +44,37 @@ The gap detector runs on Class A ships. A ship is a **candidate** when it has be
 
 Silences at anchor or moored are not gaps. Our own outages are removed from the judgement. A candidate is a prompt to look, not a finding: the label says the silence *looks* deliberate.
 
-<!-- IMAGE: candidate ring -->
+![The map filtered to dark-ship candidates; the pink markers are the candidates (illustrative data)](docs/readme/show-dark-candidates.jpg)
+
+*Illustrative data.* "Show" set to dark-ship candidates. The pink markers are candidates, not findings.
 
 ### The ship window
 
 Click a ship and a floating window opens with its name, MMSI, IMO, type, speed, course and destination. It also shows the ship's departure and arrival ports (From → To), its recent track, its open and recent gaps, its risk score and any route prediction. Leader lines tie each window to its ship on the map.
 
-<!-- IMAGE: ship window -->
+![A ship window with identity, the 24 hour track and the Brief me and Add to review buttons (illustrative data)](docs/readme/ship-window.jpg)
+
+*Illustrative data.* A ship window: identity, last AIS time and speed, the 24 hour track, and the actions.
+
+![Three ship windows, each with a leader line back to its ship (illustrative data)](docs/readme/ship-windows-several.jpg)
+
+*Illustrative data.* Several ship windows at once. Leader lines tie each window to its ship.
 
 ### Predictions and risk
 
-- **Route.** For a ship that has gone quiet, the route model estimates where it is likely to be at several time points up to 24 hours later. Each estimate comes with an 80% circle and a 95% circle, so the picture shows how far the ship could have moved, not one point.
-- **Go-dark risk.** Each moving ship gets a chance of going dark within 1, 6 or 24 hours. The primary target is 6 hours. The scores are frozen once an hour, so they can be checked later.
-- **Watchlist.** The top 50 ships by risk, each with reason codes: `HIGH_FORECAST`, `OPEN_GAP`, `RECENT_GAP`, `DRAUGHT_JUMP` (draught changed by a metre or more across a recent gap) and `BLANK_DESTINATION`.
+- **Route.** For a ship that has gone quiet, the route model estimates where it is likely to be at several time points up to 24 hours later. Each estimate comes with an 80% circle and a 95% circle, so the picture shows how far the ship could have moved, not one point. On our own feed the first circles were too small; the recalibrated radii are in [Models and results](#models-and-results).
+- **Go-dark ranking.** Each moving ship is scored for how likely it is to go dark within 6 hours, and the ships are ranked. The scores are frozen once an hour, so they can be checked later. **The ranking is weak on our own feed.** Its AUC is 0.59 at 1 hour and 0.63 at 6 hours. The top 10% of ships went dark about twice as often as the average within 6 hours. So POSEIDON shows go-dark as an order with reasons, not as a percentage.
+- **Watchlist.** The top 50 ships in the ranking, each with reason codes: `HIGH_FORECAST`, `OPEN_GAP`, `RECENT_GAP`, `DRAUGHT_JUMP` (draught changed by a metre or more across a recent gap) and `BLANK_DESTINATION`. The reasons are the part to read; the rank alone is a weak signal.
 - **Forecast check.** Each frozen set is graded once its window closes. A forecast counts as a hit or a miss, or is marked censored when our data had a hole.
 
 With no trained model loaded, every ship gets the same baseline risk, so the ranking carries no information. The ranking becomes useful once a trained champion model is loaded (see [Models and results](#models-and-results)).
 
-<!-- IMAGE: watchlist and risk -->
-<!-- IMAGE: forecast check -->
+![A ship window with the route forecast layer on: the predicted path and the uncertainty ring (illustrative data)](docs/readme/route-forecast.jpg)
+
+*Illustrative data.* The route forecast for a quiet ship: the predicted path and the uncertainty ring.
+![Forecast check panel listing the top 10 ships against three baselines (illustrative data)](docs/readme/forecast-check.jpg)
+
+*Illustrative data.* The forecast check for the top 10 ships. It sets the frozen forecast against what happened and against three simple baselines. Here the ranges overlap, so the check cannot yet show that the model beats them.
 
 ### Review list and briefings
 
@@ -67,20 +83,33 @@ With no trained model loaded, every ship gets the same baseline risk, so the ran
 - **Brief me.** A Gemini summary of the picked ships. It says whether the model flagged a ship, and why, or whether a user added it. An optional spoken version uses ElevenLabs.
 - **Session summary.** Any member can ask for a summary of the session's notes, saved briefings and listed ships.
 
-<!-- IMAGE: review list -->
-<!-- IMAGE: brief me -->
+![The review list with ships added from their windows, each with who added it (illustrative data)](docs/readme/review-list.jpg)
+
+*Illustrative data.* The review list, with ships added from their windows and who added each one.
+
+![Compare panel for two ships picked in the review list (illustrative data)](docs/readme/compare-ships.jpg)
+
+*Illustrative data.* Compare two ships side by side.
+![A generated briefing for two ships, with the reasons for each and the note that it is a sample (illustrative data)](docs/readme/briefing.jpg)
+
+*Illustrative data.* A briefing shown in sample mode, because no live backend was connected when this was captured. The real text is written by Gemini from the ships' data. Its reasons are the signals behind each ship, and it says a silent ship is not evidence of wrongdoing.
 
 ### Replay
 
 A scrub bar takes the picture back to any moment in the stored history. Play it at 1 to 600 times real speed, or pause. Gaps, risk, the watchlist and route predictions are all shown as they were at the replay time. Seeking to a time across the whole world takes about 5 seconds.
 
-<!-- IMAGE: replay -->
+![Replay mode with the scrub bar, the replay timestamp and the speed control (illustrative data)](docs/readme/timeline-replay.jpg)
+
+*Illustrative data.* Replay mode, paused, with the scrub bar, the timestamp and the speed.
+
+![Replay with Follow selected on: the map follows the two selected ships (illustrative data)](docs/readme/timeline-follow.jpg)
+
+*Illustrative data.* Replay with "Follow selected" on. The map follows the two selected ships.
 
 ### Collaboration
 
 A team works in a **session**. An owner invites people with a one-time link that lasts 7 days, or by email to someone who has signed in. Members see who is viewing and following which ship, share the review list and notes, and read an activity log. A member can set their presence to private and still see others. A session resumes when you sign in again.
 
-<!-- IMAGE: collaboration -->
 
 ## Extras
 
@@ -91,6 +120,14 @@ These are useful, but they are not the main job of the product.
 - **Popular places.** Where ships spend time, from Global Fishing Watch presence data.
 - **Digitraffic.** A second live feed for Finnish waters.
 - **Themes.** Light, dark, high-contrast and larger text, with a colour-vision signal mode.
+
+![Delayed layers switched on: radar detections (3 days old), radar passes (13 hours old) and GFW gap events (3 days old) (illustrative data)](docs/readme/radar-gfw-layers.jpg)
+
+*Illustrative data.* The delayed layers, each with its age. Radar and gap events are never shown as live.
+
+![Show set to sanctioned and notable yachts, with sources credited in the panel (illustrative data)](docs/readme/show-yachts.jpg)
+
+*Illustrative data.* "Show" set to sanctioned and notable yachts. The panel credits OpenSanctions and Wikipedia.
 
 ## How it works
 
@@ -128,14 +165,18 @@ flowchart LR
 
 ## Models and results
 
-The live server runs the two champions below. Every number is traceable to a team post on the board or to a merged PR.
+The server runs two trained champions, `route-dma90-v2` and `godark-lgbm-20261108T051156`, and each has a recalibrated `-cal1` version that replaces its radii or probabilities once applied. Each result below is traceable to a team post on the board or a merged PR. The results are not all good, and the table says so.
 
-| Model | Job | Held-out result | Where it is recorded |
+| Model | Job | Result | Where it is recorded |
 |---|---|---|---|
-| **Route `route-dma90-v2`** (live champion) | Where a quiet ship is likely to be at 1, 3, 6, 12 and 24 hours, with 80% and 95% circles | Skill against dead reckoning: 0.365 at 1 h, 0.624 at 3 h, 0.716 at 6 h, 0.795 at 12 h, 0.873 at 24 h. Circles cover 0.79 to 0.81 (80%) and 0.94 to 0.95 (95%). 509,061 held-out cases. Trained on 90 days of Danish Maritime Authority AIS. | Board post, 8 Nov 07:32 (`agent-chat`, issue #153); `ml/route/`, PR #140 |
-| **Go-dark `godark-lgbm-20261108T051156`** (live champion) | Chance a moving ship goes dark (`deliberate_candidate`) within 1 h and 6 h | PR #133's evaluation of this model code, on the 7 Nov 16:52 to 8 Nov 04:00 log, labels from our own detector (the champion's own run report is not in this repo). On `deliberate_candidate`, 6 h: Brier skill +0.012 [−0.018, +0.039], which is no better than the base rate. On `unknown`, 6 h: +0.075 [+0.027, +0.125]. | PR #133 description (`ml/godark/`) |
+| **Route `route-dma90-v2`** | Where a quiet ship is likely to be at several horizons up to 24 h, with 80% and 95% circles | **Training holdout** (509,061 Danish cases, 90 days of Danish Maritime Authority AIS): skill against dead reckoning 0.365 at 1 h, 0.624 at 3 h, 0.716 at 6 h, 0.795 at 12 h, 0.873 at 24 h. Circles covered 0.79 to 0.81 (80%) and 0.94 to 0.95 (95%). **Our own feed, 11 h backtest** (moving ships): skill 0.141 at 1 h, 0.400 at 3 h, 0.515 at 6 h, so the model is much weaker on our feed. Circles covered only 0.59 to 0.62 (80%) and 0.86 to 0.89 (95%). | Board posts 8 Nov 07:32 (issue #153) and 08:17 (backtest) |
+| **Route `route-dma90-v2-cal1`** (radii recalibrated) | Same model, with radii widened by 1.61 to 1.71 (80%) and 1.33 to 1.41 (95%) per horizon, fitted on the first half of 11,648 graded backtest rows | On the later half, unseen in the fit: 80% coverage 0.79 to 0.82 and 95% coverage 0.95 to 0.97. Point predictions are unchanged. | Board post 8 Nov 08:20 (draft release `models-recal-v1`) |
+| **Go-dark `godark-lgbm-20261108T051156`** | Ranking of moving ships by how likely they are to go dark within 1 h and 6 h (`deliberate_candidate`) | **Weak.** On our feed, AUC 0.59 at 1 h and 0.63 at 6 h. The top 10% of ships went dark about twice as often as the average within 6 h. The raw probabilities were about twice the hit rate (dark_1h mean 0.022 against a hit rate of 0.0097; dark_6h 0.095 against 0.046), so they are not shown as percentages. | Board posts 8 Nov 08:17 and 08:20 |
+| **Go-dark `godark-lgbm-20261108T051156-cal1`** | Same ranking, with the probabilities shifted to match the hit rate | Mean probability now equals the hit rate. The ranking is unchanged. | Board post 8 Nov 08:20 |
 | Route `dma90-v1` | First route model | Retired. Its file format is refused by the server loader. | Board post, 8 Nov 06:46 |
-| Go-dark from Global Fishing Watch history | Go-dark risk trained on GFW gap events and presence | The default run was rejected by the promotion rule. 30-day skill +0.020 [−0.057, +0.083] with all 2.9 months of history; neither primary interval excludes zero. | PR #154 description (`ml/godark_gfw/`) |
+| Go-dark from Global Fishing Watch history | Go-dark risk trained on GFW gap events and presence | Rejected by the promotion rule. 30-day skill +0.020 [−0.057, +0.083] with all 2.9 months of history; neither primary interval excludes zero. | PR #154 description (`ml/godark_gfw/`) |
+
+The route model's skill on our own feed is the number to quote when judging it. The Danish holdout figures show what the model does on its training source, not on the worldwide live feed.
 
 The gap detector was replayed offline over the 7 Nov log, 16:51 to 21:57 UTC, 1.65 million messages and 24,615 Class A ships. It found 2,326 gaps: 654 `deliberate_candidate`, 1,097 `coverage_gap`, 495 `unknown` and 80 `own_stall`. Closed `deliberate_candidate` gaps lasted a median of 69 minutes. Source: [`backend/README.md`](backend/README.md), section "Gap detector", "Measured on the recorded 7 Nov log".
 
@@ -153,7 +194,7 @@ Ledger volume, estimated from backtest rates for the 5-minute live cycle: about 
 | **Sentinel-1 via Element 84 Earth Search** | Radar scene coverage (no ship detection is done from it) | Copernicus Sentinel data, free and open. Credited as "Contains modified Copernicus Sentinel data". |
 | **Danish Maritime Authority** | AIS archive for training the route and go-dark models | Cite the DMA wherever the data or a model trained on it is shown. Check the archive's terms before reuse. |
 | **OpenFreeMap and OpenStreetMap** | Basemap vector tiles and fonts | Map data © OpenStreetMap contributors. The coastline is our own build. |
-| **OpenSanctions** | Sanctioned-vessel list for the yacht layer | Check OpenSanctions' licence before any commercial use. Shown as reported. |
+| **OpenSanctions** | Sanctioned-vessel list for the yacht layer | CC BY-NC 4.0, credited in the yacht panel. Non-commercial use only. Shown as reported. |
 | **Wikipedia** | Notable-yacht list for the yacht layer | CC BY-SA 4.0. The source page is linked from each row. |
 | **Gemini, ElevenLabs** | Briefing text and optional spoken briefings (AI services, not data sources) | Used under their own API terms. The predictor never calls Gemini. |
 
