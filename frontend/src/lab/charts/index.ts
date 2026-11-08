@@ -1,0 +1,11 @@
+// Lab chart kit: <Chart> (scales, axes, tooltip) and its marks. See Chart.tsx and marks.tsx.
+export { Chart } from './Chart'
+export type { ChartProps } from './Chart'
+export { useChart } from './context'
+export type { Axis, CatAxis, ChartCtx, NumAxis, Tip } from './context'
+export { pathOf, shapePath } from './geom'
+export type { Shape } from './geom'
+export { Band, Bars, Diagonal, Legend, Line, Markers, Ranges, RefLine, Step } from './marks'
+export type { Bar, Interval, LegendItem, Marker, Range, Tone, XY } from './marks'
+export { band, extent, linear, niceTicks, numLabel, pad, timeFull, timeLabel, timeTicks } from './scale'
+export type { BandScale, Domain, Scale } from './scale'
