@@ -6,16 +6,33 @@ this data or a model trained on it is shown.
 `dma.py` downloads the archive's daily files (`aisdk-YYYY-MM-DD.zip`, 550 to 750 MB zipped, about 4.5 GB of CSV),
 cleans them with DuckDB and writes Parquet in the ml track contract (`docs/handoffs/ml-architecture.md`).
 
+## On a fresh machine (one command, Python 3.12, no keys, no database)
+
 ```bash
-python3 -m venv ml/.venv && ml/.venv/bin/pip install duckdb pyarrow httpx pytest
-ml/.venv/bin/python -m ml.data.dma                   # 14 newest days (3 downloads, 2 conversions at once)
-ml/.venv/bin/python -m ml.data.dma --day 2026-11-05  # one day; --days N for the N newest
-ml/.venv/bin/python -m pytest -q ml/data/tests
+git clone -b 121-ml-data git@github.com:Hamish-MarshallDawson/Hedged-Bets-hacktheburgh.git && cd Hedged-Bets-hacktheburgh
+python3.12 -m venv ml/.venv && ml/.venv/bin/pip install -r ml/data/requirements.txt \
+  && ml/.venv/bin/python -m ml.data.dma --days 14 --until 2026-11-05 --out ~/data/poseidon/dma --delete-zips
+ml/.venv/bin/python -m ml.data.dma --out ~/data/poseidon/dma --verify    # optional: re-hash against manifest.json
 ```
 
-Days already converted are skipped (`--force` redoes them); zips already downloaded with the listed size are reused.
+`--days 14 --until 2026-11-05` fixes the exact days (23 Oct to 5 Nov 2026) so every machine builds the same data;
+without `--until` it takes the newest days in the archive. `ml/requirements.txt` (the whole ml stack) pins the same
+versions, so either file works. Re-running skips days already converted (`--force` redoes them) and reuses zips
+already downloaded.
 
-## Output (`/home/aiden/data/poseidon/dma/`, or `--out`, or `$POSEIDON_DMA_DIR`)
+What to expect (measured 8 Nov on a 16-core desktop with 31 GB RAM, duckdb 1.5.6):
+
+- Time: about 9 minutes for 14 days at defaults (3 downloads and 2 conversions at once): download 10 to 50 s per
+  day (all 14 zips arrive in about 1.5 minutes), unzip 6 to 18 s, convert 20 to 70 s.
+- Memory: about 3.2 GB per conversion, so about 7 GB at the default 2 at once (`--converts 1` halves it).
+- Disk: 1.8 GB of output. Peak while running about 20 GB with `--delete-zips` (estimated, not measured: zips not
+  yet converted, plus a 4.5 GB CSV and DuckDB scratch per conversion); the 8.7 GB of zips stay if it is not given.
+- The same days give byte-identical Parquet with the same duckdb version (checked across thread counts), so
+  `dataset_hash` in `manifest.json` can be compared between machines. Per-day row counts are in `stats/`.
+- Expected result for `--days 14 --until 2026-11-05`: 137,129,082 rows (29,905,123 at 1 per minute), 8,458 ships,
+  `dataset_hash` `ac9a4c343baad38e8c62554ed499a6cc222b7625258135850c9ba84ae39ad8f4` (duckdb 1.5.6).
+
+## Output (`--out`, default `$POSEIDON_DMA_DIR`, else `~/data/poseidon/dma`)
 
 | Path | What |
 |---|---|
@@ -42,3 +59,6 @@ con.execute(f"SELECT * FROM {tracks_sql(thin=True)} WHERE mmsi = 219000001 ORDER
 4. Same mmsi and same second de-duplicated (copies from several receivers; 35 to 56% of rows, 23 Oct to 5 Nov 2026).
 5. Speed gate at 40 kn with 200 m slack: first isolated spikes (both legs too fast), then any remaining jump from the
    previous kept fix.
+
+Other options: `--day YYYY-MM-DD` (repeatable), `--download-only`, `--manifest-only`, `--downloads`, `--converts`,
+`--threads`, `--memory`. Tests: `ml/.venv/bin/python -m pytest -q ml/data/tests`.

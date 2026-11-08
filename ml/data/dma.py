@@ -38,6 +38,7 @@ import concurrent.futures as cf
 import datetime as dt
 import hashlib
 import json
+import multiprocessing as mp
 import os
 import re
 import shutil
@@ -202,7 +203,7 @@ def convert_csv(csv_path: Path, day: str, out: Path, threads: int = 6, memory: s
     t0 = time.monotonic()
     con = duckdb.connect(str(tmp / "work.duckdb"))
     con.execute(f"SET threads = {threads}; SET memory_limit = '{memory}'; SET temp_directory = '{tmp}';"
-                "SET preserve_insertion_order = false; SET TimeZone = 'UTC';")
+                "SET preserve_insertion_order = false; SET TimeZone = 'UTC'; SET enable_progress_bar = false;")
     cols = ", ".join(f"'{c}': 'VARCHAR'" for c in CSV_COLUMNS)
     con.execute(f"""
         CREATE TABLE raw AS SELECT * FROM read_csv({_q(str(csv_path))}, header = true, columns = {{{cols}}},
@@ -479,7 +480,9 @@ def main(argv: list[str] | None = None) -> int:
     todo = [d for d in days if a.force or d not in done]
     failures = []
     t0 = time.monotonic()
-    with cf.ThreadPoolExecutor(a.downloads) as dl, cf.ProcessPoolExecutor(a.converts) as cv:
+    # spawn, not fork: forking while download threads hold the stdout lock left a worker hung on its log line
+    with cf.ThreadPoolExecutor(a.downloads) as dl, \
+            cf.ProcessPoolExecutor(a.converts, mp_context=mp.get_context("spawn")) as cv:
         dls = {dl.submit(download, d, listing[d], out / "raw"): d for d in todo}
         convs = {}
         for f in cf.as_completed(dls):
