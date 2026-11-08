@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { Band, Chart, Legend, Line, Markers, RefLine, Step as StepLine, extent, pad, timeFull, useChart, type Shape, type Tone } from '../charts'
 import type { LabEvent, Metrics, Proposal, Run, Summary } from '../types'
 import {
-  BASELINE, MARKER_LABEL, championSteps, hoursLabel, liveSkill, markers, modelKey, pct, recalLog,
+  BASELINE, MARKER_LABEL, championSteps, hoursLabel, liveSkill, markers, modelKey, offlineStatName, pct, recalLog,
   type EventLike, type LivePoint, type Marker, type MarkerKind, type MetricsLike, type ModelSummaryLike, type ProposalLike, type RecalEntry, type RunLike, type Step,
 } from './shape'
+import { liveHorizon, offlineSkill } from '../skill'
 import './improve.css'
 
 // "How it improved": per model, the champion's offline skill as a step line (one step per promotion or deployment,
@@ -53,6 +54,9 @@ function ModelHistory({ model, runs, events, metrics, proposals, now }: { model:
   const marks = useMemo(() => markers(model, runs, events, proposals), [model, runs, events, proposals])
   const h = hoursLabel(model.offline.primary_h)
   const vs = BASELINE[key]
+  // One statistic at one horizon on this chart: go-dark's held-out Brier skill (not its log-loss skill) under its live Brier skill.
+  const stat = offlineStatName(model, runs)
+  const offline = useMemo(() => offlineSkill(model, runs), [model, runs])
 
   const ts = [...steps.map((s) => s.t), ...marks.map((m) => m.t), ...live.live.map((p) => p.t), ...live.backtest.map((p) => p.t), now]
   const t0 = Math.min(...ts)
@@ -64,25 +68,27 @@ function ModelHistory({ model, runs, events, metrics, proposals, now }: { model:
   const stepPts = steps.map((st) => ({ x: st.t, y: st.value, s: st }))
   const band = steps.map((st) => ({ x: st.t, lo: st.lo, hi: st.hi }))
   const livePrimary = model.live?.primary
-  const liveNow = livePrimary?.value ?? lastLive?.value
+  // Live against held-out only on the same statistic and horizon: the summary's live figure when it is graded at the
+  // primary horizon (route), else the chart's own live series pooled (go-dark's summary figure is at 1 h).
+  const liveNow = livePrimary?.value != null && liveHorizon(model) === model.offline.primary_h ? livePrimary.value : pooled(live.live)
 
   return (
     <div className="lab-improve__model">
       <p className="lab-improve__lede">
         Champion <b>{model.champion.version}</b>:{' '}
-        {model.offline.skill != null
-          ? <>skill <b>{pct(model.offline.skill)}</b>{model.offline.skill_lo != null && model.offline.skill_hi != null && <> ({pct(model.offline.skill_lo)} to {pct(model.offline.skill_hi)})</>} over {vs} at {h} on the held-out set{model.offline.holdout ? ` (${model.offline.holdout})` : ''}.</>
-          : <>no offline skill on a held-out set yet.</>}
+        {offline != null
+          ? <>{offline.name} <b>{pct(offline.skill)}</b>{offline.lo != null && offline.hi != null && <> ({pct(offline.lo)} to {pct(offline.hi)})</>} over {vs} at {h} on the held-out set{model.offline.holdout ? ` (${model.offline.holdout})` : ''}.</>
+          : <>no offline {stat} on a held-out set yet.</>}
         {' '}{livePrimary?.value != null
           ? <>Live on our feed, last {model.live?.hours ?? 24} h: <b>{pct(livePrimary.value)}</b> {livePrimary.name}{model.live?.n ? ` (${model.live.n.toLocaleString('en-GB')} graded)` : ''}.</>
           : lastLive ? <>Live on our feed, last hour: <b>{pct(lastLive.value)}</b> ({lastLive.n.toLocaleString('en-GB')} graded).</>
             : key === 'fishing' || !model.live ? 'Not graded on our live feed yet.' : 'No live grades at this horizon yet.'}
       </p>
       {hasValues || marks.length ? (
-        <Chart label={`${SHORT[key]} champion skill over ${vs} at ${h}, offline and live, with model events`} x={{ type: 'time', domain: xDomain }} y={{ domain: yDomain, percent: true, label: `skill over ${vs}` }} height={240} margin={{ top: 18 }}>
+        <Chart label={`${SHORT[key]} champion ${stat} over ${vs} at ${h}, offline and live, with model events`} x={{ type: 'time', domain: xDomain }} y={{ domain: yDomain, percent: true, label: `${stat} over ${vs} at ${h}` }} height={240} margin={{ top: 18 }}>
           <RefLine y={0} label={`no better than ${vs}`} />
           <Band data={band} step until={xDomain[1]} tone="ink" />
-          <StepLine data={stepPts} until={xDomain[1]} tone="ink" label="champion skill on the held-out set" tip={(d) => stepTip(d.s, vs, h)} />
+          <StepLine data={stepPts} until={xDomain[1]} tone="ink" label="champion skill on the held-out set" tip={(d) => stepTip(d.s, stat, vs, h)} />
           <Line data={live.backtest.map(xy)} tone="muted" dashed dots label="backtest replay" tip={(d) => pointTip(d, `backtest replay, ${live.name}`)} />
           <Line data={live.live.map(xy)} tone="accent" dots label="live on our feed" tip={(d) => pointTip(d, `live, ${live.name}`)} />
           <EventRail marks={marks} />
@@ -95,17 +101,22 @@ function ModelHistory({ model, runs, events, metrics, proposals, now }: { model:
         ...(live.backtest.length ? [{ label: 'backtest replay', tone: 'muted' as const, kind: 'dashed' as const }] : []),
         ...[...new Set(marks.map((m) => m.kind))].map((k) => ({ label: MARKER_LABEL[k].toLowerCase(), tone: KIND[k].tone, kind: KIND[k].shape })),
       ]} />
-      {liveNow != null && model.offline.skill != null && liveNow < model.offline.skill && (
-        <p className="lab-improve__note">Live skill is below the offline result: our feed is not the held-out set, so we show both.</p>
+      {liveNow != null && offline != null && liveNow < offline.skill && (
+        <p className="lab-improve__note">Live {stat} at {h} is below the held-out result: our feed is not the held-out set, so we show both.</p>
       )}
     </div>
   )
 }
 
 const xy = (p: LivePoint) => ({ x: p.t, y: p.value, p })
+/** n-weighted mean of the live points. */
+const pooled = (ps: LivePoint[]) => {
+  const n = ps.reduce((a, p) => a + p.n, 0)
+  return n > 0 ? ps.reduce((a, p) => a + p.value * p.n, 0) / n : null
+}
 const pointTip = (d: { p: LivePoint }, name: string) => <><b>{pct(d.p.value)}</b> {name}<br />{timeFull(d.p.t)} · {d.p.n.toLocaleString('en-GB')} graded</>
-const stepTip = (s: Step, vs: string, h: string) => (
-  <><b>{s.version}</b><br />{s.how === 'current' ? 'current champion' : s.how} {timeFull(s.t)}<br />skill {pct(s.value)} over {vs} at {h}{s.lo != null && s.hi != null ? ` (${pct(s.lo)} to ${pct(s.hi)})` : ''}</>
+const stepTip = (s: Step, stat: string, vs: string, h: string) => (
+  <><b>{s.version}</b><br />{s.how === 'current' ? 'current champion' : s.how} {timeFull(s.t)}<br />{stat} {pct(s.value)} over {vs} at {h}{s.lo != null && s.hi != null ? ` (${pct(s.lo)} to ${pct(s.hi)})` : ''}</>
 )
 
 const KIND: Record<MarkerKind, { shape: Shape; tone: Tone }> = {

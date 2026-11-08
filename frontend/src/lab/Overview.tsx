@@ -1,17 +1,18 @@
 import { Chart, Legend, Markers, Ranges, RefLine, extent, pad } from './charts'
 import { baselineOf, calValue, count, horizon, interval, proposerLabel, signedPct, sourceLabel, when } from './format'
+import { liveHorizon, offlineSkill, recordedOffline, type SkillFigure, type SkillRunLike } from './skill'
 import type { ModelSummary, Summary } from './types'
 
 // One card per model (champion, since when, offline skill with its interval, live primary metric and calibration
 // with pass/fail written out, deployed or not), then the totals strip and the improvement cycle's state.
 
-export function Overview({ summary }: { summary: Summary | null }) {
+export function Overview({ summary, runs = [] }: { summary: Summary | null; runs?: SkillRunLike[] }) {
   if (!summary) return <p className="lab-muted" role="status">Loading the models…</p>
   const { totals, cycle } = summary
   return (
     <section className="lab-overview" aria-label="Models at a glance">
       <div className="lab-cards">
-        {summary.models.map((m) => <ModelCard key={m.target} m={m} />)}
+        {summary.models.map((m) => <ModelCard key={m.target} m={m} runs={runs} />)}
       </div>
       <dl className="lab-totals">
         <div><dt>Training runs</dt><dd>{count(totals.runs)}</dd></div>
@@ -26,10 +27,12 @@ export function Overview({ summary }: { summary: Summary | null }) {
   )
 }
 
-export function ModelCard({ m }: { m: ModelSummary }) {
+export function ModelCard({ m, runs = [] }: { m: ModelSummary; runs?: SkillRunLike[] }) {
   const base = baselineOf(m.target)
-  const h = horizon(m.offline.primary_h)
-  const iv = interval(m.offline.skill_lo, m.offline.skill_hi)
+  // The held-out figure on the statistic the model is graded on live (go-dark: Brier skill), else the recorded one, named.
+  const off = offlineSkill(m, runs) ?? recordedOffline(m, runs)
+  const h = horizon(off?.h ?? m.offline.primary_h)
+  const iv = interval(off?.lo, off?.hi)
   const cal = m.live?.calibration
   return (
     <article className="lab-card" aria-labelledby={`lab-card-${m.target}`}>
@@ -44,11 +47,11 @@ export function ModelCard({ m }: { m: ModelSummary }) {
       </p>
       <div className="lab-card__row">
         <span className="lab-k">Held-out test</span>
-        {m.offline.skill == null ? (
+        {off == null ? (
           <p>No held-out skill recorded for this champion.{m.offline.holdout ? <span className="lab-muted"> Tested on {m.offline.holdout}.</span> : null}</p>
         ) : (
           <p>
-            <b className="lab-num">{signedPct(m.offline.skill)}</b> skill over {base} at {h}
+            <b className="lab-num">{signedPct(off.skill)}</b> {off.name} over {base} at {h}
             <span className="lab-muted"> {iv ? `95% interval ${iv}` : 'no interval recorded'}{m.offline.holdout ? ` · ${m.offline.holdout}` : ''}</span>
           </p>
         )}
@@ -75,37 +78,45 @@ export function ModelCard({ m }: { m: ModelSummary }) {
           </>
         )}
       </div>
-      <SkillStrip m={m} />
+      <SkillStrip m={m} runs={runs} />
       {m.note && <p className="lab-card__note">{m.note}</p>}
     </article>
   )
 }
 
-/** Held-out skill (with its interval) against live skill on one axis, with zero (no better than the baseline) marked. */
-function SkillStrip({ m }: { m: ModelSummary }) {
-  const off = m.offline.skill
+/** Held-out skill (with its interval) against live skill on one axis, with zero (no better than the baseline) marked.
+ *  Both points are the same statistic at the same horizon: the live one's (go-dark: Brier skill at 1 h), so the
+ *  held-out point is taken at that horizon, and left out when the champion has no comparable held-out figure. */
+function SkillStrip({ m, runs }: { m: ModelSummary; runs: SkillRunLike[] }) {
   const live = m.live?.primary.value ?? null
+  const fig: SkillFigure | null = live != null ? offlineSkill(m, runs, liveHorizon(m)) : offlineSkill(m, runs) ?? recordedOffline(m, runs)
+  const off = fig?.skill ?? null
   if (off == null && live == null) return null
+  const base = baselineOf(m.target)
+  const h = horizon(fig?.h ?? liveHorizon(m))
+  const stat = fig?.name ?? 'skill'
+  const what = live != null ? m.live!.primary.name : `${stat} over ${base} at ${h}`
   const rows = [...(off != null ? ['held-out'] : []), ...(live != null ? ['live'] : [])]
-  const dom = pad(extent([0, off, m.offline.skill_lo, m.offline.skill_hi, live]), 0.12)
-  const iv = m.offline.skill_lo != null && m.offline.skill_hi != null ? [{ y: 'held-out', x0: m.offline.skill_lo, x1: m.offline.skill_hi }] : []
+  const lo = fig?.lo ?? null, hi = fig?.hi ?? null
+  const dom = pad(extent([0, off, lo, hi, live]), 0.12)
+  const iv = off != null && lo != null && hi != null ? [{ y: 'held-out', x0: lo, x1: hi }] : []
   const pts = [
-    ...(off != null ? [{ x: off, y: 'held-out', tone: 'accent' as const, shape: 'circle' as const, what: 'Held-out test' }] : []),
+    ...(off != null ? [{ x: off, y: 'held-out', tone: 'accent' as const, shape: 'circle' as const, what: `Held-out test, ${h}` }] : []),
     ...(live != null ? [{ x: live, y: 'live', tone: live < 0 ? ('bad' as const) : ('ink' as const), shape: 'diamond' as const, what: `Live, last ${m.live?.hours ?? 24} h` }] : []),
   ]
   return (
     <figure className="lab-strip">
-    <Chart label={`${m.label}: held-out skill ${signedPct(off)} and live ${signedPct(live)} over ${baselineOf(m.target)}`}
+    <Chart label={`${m.label}: ${what}, held-out ${signedPct(off)} and live ${signedPct(live)}`}
       height={rows.length * 26 + 24} x={{ domain: dom, percent: true, ticks: 4, noGrid: true }} y={{ type: 'band', domain: rows }} margin={{ top: 4, bottom: 18 }}>
       <RefLine x={0} label="no skill" />
       <Ranges data={iv} tone="accent" thickness={8} tip={(d) => <>95% interval {interval(d.x0, d.x1)}</>} />
-      <Markers data={pts} size={4.5} tip={(p) => <><b>{p.what}</b>: {signedPct(p.x)} over {baselineOf(m.target)}</>} label="skill" />
+      <Markers data={pts} size={4.5} tip={(p) => <><b>{p.what}</b>: {signedPct(p.x)} {stat} over {base} at {h}</>} label="skill" />
     </Chart>
     <figcaption><Legend items={[
-      ...(off != null ? [{ label: 'held-out test', tone: 'accent' as const, kind: 'circle' as const }] : []),
+      ...(off != null ? [{ label: `held-out test, ${h}`, tone: 'accent' as const, kind: 'circle' as const }] : []),
       ...(iv.length ? [{ label: '95% interval', tone: 'accent' as const, kind: 'band' as const }] : []),
       ...(live != null ? [{ label: `live, last ${m.live?.hours ?? 24} h`, tone: live < 0 ? ('bad' as const) : ('ink' as const), kind: 'diamond' as const }] : []),
-      { label: `skill over ${baselineOf(m.target)}; left of 0 is worse`, tone: 'muted' as const, kind: 'dashed' as const },
+      { label: `${stat} over ${base} at ${h}; left of 0 is worse`, tone: 'muted' as const, kind: 'dashed' as const },
     ]} /></figcaption>
     </figure>
   )

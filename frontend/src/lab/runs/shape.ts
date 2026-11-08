@@ -1,5 +1,6 @@
 // Data shaping for the runs section: plain-words labels, primary skill, change against the parent, decision line.
 // The record shapes follow the Model Lab contract (docs/handoffs/lab.md); only the fields used here are typed.
+import { byHandLine, promotionWhy, verdict } from '../decision'
 
 export interface SkillH { n: number; stat: number | null; baseline_stat: number | null; skill: number | null; skill_lo: number | null; skill_hi: number | null; win_rate?: number | null }
 export interface CalCheck { name: string; horizon_s: number | null; value: number | null; nominal: number | null; tol?: number | null; ok?: boolean | null }
@@ -8,6 +9,7 @@ export interface Stratum { stratum: string; value: string; horizon_s: number; n:
 export interface Decision {
   promote: boolean | null
   against: string | null
+  by?: string | null
   alpha?: number | null
   n_comparisons?: number | null
   horizons?: Record<string, DecisionH> | null
@@ -167,25 +169,28 @@ export function changeLine(run: RunRecord, byId: Map<string, RunRecord>): string
   return diff.length > 2 ? `${parts.join(', ')} +${diff.length - 2} more` : parts.join(', ')
 }
 
-/** "rejected: did not beat the champion at 168 h" and its kin, from the stored decision. */
+/** "rejected: did not beat the champion at 168 h", "promoted by hand: <first reason>" and their kin, from the stored
+ *  decision (read the same way as the Improve markers, see decision.ts). */
 export function decisionLine(run: RunRecord): string {
   const d = run.metrics?.decision
   const state = run.metrics?.state
   if (state && state !== 'done') return `not scored (${state})`
   if (!d) return run.status === 'champion' ? 'champion (set by hand)' : STATUS_LABEL[run.status] ?? run.status
-  const against = d.against?.startsWith('champion') ? 'the champion' : 'the baseline'
-  const hs = Object.entries(d.horizons ?? {}).sort(([a], [b]) => Number(a) - Number(b))
-  const lost = hs.filter(([, v]) => v.win === false).map(([h]) => horizonLabel(h))
-  const badCal = (d.calibration ?? []).filter((c) => c.ok === false)
-  if (d.promote) {
-    const won = hs.filter(([, v]) => v.win).map(([h]) => horizonLabel(h))
-    return `promoted: beat ${against}${won.length ? ` at ${won.join(', ')}` : ''}`
-  }
-  const why: string[] = []
-  if (lost.length) why.push(`did not beat ${against} at ${lost.join(', ')}`)
-  if (badCal.length) why.push(`${badCal.map((c) => c.name).join(', ')} out of tolerance`)
+  const v = verdict(d)
   const word = run.status === 'candidate' ? 'not promoted' : 'rejected'
+  if (v.hand) return byHandLine(d, run.status === 'candidate' ? 'kept as a candidate' : word)
+  if (d.promote) return `promoted: ${promotionWhy(d, horizonLabel)}`
+  const why: string[] = []
+  if (v.lost.length) why.push(`did not beat ${v.against} at ${v.lost.map(horizonLabel).join(', ')}`)
+  const badCal = (d.calibration ?? []).filter((c) => c.ok === false)
+  if (badCal.length) why.push(`${badCal.map((c) => c.name).join(', ')} out of tolerance`)
   return why.length ? `${word}: ${why.join('; ')}` : `${word}`
+}
+
+/** The run the detail panel shows: the selected one while it is still listed, else the first shown. A refresh, or a
+ *  fallback to the sample data, can drop the selected run from the list; that must never leave a dangling id. */
+export function currentRun<R extends { run_id: string }>(selected: string | null, byId: Map<string, R>, shown: R[]): R | undefined {
+  return (selected != null ? byId.get(selected) : undefined) ?? shown[0]
 }
 
 export interface RunFilters { target: string; proposer: string; status: string }
@@ -217,6 +222,17 @@ export function horizonRows(run: Pick<RunRecord, 'metrics'>): HorizonRow[] {
 export function calibrationChecks(run: Pick<RunRecord, 'metrics'>): CalCheck[] {
   const d = run.metrics?.decision?.calibration
   return d?.length ? d : run.metrics?.calibration ?? []
+}
+/** A coverage-style check (route circles: "80% radius coverage", cover80) is a share, written in percent. */
+export const isCoverage = (name: string) => /coverage|cover\d|circle|%/i.test(name)
+const sig = (x: number) => String(Number(x.toPrecision(3)))
+const pc = (x: number) => `${sig(x * 100)}\u00a0%`
+/** "80.5 % (target 80 % ± 5 %)" for coverage, "0.027 (target 0 ± 0.05)" for the rest. */
+export function fmtCalCheck(c: CalCheck): string {
+  const f = isCoverage(c.name) ? pc : sig
+  const v = c.value == null ? '—' : f(c.value)
+  const target = c.nominal == null ? '' : ` (target ${f(c.nominal)}${c.tol != null ? ` ± ${f(c.tol)}` : ''})`
+  return v + target
 }
 export function calibrationOk(c: CalCheck): boolean | null {
   if (c.ok != null) return c.ok

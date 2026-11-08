@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ALL, STATUS_LABEL, calibrationChecks, calibrationOk, changeLine, configDiff, decisionLine, distinct, filterRuns, fmtCount, fmtMonth,
+  ALL, STATUS_LABEL, calibrationChecks, calibrationOk, changeLine, currentRun, fmtCalCheck, configDiff, decisionLine, distinct, filterRuns, fmtCount, fmtMonth,
   fmtPct, fmtStat, fmtWhen, horizonLabel, horizonRows, lossLabel, primarySkill, proposerLabel, skillRows, targetLabel, weakestStrata,
   type RunFilters, type RunRecord, type SkillRow,
 } from './shape'
 import { Chart, RefLine, Ranges, extent, pad } from '../charts'
 import type { Proposal, Run, RunDetail } from '../types'
+import { againstBaseline } from '../decision'
 import './runs.css'
 
 /** Props for the runs section of the Model Lab. */
@@ -26,7 +27,8 @@ export function Runs({ runs, proposals, loadDetail, primaryH }: RunsProps) {
   const shown = useMemo(() => filterRuns(runs, filters), [runs, filters])
   const byId = useMemo(() => new Map(runs.map((r) => [r.run_id, r])), [runs])
   const [selected, setSelected] = useState<string | null>(null)
-  const current = selected ?? shown[0]?.run_id ?? null
+  const shownRun = currentRun(selected, byId, shown)
+  const current = shownRun?.run_id ?? null
   const champions = useMemo(() => new Map(runs.filter((r) => r.status === 'champion').map((r) => [r.target, r])), [runs])
 
   const select = (id: string) => {
@@ -85,7 +87,7 @@ export function Runs({ runs, proposals, loadDetail, primaryH }: RunsProps) {
             </table>
           )}
         </div>
-        {current && <RunDetailView key={current} run={byId.get(current)!} byId={byId} loadDetail={loadDetail} proposals={proposals} champion={champions.get(byId.get(current)!.target)} />}
+        {shownRun && <RunDetailView key={shownRun.run_id} run={shownRun} byId={byId} loadDetail={loadDetail} proposals={proposals} champion={champions.get(shownRun.target)} />}
       </div>
       <ProposalLog proposals={proposals} runs={byId} onOpen={select} />
     </div>
@@ -116,7 +118,8 @@ function RunDetailView({ run, byId, loadDetail, proposals, champion }: { run: Ru
   const rows = horizonRows(r)
   const cal = calibrationChecks(r)
   const strata = weakestStrata(r)
-  const vsChampion = r.metrics?.decision?.against?.startsWith('champion')
+  const against = r.metrics?.decision?.against
+  const vsChampion = !!against && !againstBaseline(against)
   const m = r.metrics
 
   return (
@@ -189,7 +192,7 @@ function RunDetailView({ run, byId, loadDetail, proposals, champion }: { run: Ru
               <li key={i} data-pass={ok == null ? 'na' : ok ? 'yes' : 'no'}>
                 <i aria-hidden />
                 <span>{c.name.toUpperCase() === 'ECE' ? 'Expected calibration error' : c.name} at {horizonLabel(c.horizon_s)}
-                  <span className="lr-sub">{fmtStat(c.value)} (target {fmtStat(c.nominal)}{c.tol != null ? ` ± ${c.tol}` : ''})</span>
+                  <span className="lr-sub">{fmtCalCheck(c)}</span>
                 </span>
                 <b>{ok == null ? 'n/a' : ok ? 'ok' : 'off'}</b>
               </li>

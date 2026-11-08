@@ -53,6 +53,8 @@ export interface Decision {
   horizons: Record<string, HorizonDecision> | null
   calibration: CalibrationCheck[] | null
   reasons: string[] | null
+  /** 'human' for a promotion (or hold) made by hand, 'rule' when the promotion rule decided. */
+  by?: string | null
   strata_worse?: { stratum: string; value: string; horizon_s: number; n: number; cand: number; ref: number }[] | null
 }
 
@@ -142,6 +144,9 @@ export interface ModelSummary {
   live: {
     hours: number
     n: number
+    /** The version graded live, and for go-dark the target graded ("dark_1h"). */
+    model_version?: string
+    target?: string
     primary: { name: string; value: number | null; ref_label: string }
     calibration: { name: string; value: number | null; nominal: number | null; ok: boolean | null }
   } | null
