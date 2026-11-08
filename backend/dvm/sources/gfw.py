@@ -27,7 +27,6 @@ BASE = "https://gateway.api.globalfishingwatch.org/v3"
 PRESENCE = "public-global-presence:latest"
 SAR = "public-global-sar-presence:latest"
 EVENT_DATASETS = {
-    "gap": "public-global-gaps-events:latest",
     "encounter": "public-global-encounters-events:latest",
     "loitering": "public-global-loitering-events:latest",
     "port_visit": "public-global-port-visits-events:latest",
