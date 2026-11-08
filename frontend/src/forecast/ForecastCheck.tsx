@@ -58,15 +58,20 @@ export function ForecastCheck() {
         {isMock && <span className="fc-tag">Illustrative data</span>}
         <button className="fc-x" onClick={close} aria-label="Close forecast check">×</button>
       </header>
-      {!check ? <p className="fc-muted">Loading…</p> : !check.rows.length ? <p className="fc-muted">No resolved forecast at the shown time.</p> : (
+      {!check ? <p className="fc-muted">Loading…</p> : !check.rows.length ? (
+        <>
+          <p className="fc-muted">No resolved forecast yet: each one is scored 6 h 30 min after it is made.</p>
+          {board && <LiveSkill board={board} />}
+        </>
+      ) : (
         <>
           <p className="fc-muted">
             {check.frozen ? 'Frozen forecast' : 'Hourly forecast'} made {fmtDay(check.made)} {fmtHM(check.made)}, scored {fmtHM(check.made + HORIZON_MS + RESOLVE_LAG_MS)}.
             {!check.frozen && <> The frozen forecast ({fmtDay(FREEZE_TS)} {fmtHM(FREEZE_TS)}) is scored {fmtHM(FREEZE_TS + HORIZON_MS + RESOLVE_LAG_MS)}.</>}
           </p>
-          <p className="fc-head"><b>{hits} of {scored.length}</b> went silent with reception normal nearby <span>({range(ci)})</span></p>
+          {scored.length > 0 && <p className="fc-head"><b>{hits} of {scored.length}</b> went silent with reception normal nearby <span>({range(ci)})</span></p>}
           <p className="fc-muted">
-            The p values predicted {expected.toFixed(1)} of {scored.length}.{leads.length > 0 && <> Median warning {fmtDuration(leads[leads.length >> 1] * 1000)}.</>}
+            {scored.length === 0 ? 'Not scored yet.' : <>The p values predicted {expected.toFixed(1)} of {scored.length}.</>}{leads.length > 0 && <> Median warning {fmtDuration(leads[leads.length >> 1] * 1000)}.</>}
             {censored > 0 && <> {censored} not scored; counted as a miss: {hits} of {check.rows.length} ({range(ciAll)}).</>}
           </p>
           <ol className="fc-rows">
