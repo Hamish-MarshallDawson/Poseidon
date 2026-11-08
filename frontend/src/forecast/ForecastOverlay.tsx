@@ -141,23 +141,21 @@ function setup(map: MapLibreMap): () => void {
 
   // ---- ghosts: open gaps (not own_stall) as of the shown time; radius grows every animation frame while one is on screen.
   // Only deliberate_candidate ghosts by default: unknown and coverage_gap ones are often hours old and tens of km wide, so
-  // a grey ghost is drawn only for a ship with an open window or in focus. Focus mode keeps the focused ship's ghost and
-  // the deliberate ghosts of its related ships, and hides the rest.
+  // a grey ghost is drawn only for a ship with an open window.
   let gaps: GapEvent[] = []
   const labels = new Map<string, { m: Marker; el: HTMLDivElement }>()
   let hoverGap: string | null = null
   const syncGaps = () => {
     const t = shownNow()
     const s = ui.get()
-    const related = new Set(s.focusRelated.map((r) => r.mmsi))
     const picked = new Set(s.windows.map((w) => w.mmsi))
     const match = showFilter(s.show).match
     const shown = (g: GapEvent) => {
       if (s.follow && !picked.has(g.mmsi)) return false
       const v = vessels.vessels.get(g.mmsi)
-      if (match && !picked.has(g.mmsi) && g.mmsi !== s.focusMmsi && !(v && match(v))) return false   // Show filter
+      if (match && !picked.has(g.mmsi) && !(v && match(v))) return false   // Show filter
       const dark = g.coverage_flag === 'deliberate_candidate'
-      return s.focusMmsi != null ? g.mmsi === s.focusMmsi || (dark && related.has(g.mmsi)) : dark || picked.has(g.mmsi)
+      return dark || picked.has(g.mmsi)
     }
     gaps = [...vessels.gaps.values()].filter((g) => g.state === 'open' && g.start_ts <= t && g.coverage_flag !== 'own_stall' && shown(g))
     map.getSource<GeoJSONSource>('fc-ghost-pt')?.setData({ type: 'FeatureCollection', features: gaps.map((g) => ({
@@ -244,7 +242,7 @@ function setup(map: MapLibreMap): () => void {
   const offV = vessels.subscribe(all)
   const offUi = ui.subscribe((s, p) => {
     if (s.windows !== p.windows || s.show !== p.show) drawTags()
-    if (s.windows !== p.windows || s.focusMmsi !== p.focusMmsi || s.focusRelated !== p.focusRelated || s.show !== p.show) syncGaps()
+    if (s.windows !== p.windows || s.show !== p.show) syncGaps()
   })
   const onZoom = () => { const z = zoomTier(map.getZoom()); if (z !== tier) { tier = z; drawTags() } syncLabels(shownNow()) }
   map.on('zoomend', onZoom)

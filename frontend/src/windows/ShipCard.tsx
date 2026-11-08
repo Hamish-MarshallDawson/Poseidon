@@ -75,7 +75,7 @@ export function Route({ v, destination, eta, ports, departure }: {
   )
 }
 
-export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number; onFocus: () => void }) {
+export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
   const v = useVessel(mmsi)
   const gap = useGap(v?.open_gap_id)
   const now = useNow()
@@ -96,10 +96,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
 
   return (
     <div className={`sc ${noAis ? 'is-noais' : ''}`}>
-      <div className="sc-head">
-        <h3 className="sc-name">{v.name ?? `MMSI ${fmtMmsi(v.mmsi)}`}</h3>
-        <span className={`sc-chip ${noAis ? 'noais' : ''}`}>{noAis ? 'No AIS' : 'AIS heard'}{replay && ` · as of ${utcTime(now, false)}`}</span>
-      </div>
+      {noAis && <span className="sc-chip noais">No AIS</span>}
       <p className="sc-sub">{subline(v, statics?.flag_iso2 ?? v.flag, statics?.length_m ?? v.length_m)}</p>
       <ShipPresence mmsi={mmsi} />
       <Route v={v} destination={statics?.destination} eta={statics?.eta_utc} ports={ports} departure={departure} />
@@ -122,7 +119,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
             <b>Forecast before the silence</b>
             <span>
               {p ? `${p}${rank ? ` · rank ${rank}` : ''}${score ? ` · made ${utcTime(score.made_at, false)}` : ''}. ` : 'No forecast was made before this silence. '}
-              This silence is the event it ranked; it is scored only if it began after a frozen forecast.
+             
             </span>
           </>
         ) : (
@@ -134,7 +131,6 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
       </div>
       <EvidenceStrip ts={v.last_ts} now={now} />
       <div className="sc-actions">
-        <Button onClick={onFocus}>Nearby ships</Button>
         <Button onClick={() => runBriefing([mmsi])}>Brief me</Button>
         <Button variant={inReview ? 'outline' : 'filled'} aria-pressed={inReview} onClick={() => toggleReview(mmsi)}>
           {inReview ? 'In review' : 'Add to review'}

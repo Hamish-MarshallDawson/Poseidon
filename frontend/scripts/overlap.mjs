@@ -105,7 +105,6 @@ const STATES = [
   ['05-display', (p) => p.click('.dvm-menu-toggle')],
   ['06-legend', (p) => p.evaluate(() => window.__dev.ui.set({ legendOpen: true }))],
   ['07-two-windows', (p) => two(p, 0.5, 0.5, 0.55, 0.45)],
-  ['08-focus', async (p) => { const a = await open(p, 0.5, 0.5); await p.evaluate((m) => window.__dev.ui.set({ focusMmsi: m }), a) }],
   ['09-briefing-two-windows', async (p) => {
     const [a, b] = await two(p, 0.2, 0.7, 0.28, 0.6)
     await p.evaluate(([x, y]) => window.__dev.runBriefing([x, y]), [a, b])

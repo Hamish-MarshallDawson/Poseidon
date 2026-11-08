@@ -1,4 +1,4 @@
-/* Map chrome: status line, top-right chips, zoom, scale, layers, watchlist, legend, focus bar.
+/* Map chrome: status line, top-right chips, zoom, scale, layers, watchlist, legend.
    Positions follow the map-first frames (1440 × 900): 16 px insets, legend toggle centred on the scrub bar's row. */
 .panel {
   box-sizing: border-box;
@@ -240,7 +240,7 @@
 .legend-wrap { position: fixed; left: 16px; bottom: 66px; transform-origin: bottom left; }
 .legend {
   width: 480px;
-  max-height: calc(100vh - 66px - 104px);   /* bottom-left column: under the focus bar */
+  max-height: calc(100vh - 66px - 104px);   /* bottom-left column */
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -316,29 +316,6 @@
 .g-stack-glyph { position: relative; width: 14px; height: 14px; }
 .replay-chip { display: inline-block; }
 
-/* Focus bar (39:1366): under the status line. */
-.focus-bar {
-  position: fixed;
-  top: 50px;
-  left: 16px;
-  max-width: calc(100vw - 32px - 420px);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 12px;
-}
-.fb-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
-.fb-list { margin: 0; padding: 0; list-style: none; max-height: 132px; overflow-y: auto; display: flex; flex-direction: column; }
-.fb-row {
-  display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; width: 100%; padding: 3px 0; border: 0; background: none; text-align: left;
-  font-size: var(--dvm-size-body); color: var(--dvm-text-secondary);
-}
-.fb-row b { color: var(--dvm-text-primary); font-weight: 600; }
-.fb-row:hover b { text-decoration: underline; }
-.fb-step { display: inline-flex; align-items: center; gap: 6px; color: var(--dvm-text-muted); }
-.fb-crumb { padding: 0; border: 0; background: none; color: var(--dvm-accent-default); text-decoration: underline; font-size: var(--dvm-size-body); }
-.fb-name { font-size: var(--dvm-size-body); line-height: var(--dvm-line-body); color: var(--dvm-text-secondary); }
-.fb-name b { color: var(--dvm-text-primary); font-weight: 600; }
 .reason-chip {
   padding: 1px 8px;
   border-left: 2px solid var(--dvm-accent-default);
@@ -368,8 +345,7 @@
    the scrub bar takes the full width and the legend toggle, scale, legend and briefing move up above it. */
 @media (max-width: 720px) {
   :root { --lay-phone-controls: 126px; --lay-phone-panel: 164px; }
-  .status-line, .focus-bar { max-width: calc(100vw - 32px); }
-  .focus-bar { top: var(--lay-phone-panel); }
+  .status-line { max-width: calc(100vw - 32px); }
   .status-line.is-replay { max-width: calc(100vw - 32px); }
   .top-right { top: 50px; left: 16px; justify-content: flex-start; }
   .zoom, .dvm-theme-menu { top: var(--lay-phone-controls); }
