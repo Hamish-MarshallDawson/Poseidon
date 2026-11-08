@@ -14,7 +14,10 @@ The backend never imports `ml/`. An artifact is a directory with `model.json` an
       "heads": {
         # route: LightGBM regressors for the east and north offset (metres) from the baseline point, and the
         # split-conformal radii (metres): a number each, or per speed band
-        # {"sog_edges_kn": [2, 8, 15], "r": [4 values]} (band i is edges[i-1] <= sog < edges[i])
+        # {"sog_edges_kn": [2, 8, 15], "r": [4 values]} (band i is edges[i-1] <= sog < edges[i]), or per ship
+        # {"model": "h3600_r80.txt", "features": [...], "scale": 1.07, "min_m": 200, "max_m": 400000}: a LightGBM
+        # quantile regression of log(error_m + 50) on `features` (names from FEATURE_NAMES), so the radius is
+        # min_m <= scale * exp(model) <= max_m, with `scale` the split-conformal factor (min_m, max_m optional)
         "3600": {"east": "h3600_east.txt", "north": "h3600_north.txt", "radius_m_80": 900, "radius_m_95": 2100},
         # godark: a LightGBM classifier (raw probability out) and optional isotonic calibration, as the
         # increasing breakpoints of a piecewise-linear map from the model's output to a probability
@@ -49,11 +52,25 @@ class ArtifactError(ValueError):
     pass
 
 
-def _radius(spec, sog: Optional[float]) -> float:
+class _RadiusModel:
+    """A per-ship radius: scale * exp(LightGBM quantile of log(error_m + 50)), clamped to [min_m, max_m]."""
+
+    def __init__(self, booster, features: list[str], scale: float, min_m: float, max_m: float):
+        self.booster, self.features, self.scale, self.min_m, self.max_m = booster, features, scale, min_m, max_m
+
+    def __call__(self, feats: Mapping) -> float:
+        import numpy as np  # noqa: PLC0415
+        q = float(self.booster.predict(np.array([F.vector(feats, self.features)], dtype=float))[0])
+        return min(self.max_m, max(self.min_m, self.scale * math.exp(min(q, 30.0))))
+
+
+def _radius(spec, fix: Mapping, feats: Optional[Mapping] = None) -> float:
     if isinstance(spec, (int, float)):
         return float(spec)
+    if isinstance(spec, _RadiusModel):
+        return spec(feats or {})
     edges = spec["sog_edges_kn"]
-    return float(spec["r"][bisect_right(edges, sog or 0.0)])
+    return float(spec["r"][bisect_right(edges, fix.get("sog_kn") or 0.0)])
 
 
 class RouteBaseline:
@@ -129,26 +146,45 @@ class RouteModel(_Lgbm):
         for h in self.horizons_s:
             spec = meta["heads"][str(h)]
             self.heads[h] = (self._booster(spec["east"]), self._booster(spec["north"]),
-                             _norm_radius(spec["radius_m_80"]), _norm_radius(spec["radius_m_95"]))
+                             _norm_radius(spec["radius_m_80"], self._booster),
+                             _norm_radius(spec["radius_m_95"], self._booster))
 
     def predict(self, fix: Mapping, feats: Mapping) -> list[dict]:
         x, out = self._row(feats), []
         for h, (be, bn, r80, r95) in self.heads.items():
             blat, blon = F.baseline_point(fix, h)
             lat, lon = F.apply_offset(blat, blon, float(be.predict(x)[0]), float(bn.predict(x)[0]))
+            r80 = _radius(r80, fix, feats)
             out.append({"horizon_s": h, "lat": lat, "lon": lon, "base_lat": blat, "base_lon": blon,
-                        "radius_m_80": _radius(r80, fix.get("sog_kn")), "radius_m_95": _radius(r95, fix.get("sog_kn"))})
+                        "radius_m_80": r80, "radius_m_95": max(r80, _radius(r95, fix, feats))})
         return out
 
 
-def _norm_radius(spec):
-    """A radius spec as _radius reads it: a number, or {"sog_edges_kn": [...], "r": [one more than edges]}."""
+def _norm_radius(spec, booster=None):
+    """A radius spec as _radius reads it: a number, {"sog_edges_kn": [...], "r": [one more than edges]}, or a
+    per-ship radius model {"model": file, "features": [...], "scale": k} (a _RadiusModel, loaded with `booster`)."""
     if isinstance(spec, (int, float)) and not isinstance(spec, bool):
         return float(spec)
     if isinstance(spec, dict) and isinstance(spec.get("sog_edges_kn"), list) and isinstance(spec.get("r"), list) \
             and len(spec["r"]) == len(spec["sog_edges_kn"]) + 1:
         return spec
-    raise ArtifactError(f"bad radius {spec!r}: a number or {{'sog_edges_kn': [...], 'r': [len(edges) + 1]}}")
+    if isinstance(spec, dict) and "model" in spec and booster is not None:
+        feats, scale = spec.get("features"), spec.get("scale", 1.0)
+        lo, hi = spec.get("min_m", 0.0), spec.get("max_m", 2.0e6)
+        if not (isinstance(feats, list) and feats and all(isinstance(f, str) for f in feats)):
+            raise ArtifactError(f"bad radius model {spec.get('model')!r}: needs a list of features")
+        unknown = set(feats) - set(F.FEATURE_NAMES)
+        if unknown:
+            raise ArtifactError(f"radius model {spec['model']!r}: unknown features {sorted(unknown)}")
+        if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (scale, lo, hi)) \
+                or not (scale > 0 and 0 <= lo < hi):
+            raise ArtifactError(f"radius model {spec['model']!r}: scale > 0 and 0 <= min_m < max_m")
+        b = booster(spec["model"])
+        if b.num_feature() != len(feats):
+            raise ArtifactError(f"radius model {spec['model']!r}: {b.num_feature()} inputs, {len(feats)} features")
+        return _RadiusModel(b, feats, float(scale), float(lo), float(hi))
+    raise ArtifactError(f"bad radius {spec!r}: a number, {{'sog_edges_kn': [...], 'r': [len(edges) + 1]}} "
+                        "or {'model': file, 'features': [...], 'scale': k}")
 
 
 class GodarkModel(_Lgbm):

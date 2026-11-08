@@ -104,6 +104,58 @@ def test_artifact_refusals(tmp_path):
         artifact.load(d)
 
 
+def _with_radius_models(d, feats=("sog_kn", "w30m_sog_std"), scale=1.5, **extra):
+    """Turn the toy route artifact's radii into per-ship radius models: log(radius) grows with speed."""
+    lgb = pytest.importorskip("lightgbm")
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(2)
+    x = np.column_stack([rng.uniform(0, 20, 500), rng.uniform(0, 3, 500)])[:, :len(feats)]
+    for q in (80, 95):
+        y = np.log(500 + (100 if q == 80 else 300) * x[:, 0] ** 2)
+        b = lgb.train({"objective": "quantile", "alpha": q / 100, "verbose": -1, "min_data_in_leaf": 5,
+                       "num_threads": 1}, lgb.Dataset(x, y), num_boost_round=30)
+        b.save_model(str(d / f"r{q}.txt"))
+    meta = json.loads((d / "model.json").read_text())
+    for spec in meta["heads"].values():
+        for q in (80, 95):
+            spec[f"radius_m_{q}"] = {"model": f"r{q}.txt", "features": list(feats), "scale": scale, **extra}
+    (d / "model.json").write_text(json.dumps(meta))
+    return d
+
+
+def test_route_artifact_per_ship_radius_model(tmp_path):
+    m = artifact.load(_with_radius_models(_toy_route_artifact(tmp_path), min_m=800, max_m=60_000))
+    out = {}
+    for sog in (2.0, 8.0, 16.0):
+        t = F.Track.from_rows(fixes(A, T, T + 30 * MIN, 55.0, 11.0, 0.0, sog=sog))
+        out[sog] = m.predict(t.last_fix(T + 30 * MIN), F.features_at(t, T + 30 * MIN))
+    r80 = [out[s][0]["radius_m_80"] for s in (2.0, 8.0, 16.0)]
+    assert r80[0] < r80[1] < r80[2], r80                       # a radius per ship, not per band
+    for ps in out.values():
+        for p in ps:
+            assert 800 <= p["radius_m_80"] <= p["radius_m_95"] <= 60_000
+    # the scale is the conformal factor: doubling it doubles every (unclamped) radius
+    t = F.Track.from_rows(fixes(A, T, T + 30 * MIN, 55.0, 11.0, 0.0, sog=8.0))
+    p = {}
+    for scale in (1.5, 3.0):
+        (tmp_path / str(scale)).mkdir()
+        mm = artifact.load(_with_radius_models(_toy_route_artifact(tmp_path / str(scale)), scale=scale))
+        p[scale] = mm.predict(t.last_fix(T + 30 * MIN), F.features_at(t, T + 30 * MIN))[0]
+    assert p[3.0]["radius_m_80"] == pytest.approx(2 * p[1.5]["radius_m_80"])
+
+
+def test_radius_model_refusals(tmp_path):
+    d = _with_radius_models(_toy_route_artifact(tmp_path))
+    meta = json.loads((d / "model.json").read_text())
+    for bad in ({"features": ["no_such_feature", "sog_kn"]}, {"features": ["sog_kn"]}, {"scale": 0},
+                {"scale": "1"}, {"min_m": 5, "max_m": 1}, {"model": "missing.txt"}, {"features": []}):
+        m = json.loads(json.dumps(meta))
+        m["heads"]["3600"]["radius_m_80"].update(bad)
+        (d / "model.json").write_text(json.dumps(m))
+        with pytest.raises(artifact.ArtifactError):
+            artifact.load(d)
+
+
 def test_godark_artifact_and_calibration(tmp_path):
     m = artifact.load(_toy_godark_artifact(tmp_path))
     ps = m.predict({"sog_kn": 0.1, "w30m_sog_std": None})
