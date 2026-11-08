@@ -1,41 +1,46 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { lab } from './api'
-import { HOURS, useLab } from './useLab'
-import { Overview } from './Overview'
-import { Improve } from './improve/Improve'
-import { Live } from './live'
-import { Runs } from './runs/Runs'
-import type { LabSectionProps } from './sections'
+import { useLab } from './useLab'
+import { Home } from './home/Home'
+import { ModelPage } from './ModelPage'
+import { MODEL_INFO } from './model'
+import { openLab, useLabRoute } from './hash'
 import { when } from './format'
 import './lab.css'
 
-// The Model Lab: a full-screen view over the map (#lab). Overview cards on top, then three sections that other agents
-// fill (improve/, live/, runs/), each given LabSectionProps. Reloads every minute while open.
-
-
+// The Model Lab: a full-screen view over the map. #lab is the home (totals and three model cards); #lab/<model>[/<tab>]
+// a model page. Escape on a model page returns home; on home it closes the Lab. Reloads every minute while open.
 
 export function Lab({ onClose }: { onClose: () => void }) {
   const state = useLab()
+  const route = useLabRoute()
   const closeRef = useRef<HTMLButtonElement>(null)
+  const modelRef = useRef(route.model)
+  modelRef.current = route.model
   useEffect(() => {
     closeRef.current?.focus()
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      if (modelRef.current) openLab()
+      else onClose()
+    }
     window.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
   }, [onClose])
-  const props: LabSectionProps = { ...state, hours: HOURS, api: lab }
   const loadDetail = useCallback(async (id: string) => (await lab.run(id)).value, [])
-  const summary = state.summary
-  const primaryH = useMemo(() => Object.fromEntries((summary?.models ?? []).map((m) => [m.target, m.offline.primary_h])), [summary])
   return (
     <div className="lab" role="dialog" aria-modal="true" aria-labelledby="lab-title">
       <header className="lab-head">
-        <div className="lab-head__title">
-          <h1 id="lab-title">Model Lab</h1>
-          <p>How our three models are trained, tested against a frozen held-out set, promoted only when they beat the champion, and how they do live on our own feed.</p>
-        </div>
+        <nav className="lab-head__title" aria-label="Model Lab">
+          <h1 id="lab-title">
+            {route.model
+              ? <><a href="#lab" className="lab-crumb">Model Lab</a> <span aria-hidden>/</span> {MODEL_INFO[route.model].name}</>
+              : 'Model Lab'}
+          </h1>
+          {!route.model && <p>Three models that learn from our own feed. Each new version must beat the current one on a frozen test before it goes live.</p>}
+        </nav>
         <div className="lab-head__meta">
           {state.sample && <span className="lab-tag" title={state.errors.join('\n') || undefined}>Sample data</span>}
           {state.summary && <span className="lab-muted">Updated {when(state.sample ? state.summary.generated_at : state.now)}</span>}
@@ -45,33 +50,11 @@ export function Lab({ onClose }: { onClose: () => void }) {
         </div>
       </header>
       <main className="lab-body">
-        <Overview summary={state.summary} runs={state.runs ?? []} />
-        <Section id="improve" title="How it improved" lede="Each step is a promotion: a run that beat the champion on the frozen held-out set. Live results on our feed are drawn over it.">
-          {state.summary && state.runs && state.events
-            ? <Improve summary={state.summary} runs={state.runs} events={state.events} metrics={state.metrics} proposals={state.proposals ?? []} />
-            : <Loading />}
-        </Section>
-        <Section id="live" title="Live track record" lede="Every prediction we serve is graded when its horizon passes. These are those grades, against the baselines.">
-          <Live {...props} />
-        </Section>
-        <Section id="runs" title="Runs and proposals" lede="Every training run with its config, data and evaluation, and why the promotion rule kept or rejected it.">
-          {state.runs ? <Runs runs={state.runs} proposals={state.proposals ?? []} loadDetail={loadDetail} primaryH={primaryH} /> : <Loading />}
-        </Section>
+        {route.model
+          ? <ModelPage target={route.model} tab={route.tab} summary={state.summary} runs={state.runs} proposals={state.proposals}
+              events={state.events} metrics={state.metrics} data={state.data} loadDetail={loadDetail} />
+          : <Home summary={state.summary} runs={state.runs} proposals={state.proposals} metrics={state.metrics} />}
       </main>
     </div>
   )
-}
-
-function Section({ id, title, lede, children }: { id: string; title: string; lede: string; children: React.ReactNode }) {
-  return (
-    <section className="lab-section" aria-labelledby={`lab-${id}`}>
-      <h2 id={`lab-${id}`}>{title}</h2>
-      <p className="lab-lede">{lede}</p>
-      {children}
-    </section>
-  )
-}
-
-function Loading() {
-  return <p className="lab-muted" role="status">Loading…</p>
 }

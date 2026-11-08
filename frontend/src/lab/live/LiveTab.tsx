@@ -2,16 +2,14 @@
 import { useState } from 'react'
 import { fmtDay, fmtHM } from '../../timeline/format'
 import { Chart, Legend, Line, extent } from '../charts'
+import type { LiveTabProps as TabProps, TabModel } from '../tabs'
 import type { Metrics } from '../types'
 import { LiveTrackRecord } from './LiveTrackRecord'
 import { LEVEL_NAME, championOf, livePlain, targetOf, type Level, type ModelRef, type Tile } from './plain'
 import './live.css'
 
-export interface LiveTabProps {
-  /** The model this page is for: 'route' | 'godark' | 'fishing', or its /lab/summary entry. */
-  model: ModelRef
-  metrics: Metrics | null
-}
+/** The tab contract (tabs.ts), also taking a bare target or a /lab/summary entry and null while loading. */
+export interface LiveTabProps { model: TabModel | ModelRef; metrics: TabProps['metrics'] | null }
 
 const when = (t: number) => `${fmtDay(t)} ${fmtHM(t)}`
 const pct = (x: number | null) => (x == null ? '–' : x < 0.1 ? `${(x * 100).toFixed(1)}%` : `${Math.round(x * 100)}%`)

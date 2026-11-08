@@ -77,3 +77,12 @@ describe('Data tab on real /lab/data', () => {
     expect(t).not.toMatch(JARGON)
   })
 })
+
+describe('nav tab contract (TabModel)', () => {
+  it('reads the champion from model.summary', () => {
+    const s = summary.models.find((m) => m.target === 'route')!
+    const p = livePlain(metrics, { target: 'route', name: 'Route', question: 'Where is a silent ship now?', summary: s } as never)
+    expect(p.version).not.toBeNull()
+    expect(text(<DataTab model={{ target: 'fishing', name: 'Fishing', question: '', summary: null }} data={data} />)).toContain('In the latest training run')
+  })
+})

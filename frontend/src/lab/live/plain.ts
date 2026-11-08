@@ -8,9 +8,13 @@ export type Level = 'ok' | 'warn' | 'bad' | 'none'
 export const LEVEL_NAME: Record<Level, string> = { ok: 'On target', warn: 'Drifting', bad: 'Off target', none: 'No data yet' }
 
 /** The model a tab is for: its target name, or its /lab/summary entry. */
-export type ModelRef = Target | Pick<ModelSummary, 'target'> & Partial<Pick<ModelSummary, 'champion'>>
+export type ModelRef = Target | (Pick<ModelSummary, 'target'> & { champion?: ModelSummary['champion']; summary?: ModelSummary | null })
 export const targetOf = (m: ModelRef): Target => (typeof m === 'string' ? m : m.target)
-export const championOf = (m: ModelRef): string[] => (typeof m === 'string' || !m.champion?.version ? [] : [m.champion.version])
+export function championOf(m: ModelRef): string[] {
+  if (typeof m === 'string') return []
+  const v = m.champion?.version ?? m.summary?.champion.version
+  return v ? [v] : []
+}
 
 /** Circle coverage against its target: within 5 points ok, within 15 drifting, else off. */
 export function coverageLevel(value: number | null | undefined, target: number): Level {

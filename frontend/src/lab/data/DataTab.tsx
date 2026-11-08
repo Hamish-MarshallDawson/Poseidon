@@ -3,15 +3,13 @@ import { fmtDay, fmtHM } from '../../timeline/format'
 import { Chart, Legend, Line, extent, type Tone } from '../charts'
 import { count, countedFrom, outcomeSeries, sourceSpans } from '../live/shape'
 import { targetOf, type ModelRef } from '../live/plain'
+import type { TabModel } from '../tabs'
 import type { LabData } from '../types'
 import { dataCounters } from './shape'
 import '../live/live.css'
 
-export interface DataTabProps {
-  /** The model this page is for: 'route' | 'godark' | 'fishing', or its /lab/summary entry. */
-  model: ModelRef
-  data: LabData | null
-}
+/** The tab contract (tabs.ts), also taking a bare target or a /lab/summary entry and null while loading. */
+export interface DataTabProps { model: TabModel | ModelRef; data: LabData | null }
 
 const MODE_TONE: Record<string, Tone> = { live: 'accent', backtest: 'warn', all: 'accent' }
 const MODE_NAME: Record<string, string> = { live: 'Live feed', backtest: 'Replayed past hours', all: 'Live and replayed' }
