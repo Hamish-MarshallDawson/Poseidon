@@ -13,7 +13,10 @@ import { openShipWindow, setFocus } from '../actions'
 import { Colour, createShipLayer, InstanceBuffer, N_COLOURS, writeMotion, type ShipLayerHooks } from './layer'
 import { buildAtlas, hullKey, LETTER_PX, TIERS, TYPES, type HullType, type Sprite } from './sprites'
 import { CourseLine } from './course'
-import { clock, ShipState } from './state'
+import { shownNow } from '../../timeline/replay'
+import { clock, setShownClock, ShipState } from './state'
+
+setShownClock(shownNow)
 
 // Owns everything ship-shaped on the map: per-ship motion state (typed arrays), the slot pass (caps, priority,
 // separation, hysteresis), the GPU layer, aggregate cells, stack chips, fan-out, focus mode and hit-testing.
