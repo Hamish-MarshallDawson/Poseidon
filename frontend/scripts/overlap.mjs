@@ -56,6 +56,32 @@ function collect() {
   return { count: boxes.length, overlaps: out, boxes: boxes.map((b) => ({ name: b.name, x: b.x, y: b.y, w: b.w, h: b.h })) }
 }
 
+// In-page inner check: inside Ranked rows and ship windows, leaf text/control boxes that intersect, and children
+// that stick out of their card's content box horizontally.
+function collectInner() {
+  const out = []
+  const nm = (el) => `${el.tagName.toLowerCase()}${[...el.classList].slice(0, 2).map((c) => '.' + c).join('')}${el.textContent && el.children.length === 0 ? `"${el.textContent.trim().slice(0, 18)}"` : ''}`
+  const shown = (el) => { const cs = getComputedStyle(el); const r = el.getBoundingClientRect(); return cs.visibility !== 'hidden' && cs.display !== 'none' && Number(cs.opacity) > 0.05 && r.width > 0 && r.height > 0 }
+  const CONTROL = 'input, img'   // a button or row with children is judged by its leaves
+  for (const scope of document.querySelectorAll('.watchlist .wl-item, .sw:not(.sw-pill)')) {
+    const where = scope.classList.contains('sw') ? `window ${scope.dataset.mmsi}` : `row ${scope.textContent.trim().slice(0, 14)}`
+    const leaves = [...scope.querySelectorAll('*')].filter((el) => shown(el) && (el.matches(CONTROL) || (el.children.length === 0 && el.textContent.trim())))
+    const rs = leaves.map((el) => ({ el, r: el.getBoundingClientRect() }))
+    for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+      const a = rs[i].r, b = rs[j].r
+      const dx = Math.min(a.right, b.right) - Math.max(a.left, b.left), dy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)
+      if (dx > 2 && dy > 2 && !rs[i].el.contains(rs[j].el) && !rs[j].el.contains(rs[i].el)) out.push({ where, kind: 'intersect', a: nm(rs[i].el), b: nm(rs[j].el), w: Math.round(dx), h: Math.round(dy) })
+    }
+    const card = scope.classList.contains('sw') ? scope.querySelector('.sc') : scope
+    if (card) {
+      const cr = card.getBoundingClientRect(), cs = getComputedStyle(card)
+      const left = cr.left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth), right = cr.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth)
+      for (const { el, r } of rs) if (card.contains(el) && (r.right > right + 1 || r.left < left - 1)) out.push({ where, kind: 'overflow', a: nm(el), b: '', w: Math.round(Math.max(r.right - right, left - r.left)), h: 0 })
+    }
+  }
+  return out
+}
+
 // Ship nearest to a point (fractions of the viewport), skipping those already used.
 const pick = (fx, fy, used) => `(() => {
   const d = window.__dev, best = []
@@ -99,6 +125,8 @@ for (const [w, h] of sizes) {
     let error = null
     try { await run(page); await page.waitForTimeout(900) } catch (e) { error = String(e.message ?? e).split('\n')[0] }
     const res = await page.evaluate(collect)
+    const inner = /^0[2789]|^10/.test(name) ? await page.evaluate(collectInner) : []
+    res.overlaps.push(...inner.map((o) => ({ a: `${o.where} ${o.kind}: ${o.a}`, b: o.b, w: o.w, h: o.h })))
     await page.screenshot({ path: join(outDir, `${w}x${h}-${name}.png`) })
     results.push({ size: `${w}x${h}`, state: name, error, boxes: res.count, overlaps: res.overlaps, layout: res.boxes })
     console.log(`${w}x${h} ${name.padEnd(24)} boxes ${String(res.count).padStart(2)}  overlaps ${res.overlaps.length}${error ? '  ERROR ' + error : ''}`)

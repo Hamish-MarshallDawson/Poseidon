@@ -47,6 +47,8 @@ const ShipWindowView = memo(function ShipWindowView({ w, slot, exiting, onExited
     spring.onChange = scheduleLeader
     const ro = new ResizeObserver(() => {
       geom.w = el.offsetWidth; geom.h = el.offsetHeight; scheduleLeader()
+      const sc = el.querySelector('.sc')
+      el.classList.toggle('sw-scroll', !!sc && sc.scrollHeight > sc.clientHeight + 1)
       // A card that grew (more rows) must not reach into the scrub bar band: slide it up.
       const cur = ui.get().windows.find((x) => x.mmsi === w.mmsi)
       if (!cur || cur.minimised) return

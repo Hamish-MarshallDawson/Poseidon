@@ -151,6 +151,7 @@
 .wl-rank b { font-weight: 600; font-size: var(--dvm-size-data); line-height: var(--dvm-line-data); }
 .wl-rank span { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
 .wl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.wl-item .wl-head { padding-right: 26px; }   /* room for the tick box at the row's top-right corner */
 .wl-head { display: flex; align-items: center; gap: 6px; }
 .wl-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 4px; overflow: hidden; white-space: nowrap; }
 .wl-name b { font-weight: 600; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); }
