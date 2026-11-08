@@ -84,9 +84,22 @@ export function championLine(points: Point[], now: number): { x: number; y: numb
 /** Words levels 1 and 2 never show. */
 export const JARGON = /skill|brier|log[ -]?loss|dead reckoning|isotonic|\bece\b|auc/i
 
-const WHO: Record<string, string> = { gemini: 'Gemini proposed', human: 'A person tried', default: 'The fixed list tried' }
+const WHO: Record<string, string> = { gemini: 'Gemini proposed', human: 'We trained', default: 'The fixed list tried' }
 
 const words = (k: string) => k.replace(/_/g, ' ')
+
+/** "dma:90 (Danish AIS, 90 days)" or "dma:14" -> "90 days of Danish AIS"; "tiger" -> "our own feed". */
+export function dataLabel(v: unknown): string {
+  const t = String(v ?? '')
+  const parts = t.split(/\s*\+\s*/).map((x) => {
+    const m = /dma:?(\d+)/i.exec(x)
+    if (m) return `${m[1]} days of Danish AIS`
+    if (/^dma\b/i.test(x)) return 'the Danish AIS archive'
+    if (/tiger|our feed|live/i.test(x)) return 'our own feed'
+    return x.replace(/\s*\(.*\)$/, '')
+  })
+  return parts.join(' plus ')
+}
 const val = (v: unknown) => (v == null ? 'none' : typeof v === 'object' ? JSON.stringify(v) : String(v))
 
 /** What a run changed against its parent, in a few words: "fewer num leaves (63 → 31)", "a new model: lgbm". */
@@ -95,10 +108,11 @@ export function changePhrase(run: RunRecord, byId: Map<string, RunRecord>): stri
   const parent = byId.get(run.parent_run)
   if (!parent) return 'a change'
   const diff = configDiff(run.config, parent.config).filter((d) => d.key !== 'seed')
-  if (!diff.length) return 'the same settings on newer data'
+  if (!diff.length) return 'with the same settings on newer data'
   const d = diff[0]
   let p: string
   if (d.key === 'model') p = `a different model (${val(d.parent)} → ${val(d.value)})`
+  else if (/^(data|source|data_source)$/i.test(d.key)) p = `on ${dataLabel(d.value)} instead of ${dataLabel(d.parent)}`
   else if (typeof d.parent === 'number' && typeof d.value === 'number') {
     const count = /^(n_|num_)|leaves|trees|rounds|estimators|features|bins/i.test(d.key)
     const dir = d.value < d.parent ? (count ? 'fewer' : 'lower') : (count ? 'more' : 'higher')
@@ -106,7 +120,7 @@ export function changePhrase(run: RunRecord, byId: Map<string, RunRecord>): stri
   } else if (d.parent == null) p = `${words(d.key)} set to ${val(d.value)}`
   else p = `${words(d.key)} ${val(d.parent)} → ${val(d.value)}`
   // A new model brings its own settings: the model is the change worth saying.
-  return diff.length > 1 && d.key !== 'model' ? `${p} and ${diff.length - 1} more change${diff.length > 2 ? 's' : ''}` : p
+  return diff.length > 1 && d.key !== 'model' ? `${p}, plus ${diff.length - 1} other setting${diff.length > 2 ? 's' : ''}` : p
 }
 
 /** The outcome half of the sentence: "rejected, not better than the champion at 3 h". */
@@ -114,7 +128,7 @@ export function outcomePhrase(run: RunRecord): string {
   const d = run.metrics?.decision
   const state = run.metrics?.state
   if (state && state !== 'done') return `not scored yet (${state})`
-  if (!d) return run.status === 'champion' ? 'made champion by hand' : run.status === 'candidate' ? 'kept as a candidate' : run.status === 'retired' ? 'was champion, now replaced' : 'rejected'
+  if (!d) return run.status === 'champion' ? 'put live by hand' : run.status === 'candidate' ? 'kept as a candidate' : run.status === 'retired' ? 'was champion, now replaced' : 'rejected'
   const v = verdict(d)
   if (v.hand) {
     // A person decided: their stored reason is shown only when it is plain words (the run panel has it in full).

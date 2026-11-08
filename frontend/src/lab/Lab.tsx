@@ -36,6 +36,11 @@ export function Lab({ onClose }: { onClose: () => void }) {
     <div ref={bodyRef} className="lab" role="dialog" aria-modal="true" aria-labelledby="lab-title">
       <header className="lab-head">
         <nav className="lab-head__title" aria-label="Model Lab">
+          {route.model && (
+            <button type="button" className="lab-back" onClick={() => openLab()} aria-label="Back to all three models">
+              <span aria-hidden="true">←</span> All models
+            </button>
+          )}
           <h1 id="lab-title">
             {route.model
               ? <><a href="#lab" className="lab-crumb">Model Lab</a> <span aria-hidden>/</span> {MODEL_INFO[route.model].name}</>

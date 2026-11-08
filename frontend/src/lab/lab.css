@@ -80,6 +80,10 @@
 
 /* v2: home, model page, tabs, pipeline, status. */
 :root { --lab-ok: var(--lab-good, #2e9e5b); --lab-warn: var(--dvm-risk-2, #d39b1f); --lab-bad: var(--dvm-risk-3, #d04a3a); }
+.lab-head__title:has(.lab-back) { display: flex; align-items: center; gap: 16px; }
+.lab-back { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--dvm-border-default); border-radius: var(--dvm-radius-control, 8px);
+  background: var(--dvm-bg-raised); color: var(--dvm-text-primary); font: 600 var(--dvm-size-label) var(--dvm-font-ui); cursor: pointer; white-space: nowrap; }
+.lab-back:hover, .lab-back:focus-visible { border-color: var(--dvm-border-strong); background: var(--dvm-bg-panel); }
 .lab-crumb { color: var(--dvm-text-secondary); text-decoration: none; }
 .lab-crumb:hover { color: var(--dvm-text-primary); text-decoration: underline; }
 .lab-strip-totals { display: flex; flex-wrap: wrap; gap: 8px 32px; margin: 0 0 16px; }
