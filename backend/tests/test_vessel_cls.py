@@ -52,11 +52,23 @@ def test_replay_snapshot_carries_cls():
         async def latest_positions(self, t, window_s):
             return rows
 
-        async def identities(self, t, window_s):
+        async def identities(self, t, window_s, extra=()):
             return {}
 
         async def between(self, a, b):
             return [], []
+
+        async def last_positions_of(self, mmsis, t, since):
+            return []
+
+        async def gap_versions(self, a, b):
+            return []
+
+        async def scores(self, a, b):
+            return []
+
+        async def routes(self, a, b, gap_ids=None):
+            return []
 
     sent = []
 
