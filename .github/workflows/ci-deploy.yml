@@ -95,9 +95,10 @@ jobs:
           else
             echo changed=true >> "$GITHUB_OUTPUT"
           fi
-      - name: Deploy backend
+      # The server only stages the backend; Hamish's laptop agent reviews it and applies it (deploy/vultr/deploy.sh).
+      - name: Stage backend for review
         if: steps.be.outputs.changed == 'true'
-        run: git archive HEAD backend | ssh -o BatchMode=yes root@$SERVER backend
+        run: git archive HEAD backend | ssh -o BatchMode=yes root@$SERVER "backend $GITHUB_SHA"
       - name: Smoke check
         run: |
           curl -fsS https://$SITE/ | grep -q '<div id="root">'
