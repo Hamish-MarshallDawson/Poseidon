@@ -14,7 +14,7 @@ export interface Frame {
 }
 
 // How far back a ship's track history goes (focus mode draws it).
-export const TRAIL_MS = 6 * 3600_000
+export const TRAIL_MS = 24 * 3600_000   // matches the 24 h GET /track read
 
 export type VesselListener = (changed: number[], removed: number[], frame: Frame) => void
 
@@ -65,7 +65,10 @@ export class VesselStore {
 
   // The detail reply's trail ([ts, lon, lat], oldest first) seeds a ship's track; deltas extend it.
   setTrail(mmsi: number, trail: [number, number, number][]): void {
-    if (this.vessels.has(mmsi)) this.trails.set(mmsi, trail.slice())
+    if (!this.vessels.has(mmsi)) return
+    // Keep older points already held (the 24 h track) when a shorter, newer trail arrives.
+    const old = (this.trails.get(mmsi) ?? []).filter((p) => p[0] < (trail[0]?.[0] ?? -Infinity))
+    this.trails.set(mmsi, [...old, ...trail])
   }
 
   subscribe(listener: VesselListener): () => void {

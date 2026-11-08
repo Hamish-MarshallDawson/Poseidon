@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
 import { ui } from '../store/ui'
+import { vessels } from '../store/vessels'
 import { Button } from '../ui'
 import { details } from './detail'
 import { useGap, useNow, useVessel, useWatchlist } from './hooks'
@@ -107,6 +108,14 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
           {inReview ? 'Added to review' : 'Add to review'}
         </Button>
       </div>
+      <span className="sc-caption sc-track">{trackCaption(vessels.trails.get(mmsi))}</span>
     </div>
   )
 })
+
+// What the Track history path shows: how far back the oldest point is.
+function trackCaption(trail: [number, number, number][] | undefined): string {
+  if (!trail || trail.length < 2) return 'No track yet'
+  const min = Math.round((trail[trail.length - 1][0] - trail[0][0]) / 60000)
+  return `Track: last ${min < 60 ? `${Math.max(1, min)} min` : min >= 23 * 60 ? '24 h' : `${Math.round(min / 60)} h`}`
+}
