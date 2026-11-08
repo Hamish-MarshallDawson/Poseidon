@@ -117,6 +117,30 @@ Per-client replay over `/ws` (06 section 4.3), built from the Tiger `positions` 
 - `detail` during replay answers from the replay state.
 - **`GET /history/range`** returns `{"from_ts", "to_ts"}` (epoch ms, null when empty): the first and last stored position. It needs the same Bearer token as `/coverage`.
 
+## Gap detector (`dvm/gaps.py`, #76)
+
+Finds Class A ships that stop reporting, and says whether the silence looks like the ship or like reception (06 sections 2.4, 2.9 and 5). The Hub feeds it every merged position, ticks it every 5 s on the receive clock, puts its gap versions on the map state, sends them to browsers and writes them to the Tiger `gaps` table. First-version rules, settled with Jake on 7 and 8 Nov:
+
+| Rule | Value |
+|---|---|
+| Ships | Class A only. A ship that has sent any Class A fix counts as Class A; Class B ships stay on the map with no gaps. |
+| Moving only | No gap if the last fix was at anchor or moored (nav status 1 or 5), slower than 1 kn, or had no speed. In the 7 Nov log those were about 95% of all silences, mostly ships in port whose slow reports AISStream drops. |
+| Opens | Silent for `max(1800 s, 20 x report_interval_s)`. `report_interval_s` is an exponentially weighted mean (alpha 0.2) of the time between fixes while moving, so the 30-minute floor decides for almost every ship. |
+| `own_stall` | The silence overlaps one of our own outages: 7 Nov 19:39:44-19:50:08 and 21:57:13-23:36 UTC (`gaps.KNOWN_STALLS`), and any backend restart (the time from the last stored fix to start-up). |
+| `unknown` | No other Class A ship was heard within 20 km in the 30 min before the silence (open sea). |
+| `coverage_gap` | Fewer than 3 other Class A ships heard within 20 km in the last 10 min, or at least half of the ships that were near it before have gone silent too: a receiver hole, not the ship. |
+| `deliberate_candidate` | Otherwise: the area still hears ships and this one went quiet. It is a candidate, not proof; a master may switch off lawfully for safety. |
+
+- **Versions.** The id is `gap-{mmsi}-{start_ts}`. A new version is written when the gap opens, when its flag changes (re-checked every 60 s while open) and when it closes on the next fix. The flag at the close is the last one seen while open, because after an outage the neighbours come back at the same moment as the ship. Rows are append-only; a version written again after a restart is skipped (`ON CONFLICT (id, version) DO NOTHING`).
+- **The 06 "cell not dead" test** is done by following the ship's earlier neighbours rather than its 0.1 degree cell. A convoy that sails out of a cell keeps being heard elsewhere, so the cell doesn't look dead when it isn't. It also catches most ships just inside a receiver hole, the case Mano's stress suite marks as a known limit.
+- **On the map.** A ship with an open gap stays at its last fix with `status: "gap_open"` and `open_gap_id` for up to 24 h, instead of dropping off after 30 min. `snapshot.gaps` has the open gaps and those closed in the last hour, `delta.gaps` has every new version, and `detail.gaps` has the ship's last 5. The frontend draws the "could be anywhere in here" circle from `last_sog_kn` and `start_ts`.
+- **Warm start.** On start-up the backend reads Tiger on its own read-only connection: every Class A fix of the last 2 h (rhythms and neighbours), each Class A ship's last fix of the last 6 h (ships already silent), their latest names, and the gaps still open. Open gaps carry on with their versions, ships already silent get their gap, and the restart itself counts as `own_stall`. The detector's clock waits until this is done. About 2 s for 300,000 fixes and 22,500 ships on a local copy. A gap whose ship was last heard more than 2 h before start-up has no neighbour baseline, so it is `unknown` unless it overlaps an outage.
+- **`/health`** has a `gaps` block: `opened`, `closed`, `versions`, `open`, `not_moving` (silences skipped because the ship wasn't moving), `warm` (`pending`, `ready`, `failed: ...` or `off`) and `written`.
+
+**Measured on the recorded 7 Nov log** (16:51-21:57, 1.65 million messages, 24,615 Class A ships, replayed offline): 2,490 gaps, of which 299 `deliberate_candidate`, 343 `coverage_gap`, 177 `unknown` and 1,671 `own_stall` (the 19:39 outage). Closed deliberate gaps lasted a median of 52 min (90% under 98). The detector took 38 s of CPU for the 5 hours.
+
+**Tests.** `tests/test_gaps.py` (rules, map state, table rows) runs with plain `pytest`. Mano's stress suite runs it too: `.venv/bin/python -m pytest tests/stress --stress --detector dvm`.
+
 ## Measured
 
 World-wide, 7 Nov 2026 around 16:55 UTC: about 90 messages a second, 7,300 ships after 3 minutes, queue depth 0, nothing dropped. One process keeps up easily, so the default box is the whole world.
@@ -148,5 +172,5 @@ AISStream bans clients for what they send: connections, reconnects and subscript
 ## Not done yet
 
 - The token is checked once at connect, not again when it expires. `/health` stays public; there are no other HTTP routes yet.
-- Client messages on `/ws` (`subscribe`, `replay`, `detail`) are ignored; trails, gaps, spoofs and the watchlist are sent empty.
+- `subscribe` on `/ws` is ignored; trails, spoofs and the watchlist are sent empty (gaps are live, see Gap detector).
 - Replay from the JSONL log, Digitraffic backup feed, MID-to-flag lookup (`flag` is null).

@@ -54,6 +54,7 @@ jobs:
           VITE_AUTH0_DOMAIN: hedgedbets-hacktheburgh.uk.auth0.com
           VITE_AUTH0_CLIENT_ID: XYVmFNiyeduk9gu9HCTBLPlBqnC0sfUJ
           VITE_AUTH0_AUDIENCE: https://api.dark-vessel-monitor
+          VITE_DATA: live   # real backend data only (ships, gaps); no illustrative mock (#76)
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:
