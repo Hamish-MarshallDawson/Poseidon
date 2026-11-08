@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { fmtDuration } from '../timeline/format'
 import { ui } from '../store/ui'
 import { vessels } from '../store/vessels'
 import { Button } from '../ui'
@@ -93,7 +94,7 @@ export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
         <Field label="Last speed" value={v.sog_kn !== null ? `${v.sog_kn.toFixed(1)} kn` : '—'} />
         <Field label={noAis ? 'Last heading' : 'Heading'} value={(v.heading_deg ?? v.cog_deg) !== null ? `${String(Math.round((v.heading_deg ?? v.cog_deg)!)).padStart(3, '0')}°` : 'Not known'} />
         {gap && <Field label="Ships heard nearby" value={`${gap.neighbours_heard} within 20 km`} />}
-        {gap?.pred_r80_m ? <Field label={`Estimated now${gap.pred_model ? ` · ${gap.pred_model}` : ''}`} value={`about 80 % within ${Math.round(gap.pred_r80_m / 1000)} km`} />
+        {gap?.pred_r80_m ? <Field label={`Estimated position now${gap.pred_model ? ` · ${gap.pred_model}` : ''}`} value={`80% chance within ${Math.round(gap.pred_r80_m / 1000)} km, ${fmtDuration(now - gap.start_ts)} since last heard`} />
           : gap?.radius_m ? <Field label="Could be within" value={`${(gap.radius_m / 1000).toFixed(1)} km`} /> : null}
         {v.sanctioned && !yachtSanctioned && <Field label="Sanctions" value="List match" />}
         {pastGaps ? <Field label="Past silent gaps" value={`${pastGaps} in 7 days`} /> : null}
