@@ -242,6 +242,7 @@ async def _db_flow():
     assert route["status"] == {"level": "ok", "text": "Circle held the ship 75% of the time · target 80%"}
     assert godark["headline"] == {"text": "Flagged ships go dark 10× more often", "value": 10, "unit": "×"}
     assert godark["status"] == {"level": "ok", "text": "Says 12%, actual 10%"}
+    assert (M._pct(0.026), M._pct(0.117), M._pct(0.0)) == ("2.6%", "12%", "0%")
     assert fishing["headline"]["value"] is None and fishing["status"]["level"] == "none"
     assert (route["runs_total"], route["runs_gemini"], godark["runs_total"]) == (2, 1, 0)
     rp = route["pipeline"]

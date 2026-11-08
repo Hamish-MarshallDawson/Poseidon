@@ -418,6 +418,11 @@ def _level(off: float, warn: float, bad: float) -> str:
     return "ok" if off <= warn else "warn" if off <= bad else "bad"
 
 
+def _pct(x: float) -> str:
+    """12%, but 2.6% under 10% (go-dark chances are small, and '3%, actual 1%' hides the gap)."""
+    return f"{x:.0%}" if x >= 0.095 or x == 0 else f"{x:.1%}"
+
+
 def _km(m: float) -> str:
     km = m / 1000
     return f"{km:.1f}" if km < 10 else f"{km:.0f}"
@@ -454,8 +459,9 @@ def godark_card(live: Optional[dict], lift_row: Optional[dict], deployed: bool) 
         return head, {"level": "none", "text": "Waiting for grades"}
     p, q = live["calibration"]["value"], live["calibration"]["nominal"]
     off = abs(p - q)
-    return head, {"level": _level(off, max(0.01, 0.25 * q), max(0.02, 0.5 * q)),
-                  "text": f"Says {p:.0%}, actual {q:.0%}"}
+    # relative to how often ships really go dark: 2.6% said against 0.7% actual is far off, not drifting
+    return head, {"level": _level(off, max(0.005, 0.25 * q), max(0.01, 0.5 * q)),
+                  "text": f"Says {_pct(p)}, actual {_pct(q)}"}
 
 
 def fishing_card(metrics: dict, graded_24h: int, deployed: bool) -> tuple[dict, dict]:
