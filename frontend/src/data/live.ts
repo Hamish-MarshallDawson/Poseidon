@@ -5,6 +5,12 @@ import type { AdapterOptions, DataAdapter, FeedHandlers, FeedStatus } from './ad
 // (no imports from map/ or the stores): it only calls the handlers; data/index.ts wires them to the stores.
 // Deltas carry whole VesselView objects, so a message is JSON.parse'd once and handed over as is.
 
+// Collaboration (src/collab/socket.ts) shares this socket: messages this adapter does not know go to onMessage, and
+// onOpen fires on every (re)connect after `hello` so the session can be re-joined.
+export const collabLink: { onMessage: ((m: unknown) => void) | null; onOpen: (() => void) | null } = { onMessage: null, onOpen: null }
+
+const AUTH_OFF = import.meta.env.DEV && import.meta.env.VITE_AUTH === 'off'   // local dev without Auth0
+
 const MIN_DELAY_MS = 1000
 const MAX_DELAY_MS = 15000
 
@@ -31,7 +37,7 @@ export function createLiveAdapter(opts: AdapterOptions): DataAdapter {
       // Browsers can't set headers on a WebSocket, so the access token is the first message.
       sock.onopen = () => {
         opts.getToken()
-          .then((token) => (token ? sock.send(JSON.stringify({ type: 'auth', token })) : sock.close()))
+          .then((token) => (token ? sock.send(JSON.stringify({ type: 'auth', token })) : AUTH_OFF ? undefined : sock.close()))
           .catch(() => sock.close())
       }
       sock.onmessage = (ev) => {
@@ -49,6 +55,7 @@ export function createLiveAdapter(opts: AdapterOptions): DataAdapter {
           case 'hello':
             emit({ connected: true, mode: msg.mode, speed: msg.speed, now_ts: msg.now_ts, sources: msg.sources })
             if (subscribe) sock.send(JSON.stringify(subscribe))
+            collabLink.onOpen?.()
             break
           case 'snapshot':
             h.onFrame({ type: 'snapshot', now_ts: msg.now_ts, vessels: msg.vessels, removed: [], gaps: msg.gaps ?? [],
@@ -75,6 +82,8 @@ export function createLiveAdapter(opts: AdapterOptions): DataAdapter {
           case 'detail':
             h.onDetail(msg)
             break
+          default:
+            collabLink.onMessage?.(msg)
         }
       }
       sock.onclose = () => {

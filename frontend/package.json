@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "smoke": "node --env-file-if-exists=../.env scripts/smoke.mjs",
     "tokens": "node scripts/tokens/build.mjs",
-    "basemap": "node scripts/basemap/run.mjs"
+    "basemap": "node scripts/basemap/run.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@auth0/auth0-react": "^2.30.0",
@@ -27,6 +28,7 @@
     "oxlint": "^1.90.0",
     "playwright-core": "^1.55.0",
     "typescript": "~7.0.2",
-    "vite": "^8.3.6"
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   }
 }
