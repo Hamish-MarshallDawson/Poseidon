@@ -1,6 +1,6 @@
 import { createStore } from '../../store/store'
 import { ui } from '../../store/ui'
-import type { Session } from '../client'
+import type { OutgoingInvite, Session } from '../client'
 import { collab } from '../store'
 
 // Entry UI state: which menu or panel is open, the one-shot joined toast, and the invite links this browser created
@@ -66,6 +66,38 @@ collab.subscribe((s, p) => {
   const m = explain(s.error)
   if (m) { collab.set({ error: null }); say(m, true) }
 })
+
+/** Who an invite went to, in words. */
+export const inviteeName = (o: OutgoingInvite) => (o.to === null ? 'Invite link' : 'email' in o.to ? o.to.email : o.to.name ?? 'Someone')
+// A decline must reach the owner even with the panel shut (an accept shows up as a new face).
+collab.subscribe((s, p) => {
+  if (s.invites === p.invites) return
+  for (const o of s.invites.outgoing) {
+    if (o.status === 'declined' && p.invites.outgoing.some((x) => x.id === o.id && x.status === 'pending')) say(`${inviteeName(o)} declined your invite to ${o.session_title}.`)
+  }
+})
+
+// A reload puts you back in the session this tab was in. sessionStorage: per tab, and leaving clears it. Per user, for a shared browser.
+const sessionKey = (me: string) => `dvm.session.${me}`
+export function rememberedSession(me: string): string | null {
+  try { return sessionStorage.getItem(sessionKey(me)) } catch { return null }
+}
+export function forgetSession(me: string) {
+  try { sessionStorage.removeItem(sessionKey(me)) } catch { /* no storage: nothing was remembered */ }
+}
+collab.subscribe((s, p) => {
+  if (s.session?.id === p.session?.id) return
+  if (s.session) entry.set({ popupDone: true })          // once you have been in a session this load, leaving must not offer it straight back
+  if (!s.me) return
+  if (!s.session) forgetSession(s.me.id)
+  else try { sessionStorage.setItem(sessionKey(s.me.id), s.session.id) } catch { /* no storage: a reload goes through the pop-up */ }
+})
+
+/** A pasted invite link, or a bare token, to the token. */
+export function tokenFrom(text: string): string | null {
+  const t = text.trim()
+  try { return new URL(t).searchParams.get('invite') } catch { return t || null }
+}
 
 const KEY = 'dvm.invite-links'
 export function savedLinks(): Record<string, string> {
