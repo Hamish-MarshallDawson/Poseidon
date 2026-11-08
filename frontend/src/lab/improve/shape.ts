@@ -36,7 +36,7 @@ export const modelKey = (target: string): ModelKey | null =>
     : target.startsWith('godark') ? 'godark'
       : target.startsWith('fishing') ? 'fishing' : null
 
-export const BASELINE: Record<ModelKey, string> = { route: 'dead reckoning', godark: 'the base rate', fishing: 'the baseline' }
+export const BASELINE: Record<ModelKey, string> = { route: 'dead reckoning', godark: 'the base rate', fishing: 'the rate by gear type and flag' }
 
 export const hoursLabel = (s: number) => (s >= 86400 && s % 86400 === 0 ? `${s / 86400} d` : `${Math.round(s / 3600)} h`)
 export const pct = (x: number | null | undefined) => (x == null || !Number.isFinite(x) ? '–' : `${x < 0 ? '−' : ''}${Math.abs(Math.round(x * 100))}%`)

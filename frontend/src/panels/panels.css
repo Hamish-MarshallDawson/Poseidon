@@ -109,8 +109,6 @@
 .layers .dvm-row, .layers .dvm-theme-menu__group > .dvm-row { padding-inline: 16px; }
 .layers .dvm-theme-menu__group { border-bottom: 0; }
 .layers .dvm-theme-menu__foot { padding: 6px 12px 0; }
-.layers .heat-group { flex-direction: row; gap: 16px; padding: 0 16px 2px 44px; }
-.heat-note { display: block; padding: 0 16px 6px 44px; }
 .show-group { display: flex; flex-direction: column; padding: 0 16px 4px; }
 .show-opt { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; font-size: var(--dvm-size-body); line-height: var(--dvm-line-body); color: var(--dvm-text-primary); }
 .show-opt input { margin: 0; accent-color: var(--dvm-accent-default); }

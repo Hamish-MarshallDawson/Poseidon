@@ -1,11 +1,11 @@
-import { Fragment, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { SessionBar, InvitePanelSlot } from '../collab/entry/SessionBar'
+import { LabChip } from '../lab/LabEntry'
 import { collab } from '../collab/store'
 import { ui, type UIState } from '../store/ui'
 import { Switch } from '../ui'
 import { useMapInstance } from '../map/context'
 import { reducedMotion, usePresence } from '../motion'
-import { popular } from '../data/popular'
 import { ThemeSettings } from '../theme/ThemeMenu'
 import { ReviewChip } from '../review/ReviewPanel'
 import { DelayedLayers } from './DelayedLayers'
@@ -46,26 +46,6 @@ function ShowChoice() {
   )
 }
 
-// Live traffic, or where ships go most over time. The note is the data's own label (range, or illustrative).
-function HeatChoice() {
-  const heat = ui.use((s) => s.heat)
-  const label = popular.use((s) => s.label)
-  const loading = popular.use((s) => s.loading)
-  return (
-    <div className="heat-choice">
-      <div role="radiogroup" aria-label="Heat map data" className="show-group heat-group">
-        {([['live', 'Live'], ['popular', 'Popular places']] as const).map(([id, text]) => (
-          <label key={id} className={`show-opt ${heat === id ? 'on' : ''}`}>
-            <input type="radio" name="heat" value={id} checked={heat === id} onChange={() => ui.set({ heat: id })} />
-            <span>{text}</span>
-          </label>
-        ))}
-      </div>
-      {heat === 'popular' && <span className="ly-note heat-note">{loading ? 'Loading…' : label?.replace('Popular places · ', '')}</span>}
-    </div>
-  )
-}
-
 // One panel for everything about how the map looks: Show, Layers, Settings.
 function DisplayPanel() {
   const layers = ui.use((s) => s.layers)
@@ -74,11 +54,8 @@ function DisplayPanel() {
       <ShowChoice />
       <span className="kicker ly-head">Layers</span>
       {LAYERS.map(({ key, label }) => (
-        <Fragment key={key}>
-          <Switch checked={layers[key]} label={label}
-            onChange={(on) => ui.set((s) => ({ layers: { ...s.layers, [key]: on } }))} />
-          {key === 'density' && layers.density && <HeatChoice />}
-        </Fragment>
+        <Switch key={key} checked={layers[key]} label={label}
+          onChange={(on) => ui.set((s) => ({ layers: { ...s.layers, [key]: on } }))} />
       ))}
       <DelayedLayers />
       <span className="kicker ly-head">Settings</span>
@@ -131,6 +108,7 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
         <SessionBar onLogout={onLogout} />
         <ReviewChip />
         <ChannelChip />
+        <LabChip />
         <button type="button" className={`chip ${layersOpen ? 'on' : ''}`} aria-expanded={layersOpen} aria-controls="layers-panel"
           onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, reviewOpen: false }))}>
           <span className="chip-square" aria-hidden />Display

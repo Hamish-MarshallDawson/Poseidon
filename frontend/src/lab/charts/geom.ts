@@ -26,3 +26,16 @@ export function shapePath(shape: Shape, cx: number, cy: number, r: number): stri
   }
 }
 
+const EDGE = 4      // px kept clear of the viewport edge
+const GAP = 10      // px between the point and the tooltip
+
+/** Place the tooltip centred above its point, then measure it: shift it sideways to stay inside the viewport, and
+ * drop it below the point when there's no room above, so it never covers the point it describes. */
+export function placeTip(p: { x: number; y: number }, size: { w: number; h: number }, origin: { left: number; top: number }, viewport: { w: number }): { left: number; top: number } {
+  const want = origin.left + p.x - size.w / 2
+  const max = viewport.w - EDGE - size.w
+  const left = Math.max(EDGE, Math.min(want, max)) - origin.left
+  const above = p.y - GAP - size.h
+  const top = origin.top + above < EDGE ? p.y + GAP : above
+  return { left, top }
+}

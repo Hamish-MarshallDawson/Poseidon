@@ -10,6 +10,7 @@
 .lab-chart__dot { fill: currentColor; }
 .lab-chart__band { fill: currentColor; fill-opacity: 0.16; stroke: none; }
 .lab-chart__bar { fill: currentColor; fill-opacity: 0.75; }
+.lab-chart__bar.soft { fill-opacity: 0.3; }
 .lab-chart__marker { fill: currentColor; stroke: var(--dvm-bg-panel); stroke-width: 1; }
 .lab-chart__marker.stroke { fill: none; stroke: currentColor; stroke-width: 2; }
 .lab-chart__rule { stroke: currentColor; stroke-opacity: 0.25; }
@@ -18,8 +19,8 @@
 .lab-chart__hits circle { fill: transparent; cursor: default; outline: none; }
 .lab-chart__hits circle:focus-visible { stroke: var(--dvm-accent-default); stroke-width: 2; }
 .lab-chart__tip {
-  position: absolute; z-index: 2; transform: translate(-50%, calc(-100% - 10px)); pointer-events: none;
-  max-width: 260px; width: max-content; padding: 6px 8px; box-sizing: border-box;
+  position: absolute; z-index: 2; pointer-events: none;
+  max-width: min(260px, calc(100vw - 8px)); width: max-content; padding: 6px 8px; box-sizing: border-box;
   background: var(--dvm-bg-raised); color: var(--dvm-text-primary); border: 1px solid var(--dvm-border-default);
   border-radius: var(--dvm-radius-panel); box-shadow: var(--dvm-shadow-lift);
   font: 400 var(--dvm-size-label) / var(--dvm-line-label) var(--dvm-font-ui);
