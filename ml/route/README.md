@@ -57,7 +57,7 @@ commit it. Optional: `ROUTE_WORKERS` (feature processes, default 6), `ROUTE_THRE
 Measured here (16 cores shared with other jobs): venv 16 s; `ml.data.dma` about 8 min for 14 days (37 s per day in
 a fresh 3-day run), 1.8 GB output, 15 GB peak while converting; `ml.route.train` about 3.5 min for 14 days
 (examples 75 s, fit and score about 60 s), peak 10.5 GB RAM; about 40 s for 3 days at 2.7 GB. More days scale
-roughly linearly (`--days 90`: plan about 20 min, 60 GB RAM for the examples step; use `ROUTE_WORKERS=4` if short
+roughly linearly; for `--days 90` that extrapolates (not measured) to about 20 min and 60 GB RAM in the examples step (use `ROUTE_WORKERS=4` if short
 on memory).
 
 ## The artifact (what the backend runs)
