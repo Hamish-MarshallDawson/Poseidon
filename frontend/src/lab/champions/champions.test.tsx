@@ -10,6 +10,7 @@ import { championLine, changePhrase, decisionSentence, latestDecided, measureFor
 const runs = real.runs as unknown as RunRecord[]
 const byId = new Map(runs.map((r) => [r.run_id, r]))
 const noDetail = async () => null
+const M = (target: 'route' | 'godark' | 'fishing') => ({ target, name: target, question: '?', summary: null })
 const BANNED = /skill|brier|log loss|dead reckoning|isotonic/i
 
 const parent = runs.find((r) => r.run_id === 'godark-lgbm-20261108T051156')!
@@ -68,16 +69,16 @@ describe('proposals', () => {
 describe('ChampionsTab renders on real data', () => {
   it('shows the decision card, the timeline and an honest empty proposals list', () => {
     for (const t of ['route', 'godark', 'fishing']) {
-      const html = renderToStaticMarkup(<ChampionsTab model={t} runs={real.runs as unknown as Run[]} proposals={[]} loadDetail={noDetail} now={real.summary.generated_at} />)
+      const html = renderToStaticMarkup(<ChampionsTab model={M(t as 'route')} runs={real.runs as unknown as Run[]} proposals={[]} events={[]} loadDetail={noDetail} now={real.summary.generated_at} />)
       expect(html).toContain('Latest decision')
       expect(html).toContain('No proposals yet')
       expect(html.replace(/<[^>]+>/g, ' ')).not.toMatch(/dead reckoning|log loss|brier/i)
     }
   })
-  it('badges Gemini runs and proposals, and is honest while loading', () => {
-    const html = renderToStaticMarkup(<ChampionsTab model={{ target: 'godark' }} runs={[...real.runs, gem] as unknown as Run[]} proposals={[prop({})]} loadDetail={noDetail} />)
+  it('badges Gemini runs and proposals, and is honest when empty', () => {
+    const html = renderToStaticMarkup(<ChampionsTab model={M('godark')} runs={[...real.runs, gem] as unknown as Run[]} proposals={[prop({})]} events={[]} loadDetail={noDetail} />)
     expect(html).toContain('lc-gemini')
     expect(html).toContain('Fewer leaves may generalise better.')
-    expect(renderToStaticMarkup(<ChampionsTab model="route" runs={null} proposals={null} loadDetail={noDetail} />)).toContain('Loading runs')
+    expect(renderToStaticMarkup(<ChampionsTab model={M('route')} runs={[]} proposals={[]} events={[]} loadDetail={noDetail} />)).toContain('No training runs')
   })
 })

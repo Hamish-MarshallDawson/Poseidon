@@ -1,30 +1,19 @@
 import { useMemo, useState } from 'react'
 import { Chart, Legend, Line, Markers, extent, pad } from '../charts'
-import type { LabEvent, Proposal, Run, RunDetail } from '../types'
+import type { ChampionsTabProps as BaseProps } from '../tabs'
 import { fmtWhen, proposerLabel, STATUS_LABEL, type RunRecord } from '../runs/shape'
-import { championLine, decisionSentence, latestDecided, measureFor, proposalRows, targetOf, timelinePoints, type ModelRef, type Point } from './shape'
+import { championLine, decisionSentence, latestDecided, measureFor, proposalRows, targetOf, timelinePoints, type Point } from './shape'
 import { RunPanel } from './RunPanel'
 import './champions.css'
 
-/** Props for the Champions & challengers tab of a model page. */
-export interface ChampionsTabProps {
-  /** The model: its target ('route', 'godark', 'fishing') or its /lab/summary entry. */
-  model: ModelRef
-  /** GET /lab/runs (all targets; the tab picks its own). Null while loading. */
-  runs: Run[] | null
-  proposals: Proposal[] | null
-  events?: LabEvent[] | null
-  /** GET /lab/runs/{id}; resolve null when it can't be loaded. */
-  loadDetail: (runId: string) => Promise<RunDetail | null>
-  /** Epoch ms for "now" (the champion line runs to it). */
-  now?: number
-}
+/** The nav contract's props (tabs.ts), plus an optional "now" for the champion line's right end. */
+export type ChampionsTabProps = BaseProps & { now?: number }
 
 /** Every run of one model on a timeline (champions joined by a line), the latest decision in one sentence, the
  *  proposals Gemini made, and a side panel with any run's full story. */
 export function ChampionsTab({ model, runs, proposals, loadDetail, now }: ChampionsTabProps) {
   const target = targetOf(model)
-  const all = useMemo(() => (runs ?? []) as RunRecord[], [runs])
+  const all = useMemo(() => (runs ?? []) as unknown as RunRecord[], [runs])
   const byId = useMemo(() => new Map(all.map((r) => [r.run_id, r])), [all])
   const points = useMemo(() => timelinePoints(all, target), [all, target])
   const latest = useMemo(() => latestDecided(all, target), [all, target])
