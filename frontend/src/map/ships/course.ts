@@ -36,7 +36,7 @@ export class CourseLine {
     })
     map.addLayer({
       id: L_LABEL, type: 'symbol', source: SRC, filter: ['==', ['get', 'k'], 'tip'],
-      layout: { 'text-field': '+10 min', 'text-font': FONT, 'text-size': 11, 'text-anchor': 'top-left', 'text-offset': [0.5, 0.3], 'text-allow-overlap': true },
+      layout: { 'text-field': '+10 min', 'text-font': FONT, 'text-size': 11, 'text-anchor': 'top-left', 'text-offset': [0.5, 0.3], 'text-optional': true },
       paint: { 'text-color': ink, 'text-halo-color': readToken('bg-app') || '#000', 'text-halo-width': 1.2 },
     })
     this.key = ''

@@ -15,6 +15,7 @@ import { Colour, createShipLayer, InstanceBuffer, N_COLOURS, writeMotion, type S
 import { buildAtlas, hullKey, LETTER_PX, TIERS, TYPES, type HullType, type Sprite } from './sprites'
 import { CourseLine } from './course'
 import { shownNow } from '../../timeline/replay'
+import { ghostRadius } from '../../forecast/geo'
 import { clock, setShownClock, ShipState } from './state'
 
 setShownClock(shownNow)
@@ -296,8 +297,9 @@ export class ShipController {
     const same = drawn.length === this.drawn.length && drawn.every((m) => this.drawnSet.has(m))
     this.drawn = drawn
     if (!same) this.drawnSet = new Set(drawn)
-    this.chips = res.chips
     const map = this.map!
+    this.avoidGhosts(res, map, view)
+    this.chips = res.chips
     ;(map.getSource(S.cells) as GeoJSONSource | undefined)?.setData(res.cells)
     ;(map.getSource(S.chips) as GeoJSONSource | undefined)?.setData(this.chipFeatures())
     const b = map.getBounds()
@@ -311,6 +313,44 @@ export class ShipController {
     if (!same || this.selectionChanged) this.gpu.invalidate()     // the same ships: positions are patched as fixes arrive
     this.selectionChanged = false
     performance.measure('dvm:slot-pass', { start: t0 })
+  }
+
+  // Ghost circles (open could-be-within regions as ForecastOverlay draws them, plus every open gap ship, at least 14 px) in
+  // screen px. A stack chip anchored inside one moves to its edge; a cell count centred inside one is blanked. Runs per slot
+  // pass (moveend / 1 Hz data), never per frame.
+  private avoidGhosts(res: ReturnType<typeof computeSlots>, map: MapLibreMap, view: View): void {
+    const s = ui.get(), t = shownNow()
+    const picked = new Set<number>(s.windows.map((w) => w.mmsi))
+    if (s.focusMmsi != null) picked.add(s.focusMmsi)
+    const zones: { x: number; y: number; r: number }[] = []
+    for (const g of vessels.gaps.values()) {
+      if (g.state !== 'open' || g.start_ts > t || g.coverage_flag === 'own_stall') continue
+      const dark = g.coverage_flag === 'deliberate_candidate'
+      if (!dark && !picked.has(g.mmsi)) continue
+      const mpp = (40_075_016 * Math.cos((g.last_lat * Math.PI) / 180)) / view.worldSize
+      const p = map.project([g.last_lon, g.last_lat])
+      zones.push({ x: p.x, y: p.y, r: Math.max(14, ghostRadius(g, t) / mpp) })
+    }
+    if (!zones.length) return
+    const inside = (x: number, y: number, pad: number) => zones.find((z) => Math.hypot(x - z.x, y - z.y) < z.r + pad)
+    for (const c of res.chips) {
+      const p = map.project([c.lon, c.lat])
+      let x = p.x, y = p.y
+      for (let i = 0, z = inside(x, y, 14); z && i < 4; i++, z = inside(x, y, 14)) {
+        const d = Math.hypot(x - z.x, y - z.y)
+        if (d < 1) { x = z.x; y = z.y - z.r - 28 } else { const k = (z.r + 28) / d; x = z.x + (x - z.x) * k; y = z.y + (y - z.y) * k }
+      }
+      if (x !== p.x || y !== p.y) { const a = map.unproject([x, y]); c.lon = a.lng; c.lat = a.lat }
+    }
+    for (const f of res.cells.features) {
+      const props = f.properties
+      if (!props?.label || f.geometry.type !== 'Polygon') continue
+      const ring = f.geometry.coordinates[0]
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+      for (const [lo, la] of ring) { x0 = Math.min(x0, lo); x1 = Math.max(x1, lo); y0 = Math.min(y0, la); y1 = Math.max(y1, la) }
+      const p = map.project([(x0 + x1) / 2, (y0 + y1) / 2])
+      if (inside(p.x, p.y, 12)) props.label = ''
+    }
   }
 
   private chipFeatures(): GeoJSON.FeatureCollection {

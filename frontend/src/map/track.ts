@@ -37,7 +37,10 @@ export function trackFeatures(trail: Trail, last: [number, number, number], nowM
     out.push({ type: 'Feature', properties: { kind: 'line', age: (pts[i][0] - t0) / span }, geometry: { type: 'LineString', coordinates: [[pts[i - 1][1], pts[i - 1][2]], [pts[i][1], pts[i][2]]] } })
   }
   for (const p of pts.slice(1)) out.push({ type: 'Feature', properties: { kind: 'fix' }, geometry: { type: 'Point', coordinates: [p[1], p[2]] } })
-  out.push({ type: 'Feature', properties: { kind: 'start', label: trackAgeLabel(span) }, geometry: { type: 'Point', coordinates: [pts[0][1], pts[0][2]] } })
+  // The label goes on the side away from the first segment, so it never sits on its own line.
+  const dx = pts[1][1] - pts[0][1], dy = pts[1][2] - pts[0][2]
+  const anchor = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'top' : 'bottom')
+  out.push({ type: 'Feature', properties: { kind: 'start', label: trackAgeLabel(span), anchor }, geometry: { type: 'Point', coordinates: [pts[0][1], pts[0][2]] } })
   return out
 }
 
@@ -76,7 +79,8 @@ export class TrackRenderer {
     map.addLayer({ id: ID.start, type: 'circle', source: ID.src, filter: kind('start'), paint: { 'circle-radius': 6, 'circle-stroke-width': 2.5 } })
     map.addLayer({
       id: ID.label, type: 'symbol', source: ID.src, filter: kind('start'),
-      layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 12, 'text-anchor': 'top', 'text-offset': [0, 1.2], 'text-allow-overlap': true },
+      layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 12, 'text-anchor': ['get', 'anchor'], 'text-radial-offset': 1, 'text-padding': 3 },
+      // Added after the basemap's labels, so it is placed first: a place label under it drops, not the track's.
       paint: { 'text-halo-width': 1.5 },
     })
     this.recolour()
