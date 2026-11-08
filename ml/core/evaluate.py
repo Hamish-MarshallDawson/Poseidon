@@ -82,6 +82,15 @@ def freeze_holdout(spec: TargetSpec, examples: pd.DataFrame, name: str = "v1", f
     ids = sorted(map(str, block["case_id"]))
     if not ids:
         raise ValueError("the held-out block is empty: not enough data to freeze a held-out set")
+    # A frozen set is permanent, and training only uses cases whose label window ends before it: freezing before
+    # there is at least as much embargo-clean history as held-out data would leave the target with nothing to train
+    # on forever. Refuse (write nothing) so a later cycle, with more data, freezes a usable set.
+    n_train = int((examples["as_of"] < start - embargo_ms(spec)).sum())
+    if n_train < len(ids):
+        need_h = (len(ids) - n_train) / max(len(examples) / max(hi - lo, 1), 1e-9) / 3_600_000
+        raise ValueError(f"not enough history to freeze a held-out set yet: {n_train} training cases before the "
+                         f"block and the {embargo_ms(spec) // 3_600_000} h embargo, {len(ids)} held out "
+                         f"(about {need_h:.0f} h more data); nothing frozen")
     h = Holdout(spec.name, name, start, int(block["as_of"].max()), ids, ships, _hash_ids(ids), len(ids),
                 datetime.now(timezone.utc).isoformat(timespec="seconds"), spec.group_by_ship)
     path.parent.mkdir(parents=True, exist_ok=True)
