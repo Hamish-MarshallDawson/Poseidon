@@ -57,6 +57,15 @@ export interface RiskScore {
   target: "dark_6h" | "dark_1h" | "dark_24h"; p: number; rank: number | null; mode: "live" | "replay" | "backtest";
   features: Record<string, number>; contrib: Record<string, number>; model_version: string;
 }
+// GET /observations rows (delayed GFW events): the fields the ship history reads. attrs is a trimmed subset.
+export interface Observation {
+  id: string; src: string; kind: string; ts: number; end_ts: number | null; mmsi: number | null;
+  lat: number | null; lon: number | null; value: number | null;   // value = hours for events
+  attrs?: { name?: string; other_vessel?: { name?: string } } & Record<string, unknown>;
+}
+export interface ObservationQuery { kinds: string[]; start: number; end: number; mmsi?: number; bbox?: [number, number, number, number] }
+export interface ObservationReply { observations: Observation[]; attribution?: Record<string, unknown> }
+
 // 06 section 2.10: what happened after a forecast.
 export interface Outcome {
   score_id: string; mmsi: number; made_at: number; resolved_at: number;

@@ -11,6 +11,7 @@ import { fmtEta, matchDestination, usePortInfo } from '../ports'
 import type { Departure, PortIndex } from '../ports'
 import { YachtSection } from '../yachts/Yachts'
 import { toggleReview, useInReview } from '../review/store'
+import { ShipHistory } from './ShipHistory'
 import { ShipPresence } from '../collab/presence/SharedList'
 
 // Body of a ship window: R2/Forecast/Ship card (Figma 56:4598), states No AIS and Active.
@@ -100,6 +101,7 @@ export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
       <p className="sc-sub">{subline(v, statics?.flag_iso2 ?? v.flag, statics?.length_m ?? v.length_m)}</p>
       <ShipPresence mmsi={mmsi} />
       <Route v={v} destination={statics?.destination} eta={statics?.eta_utc} ports={ports} departure={departure} />
+      <ShipHistory mmsi={mmsi} now={now} />
       <div className="sc-timer">
         <span className="sc-clock">{hms(now - v.last_ts)}</span>
         <span className="sc-caption">since last AIS ({utcTime(v.last_ts)}){replay && ` · shown time ${utcTime(now)}`}</span>

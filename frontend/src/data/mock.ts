@@ -9,7 +9,7 @@
 //     a watchlist, three open gaps (those ships freeze at their last fix), closed gaps, spoofs, a meeting, outcomes.
 //  3. Ships, when there is no backend (data/synthetic.ts): offline 'always' uses them at once; 'fallback' (the default)
 //     switches to them when the backend has not said hello within FALLBACK_MS, and then stays on them for the session.
-import type { ClientMsg, GapEvent, HistoryRange, Outcome, RiskScore, SpoofEvent, TimelineEvent, VesselView, Watchlist, WatchlistRow } from '../types'
+import type { ClientMsg, GapEvent, HistoryRange, Observation, ObservationQuery, ObservationReply, Outcome, RiskScore, SpoofEvent, TimelineEvent, VesselView, Watchlist, WatchlistRow } from '../types'
 import type { Frame } from '../store/vessels'
 import { vessels as store } from '../store/vessels'
 import type { DataAdapter, FeedHandlers, FeedStatus } from './adapter'
@@ -155,6 +155,19 @@ const BACKFILL_MS = 10 * MIN          // synthetic ships come with this much rep
 
 export interface MockOptions { offline?: 'always' | 'fallback' | 'never'; ships?: number }
 
+const SAMPLE_PORTS: [number, number][] = [[54.40, 18.67], [57.70, 11.93], [53.54, 9.98], [55.69, 12.60]]
+// Illustrative GFW-style events for one MMSI: a port call, some loitering, an encounter. One ship in three has none.
+function synthObservations(q: ObservationQuery): ObservationReply {
+  const m = q.mmsi
+  if (m == null || m % 3 === 0) return { observations: [] }
+  const [lat, lon] = SAMPLE_PORTS[m % SAMPLE_PORTS.length], DAY = 86_400_000, now = q.end
+  const row = (i: number, kind: string, daysAgo: number, hours: number, extra: Partial<Observation> = {}): Observation =>
+    ({ id: `sample:${m}:${i}`, src: 'gfw', kind, ts: now - daysAgo * DAY, end_ts: now - daysAgo * DAY + hours * 3_600_000, mmsi: m, lat, lon, value: hours, ...extra })
+  const all = [row(0, 'port_visit', 3, 14), row(1, 'loitering', 9, 6, { lat: lat + 0.3 }), row(2, 'loitering', 21, 9, { lat: lat + 0.4 }),
+    row(3, 'encounter', 12, 3, { attrs: { other_vessel: { name: 'SAMPLE TRADER' } }, lat: lat + 0.5 })]
+  return { observations: all.filter((o) => o.ts >= q.start), attribution: { gfw: 'Global Fishing Watch (illustrative sample)' } }
+}
+
 export function createMockAdapter(live: DataAdapter, opts: MockOptions = {}): DataAdapter {
   let src = live                                    // the feed underneath: the backend, or synthetic ships
   const log = new ReplayLog()
@@ -281,6 +294,8 @@ export function createMockAdapter(live: DataAdapter, opts: MockOptions = {}): Da
     async historyRange(): Promise<HistoryRange> { return range() },
     // The backend's track when it is the feed; for synthetic ships an illustrative one made up from the current fix.
     track: (mmsi, hours) => (src === live ? live.track(mmsi, hours) : Promise.resolve(synthTrack(mmsi, hours))),
+    // The backend's rows when it is the feed; for synthetic ships a few illustrative events made up from the MMSI.
+    observations: (q) => (src === live ? live.observations!(q) : Promise.resolve(synthObservations(q))),
     async scores(as_of?: number) { return fc ? fc.scoresAt(hourOf(as_of ?? liveNow)) : [] },
     async outcomes(from_ts, to_ts) {
       if (!fc) return []

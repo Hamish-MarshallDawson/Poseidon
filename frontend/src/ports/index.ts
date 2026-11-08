@@ -3,7 +3,7 @@ import { getTrack } from '../data/track'
 import { buildIndex, inferDeparture } from './match'
 import type { PortIndex, PortRow, Port } from './match'
 
-export { fmtEta, matchDestination } from './match'
+export { fmtEta, matchDestination, nearestPort } from './match'
 export type { Port, PortIndex }
 
 // The port list (public/ports/ports.json, ~250 KB) is fetched the first time a ship window needs it.
