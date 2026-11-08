@@ -103,10 +103,11 @@ def horizon_label(h: Any) -> str:
     return f"{s // 3600} h" if s % 3600 == 0 else f"{s // 60} min"
 
 
-def _against(decision: dict) -> str:
+def _against(decision: dict, target: Optional[str] = None) -> str:
     a = (decision.get("against") or "the champion").strip()
     if a.startswith("baseline"):
-        return "the baseline"
+        # the route baseline extrapolates the last course and speed: in plain words, a straight-line guess
+        return "the straight-line guess" if target == "route" else "the baseline"
     return a if a.startswith("the ") else f"the {a}"
 
 
@@ -137,7 +138,7 @@ def rule(rec: dict, confirm: Optional[dict]) -> list[dict]:
     d = (rec.get("metrics") or {}).get("decision") or {}
     if not d:
         return []
-    out, vs = [], _against(d)
+    out, vs = [], _against(d, rec.get("target"))
     if d.get("by") == "human":
         out.append({"check": f"no paired test was run ({_by_hand(d)})", "passed": None,
                     "detail": "; ".join(d.get("reasons") or []) or None})
@@ -184,7 +185,7 @@ def decision_summary(rec: dict) -> Optional[str]:
         return None
     if d.get("by") == "human":
         return f"{_by_hand(d)}; no paired test was run"
-    vs = _against(d)
+    vs = _against(d, rec.get("target"))
     if d.get("promote"):
         return f"promoted by the rule: beat {vs}"
     why = next((x for x in d.get("reasons") or [] if x), None)

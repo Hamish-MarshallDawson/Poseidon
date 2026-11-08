@@ -237,6 +237,20 @@ async def _db_flow():
     assert godark["live"]["target"] == "dark_1h"   # no 6 h grades yet: the 1 h card
     assert godark["live"]["n"] == 10 and godark["champion"]["run_id"] is None
     assert fishing["deployed"] is False and fishing["live"] is None
+    # plain-words cards: median 250 m at 3 h, 3 of 4 inside the circle; the 1 flagged ship of 10 went dark
+    assert route["headline"] == {"text": "Finds a silent ship within 0.2 km after 3 hours", "value": 0.2, "unit": "km"}
+    assert route["status"] == {"level": "ok", "text": "Circle held the ship 75% of the time · target 80%"}
+    assert godark["headline"] == {"text": "Flagged ships go dark 10× more often", "value": 10, "unit": "×"}
+    assert godark["status"] == {"level": "ok", "text": "Says 12%, actual 10%"}
+    assert fishing["headline"]["value"] is None and fishing["status"]["level"] == "none"
+    assert (route["runs_total"], route["runs_gemini"], godark["runs_total"]) == (2, 1, 0)
+    rp = route["pipeline"]
+    assert {k: v["count"] for k, v in rp.items()} == {"new_data": 5000, "proposed": 0, "trained": 2, "judged": 0,
+                                                      "promoted": 1, "rejected": 1, "graded": 7}
+    assert rp["trained"]["last_ts"] == T - H / 2 and rp["graded"]["last_ts"] == T + 4 * H
+    assert godark["pipeline"]["graded"]["count"] == 10
+    for x in (route, godark, fishing):
+        assert "dead reckoning" not in json.dumps(x).lower()
     assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 17, "graded_outcomes_estimated": False,
                            "graded_last_hour": 0}
     assert d["counted_from"] == T - 4 * H - 30 * 24 * H and d["truncated"] is False and m["truncated"] is False
@@ -272,6 +286,8 @@ async def _db_flow():
     assert route["note"] == "no live grades for this version yet (the last 24 h graded route-x)"
     assert godark["champion"]["since"] == T + 4 * H
     assert s["cycle"]["last"] == T + 3 * H and s["totals"]["proposals"] == 2
+    assert route["pipeline"]["promoted"]["last_ts"] == T - H + 5   # from the promoted event
+    assert route["status"]["level"] == "none" and "yet" in route["headline"]["text"]
 
 
 LAB_DDL = """
