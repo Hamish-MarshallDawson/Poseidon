@@ -3,6 +3,8 @@
 - `route_predictions`: one row per ship, as_of, horizon and model version. `as_of` is the newest fix the model saw;
   the predicted point is for `as_of + horizon_s`. `base_lat, base_lon` is the dead-reckoning baseline for the same
   time, so every graded row also grades the baseline. `gap_id` is set when the ship was in an open gap.
+  `mpa_ids, mpa_share_80, foreign_eez, foreign_share_80` (#157): protected areas the 80% circle touches and the
+  share of it inside them; EEZs other than the ship's own (at its last fix) and the share inside those.
 - `model_runs`: the training registry mirrored for the backend and the leaderboard. A run gets one row per status
   it reaches (candidate, champion, rejected); the newest row of a run is its status now.
 - `outcomes` (store.py) gains nullable columns for route grades: error_m, baseline_error_m, truth_*, in_r80, in_r95,
@@ -31,6 +33,12 @@ CREATE TABLE IF NOT EXISTS model_runs (
   PRIMARY KEY (run_id, status)
 );
 
+-- zone incursion of the 80% circle (#157, dvm/zones/incursion.py); null when the zones were not loaded
+ALTER TABLE route_predictions ADD COLUMN IF NOT EXISTS mpa_ids bigint[];
+ALTER TABLE route_predictions ADD COLUMN IF NOT EXISTS mpa_share_80 real;
+ALTER TABLE route_predictions ADD COLUMN IF NOT EXISTS foreign_eez integer[];
+ALTER TABLE route_predictions ADD COLUMN IF NOT EXISTS foreign_share_80 real;
+
 ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS model_version text;
 ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS truth_source text;
 ALTER TABLE outcomes ADD COLUMN IF NOT EXISTS truth_ts bigint;
@@ -49,7 +57,8 @@ CREATE OR REPLACE TRIGGER model_runs_append_only BEFORE UPDATE OR DELETE ON mode
 """
 
 ROUTE_COLS = ["id", "mmsi", "made_at", "as_of", "model_version", "horizon_s", "lat", "lon", "radius_m_80",
-              "radius_m_95", "base_lat", "base_lon", "gap_id", "feature_version", "mode"]
+              "radius_m_95", "base_lat", "base_lon", "gap_id", "feature_version", "mode", "mpa_ids", "mpa_share_80",
+              "foreign_eez", "foreign_share_80"]
 RUN_COLS = ["run_id", "target", "model", "config", "data_hash", "train_from", "train_to", "metrics", "artifact",
             "proposer", "parent_run", "status", "created_at", "recorded_at"]
 OUTCOME_COLS = ["score_id", "mmsi", "target", "made_at", "horizon_s", "resolved_at", "label", "censored", "event_id",

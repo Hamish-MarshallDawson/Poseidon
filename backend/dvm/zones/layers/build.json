@@ -1,0 +1,39 @@
+{
+ "eez": 16,
+ "mpa": 1844,
+ "eez_borders": 26,
+ "bytes": {
+  "eez": 1167169,
+  "mpa": 4419701,
+  "eez_borders": 12361
+ },
+ "margin_deg": 2.0,
+ "tolerance_deg": 0.001,
+ "built_at": 1794122588861,
+ "regions": {
+  "danish_straits": [
+   7.5,
+   52.0,
+   16.0,
+   60.0
+  ],
+  "gulf_of_finland": [
+   20.0,
+   57.0,
+   32.5,
+   63.0
+  ],
+  "hormuz": [
+   53.0,
+   23.5,
+   59.5,
+   29.0
+  ],
+  "gulf_of_oman": [
+   55.5,
+   20.0,
+   64.0,
+   28.0
+  ]
+ }
+}

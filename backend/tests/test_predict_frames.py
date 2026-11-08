@@ -82,7 +82,8 @@ def test_gap_fields_follow_the_gap_age_and_route_block():
     fc.update([], route_set(7, T, T + 30 * MIN, gap_id="g7") + route_set(8, T, T), {"g7"}, T + 30 * MIN)
     f = fc.gap_fields("g7", T + 30 * MIN)
     assert f["pred_horizon_s"] == 3600 and f["pred_r80_m"] == 360 and f["pred_model"] == "baseline-dr-v1"
-    assert set(f) == {"pred_lat", "pred_lon", "pred_r80_m", "pred_r95_m", "pred_horizon_s", "pred_made_at", "pred_model"}
+    assert set(f) == {"pred_lat", "pred_lon", "pred_r80_m", "pred_r95_m", "pred_horizon_s", "pred_made_at", "pred_model",
+                      "pred_mpa_ids", "pred_mpa_share_80", "pred_foreign_eez", "pred_foreign_share_80"}   # zones, #157
     assert fc.gap_fields("g7", T + 2 * H)["pred_horizon_s"] == 10800
     assert fc.gap_fields("g7", T + 30 * H)["pred_horizon_s"] == 86400   # past the last horizon: the last one
     assert fc.gap_fields("nope", T) == {}

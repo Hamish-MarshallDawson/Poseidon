@@ -26,6 +26,7 @@ from typing import Iterable, Optional
 import asyncpg
 
 from dvm.predict import artifact, features as F, forecast as FC, grader, schema
+from dvm.zones import incursion
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +78,8 @@ def route_rows(model, mmsi: int, track: F.Track, as_of: int, made_at: int, stati
                     "lat": p["lat"], "lon": p["lon"], "radius_m_80": p["radius_m_80"], "radius_m_95": p["radius_m_95"],
                     "base_lat": p["base_lat"], "base_lon": p["base_lon"], "gap_id": gap_id,
                     "feature_version": model.feature_version, "mode": mode})
-    return out
+    # zone incursion of each 80% circle (#157): MPAs, and EEZs other than the one at the last fix
+    return incursion.for_route_rows(out, fix["lat"], fix["lon"])
 
 
 PRIMARY_H = 21600   # dark_6h, the frontend's primary target: its row carries the feature snapshot
