@@ -12,6 +12,7 @@ import { isFull, OPACITY, ringOffsets, sortKey, zTier, FAN_RADIUS, type Rank } f
 import { openShipWindow, setFocus } from '../actions'
 import { Colour, createShipLayer, InstanceBuffer, N_COLOURS, writeMotion, type ShipLayerHooks } from './layer'
 import { buildAtlas, hullKey, LETTER_PX, TIERS, TYPES, type HullType, type Sprite } from './sprites'
+import { CourseLine } from './course'
 import { clock, ShipState } from './state'
 
 // Owns everything ship-shaped on the map: per-ship motion state (typed arrays), the slot pass (caps, priority,
@@ -74,6 +75,7 @@ export class ShipController {
   private colourCache = { list: new Float32Array(N_COLOURS * 4), key: new Float32Array(3), dim: 0.45 }
   private unsubs: (() => void)[] = []
   private tmp = new Float64Array(2)
+  private course = new CourseLine(this.state)
   private instHead = new Int32Array(0)               // slot → first instance (linked through instNext), -1 = none
   private instNext = new Int32Array(0)
   private pending = new Set<number>()
@@ -151,6 +153,7 @@ export class ShipController {
     map.addLayer({ id: L.fan, type: 'line', source: S.fan, paint: { 'line-color': ink, 'line-width': 1, 'line-opacity': 0.5 } })
     this.gpu = createShipLayer(L.ships, this.atlas, this.buf, { rebuild: (b) => this.rebuild(b), patch: (b) => this.patch(b), colours: () => this.colourCache })
     map.addLayer(this.gpu.layer)
+    this.course.attach(map)
     this.applyLayerVisibility(ui.get().layers)
     if (first) {
       map.on('moveend', this.onMoveEnd)
@@ -169,6 +172,7 @@ export class ShipController {
       map.off('moveend', this.onMoveEnd); map.off('movestart', this.onMoveStart); map.off('click', this.onClick)
       map.off('mousemove', this.onMouseMove); map.off('mouseout', this.onMouseOut)
     }
+    this.course.detach()
     this.map = null
     for (const u of this.unsubs) u()
     this.unsubs = []

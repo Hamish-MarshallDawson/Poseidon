@@ -29,8 +29,8 @@ void main() {
   vec2 c = C[gl_VertexID];
   float span = a_vt.w - a_vt.z;
   float e = span > 0. ? clamp((u_now - a_vt.z) / span, 0., 1.) : 1.;
-  float dt = clamp(u_now - a_vt.w, 0., ${EXTRAP_S}.);
-  vec2 pos = mix(a_p.xy, a_p.zw, e) + a_vt.xy * dt + vec2(u_wrap, 0.);
+  float dt = clamp(u_now - a_vt.z, 0., ${EXTRAP_S}.);                       // dead reckoning from the fix
+  vec2 pos = a_p.zw + a_vt.xy * dt + (a_p.xy - a_p.zw) * (1. - e * e * (3. - 2. * e)) + vec2(u_wrap, 0.);
   vec4 clip = u_m * vec4(pos, 0., 1.);
   float h = radians(a_hs.x + a_hs.y * e * e * (3. - 2. * e)) * a_op.w;
   vec2 o = c * a_hs.zw;                                    // y down = stern for a bow-up sprite

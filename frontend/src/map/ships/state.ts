@@ -2,12 +2,15 @@ import type { VesselView } from '../../types'
 import { headingOf, mercX, mercY, unitsPerMetre } from '../geo'
 
 // Per-ship motion state in typed arrays indexed by a dense slot, updated O(changed) from vessels.subscribe.
-// Between fixes a ship glides from where it was drawn to the new fix over GLIDE_S, then dead-reckons along its
-// course for at most EXTRAP_S and stops. The shader evaluates the same formula per frame; posAt() is the CPU copy
-// (used to start the next glide from the drawn position, for hit-testing and for the slot pass).
+// A moving ship dead-reckons along its course from the fix for at most EXTRAP_S (min of 10 min and the backend's
+// 30 min stale threshold). The drawn position at arrival of a fix is blended onto that new path: an offset
+// (p0 - p1) decays with smoothstep over GLIDE_S. The shader evaluates the same formula per frame; posAt() is the CPU
+// copy (used to start the next blend from the drawn position, for hit-testing and for the slot pass).
+// Slot fields: (x0,y0) drawn position at arrival, (x1,y1) the fix, t0 arrival time, t1 = t0 + blend length.
 
-export const GLIDE_S = 1
-export const EXTRAP_S = 3
+export const GLIDE_S = 3
+export const EXTRAP_S = 600
+const MIN_KN = 0.5
 const JUMP = 0.001           // ~40 km in mercator units: farther than that is a jump, not a glide
 const KN = 0.514444
 
@@ -52,10 +55,10 @@ export class ShipState {
   }
 
   posAt(s: number, now: number, out: Float64Array | number[]): void {
-    const e = this.ease(s, now)
-    const dt = Math.min(EXTRAP_S, Math.max(0, now - this.t1[s]))
-    out[0] = this.x0[s] + (this.x1[s] - this.x0[s]) * e + this.vx[s] * dt
-    out[1] = this.y0[s] + (this.y1[s] - this.y0[s]) * e + this.vy[s] * dt
+    const e = this.ease(s, now), k = 1 - e * e * (3 - 2 * e)
+    const dt = Math.min(EXTRAP_S, Math.max(0, now - this.t0[s]))
+    out[0] = this.x1[s] + (this.x0[s] - this.x1[s]) * k + this.vx[s] * dt
+    out[1] = this.y1[s] + (this.y0[s] - this.y1[s]) * k + this.vy[s] * dt
   }
 
   headingAt(s: number, now: number): number {
@@ -64,7 +67,7 @@ export class ShipState {
   }
 
   // When the drawn motion of a slot ends (for the repaint loop).
-  animEnd(s: number): number { return this.vx[s] || this.vy[s] ? this.t1[s] + EXTRAP_S : this.t1[s] }
+  animEnd(s: number): number { return this.vx[s] || this.vy[s] ? this.t0[s] + EXTRAP_S : this.t1[s] }
 
   private tmp = new Float64Array(2)
 
@@ -73,10 +76,10 @@ export class ShipState {
     let s = this.slotOf.get(v.mmsi)
     const x = mercX(v.lon), y = mercY(v.lat)
     const hdg = headingOf(v.heading_deg, v.cog_deg)
-    const moving = v.status === 'active' && v.sog_kn != null && v.sog_kn >= 0.3 && v.cog_deg != null && v.cog_deg < 360
+    const moving = v.status === 'active' && v.sog_kn != null && v.sog_kn >= MIN_KN && v.cog_deg != null && v.cog_deg < 360
     const upm = unitsPerMetre(v.lat)
-    const vx = moving ? (v.sog_kn! * KN * Math.sin((v.cog_deg! * Math.PI) / 180)) * upm : 0
-    const vy = moving ? -(v.sog_kn! * KN * Math.cos((v.cog_deg! * Math.PI) / 180)) * upm : 0
+    const vx = Math.fround(this.reducedMotion || !moving ? 0 : (v.sog_kn! * KN * Math.sin((v.cog_deg! * Math.PI) / 180)) * upm)
+    const vy = Math.fround(this.reducedMotion || !moving ? 0 : -(v.sog_kn! * KN * Math.cos((v.cog_deg! * Math.PI) / 180)) * upm)
     if (s === undefined) {
       s = this.free.pop() ?? this.n++
       if (s >= this.cap) this.alloc(this.cap * 2)
@@ -96,6 +99,12 @@ export class ShipState {
       this.h0[s] = ((h % 360) + 360) % 360
       this.dh[s] = hdg == null ? 0 : ((hdg - this.h0[s] + 540) % 360) - 180
       if (this.reducedMotion || jump) { this.h0[s] = hdg ?? this.h0[s]; this.dh[s] = 0 }
+    } else if (vx !== this.vx[s] || vy !== this.vy[s]) {
+      // same fix position but new speed or course: continue from where the ship is drawn
+      const p = this.tmp
+      this.posAt(s, now, p)
+      this.x0[s] = this.x1[s] = p[0]; this.y0[s] = this.y1[s] = p[1]
+      this.t0[s] = this.t1[s] = now
     } else if (hdg != null && !this.vx[s] && !this.vy[s] && now >= this.t1[s]) {
       // heading-only change at a standstill: turn on the spot
       const h = ((this.headingAt(s, now) % 360) + 360) % 360
@@ -106,7 +115,7 @@ export class ShipState {
         this.h0[s] = this.reducedMotion ? hdg : h; this.dh[s] = this.reducedMotion ? 0 : d
       }
     }
-    this.vx[s] = this.reducedMotion ? 0 : vx; this.vy[s] = this.reducedMotion ? 0 : vy
+    this.vx[s] = vx; this.vy[s] = vy
     this.hasHeading[s] = hdg == null ? 0 : 1
     this.view[s] = v
     return s
