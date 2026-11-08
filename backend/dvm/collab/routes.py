@@ -8,13 +8,14 @@ import hashlib
 import secrets
 import time
 import uuid
-from typing import Literal
+from typing import Annotated, Literal
 
 import jwt
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from dvm import auth
+from dvm.briefing import gemini
 from dvm.collab.invites import norm_email
 from dvm.collab.live import hub
 from dvm.sources.routes import MMSI_MAX, MMSI_MIN
@@ -49,6 +50,8 @@ class ListSet(BaseModel):
 class NewDocument(BaseModel):
     mmsi: int | None = Field(None, ge=MMSI_MIN, le=MMSI_MAX)   # null: a note on the whole session
     body: str = Field(min_length=1, max_length=4000)
+    kind: Literal["note", "briefing"] = "note"                  # "summary" is only made by POST .../summary
+    mmsis: list[Annotated[int, Field(ge=MMSI_MIN, le=MMSI_MAX)]] = Field(default_factory=list, max_length=10)
 
 
 def _store():
@@ -239,9 +242,35 @@ def make_router() -> APIRouter:
         text = body.body.strip()
         if not text:
             raise HTTPException(422, "body is empty")
+        if body.kind == "briefing" and not body.mmsis:
+            raise HTTPException(422, "a briefing names the ships it covers")
         store = _store()
-        doc = await store.add_document(sid, user["id"], body.mmsi, text)
-        await store.add_activity(sid, user["id"], "noted", body.mmsi)
+        doc = await store.add_document(sid, user["id"], body.mmsi, text, body.kind, body.mmsis)
+        await store.add_activity(sid, user["id"], "briefing_saved" if body.kind == "briefing" else "noted", body.mmsi)
+        hub.broadcast(sid, {"type": "document", "session_id": sid, "document": doc})
+        await store.touch(sid, user["id"])
+        return {"document": doc}
+
+    @r.post("/sessions/{session_id}/summary", status_code=201)
+    async def summarise(session_id: uuid.UUID, user: dict = Depends(current_user)) -> dict:
+        """End-of-session summary of the channel, the saved briefings and the tracked ships, stored as a document."""
+        sid, _ = await _member(session_id, user)
+        store = _store()
+        detail = await store.session_detail(sid)
+        names = {m["id"]: m["name"] or "A member" for m in detail["members"]}
+        docs = [{"id": d["id"], "kind": d["kind"], "author": names.get(d["author_id"], "A member"), "ship": d["mmsi"],
+                 "ships": d["mmsis"], "at": d["created_at"], "text": d["body"]}
+                for d in detail["documents"] if d["kind"] != "summary"]
+        facts = {"session": detail["title"], "members": list(names.values()), "documents": docs,
+                 "tracked_ships": [{"mmsi": e["mmsi"], "status": e["status"],
+                                    "added_by": names.get(e["added_by"], "A member")} for e in detail["list"]]}
+        try:
+            text = await gemini.summarise_session(facts)
+        except gemini.BriefingError as e:
+            raise HTTPException(e.status, str(e))
+        ships = [e["mmsi"] for e in detail["list"]][:10]
+        doc = await store.add_document(sid, user["id"], None, text[:4000], "summary", ships)
+        await store.add_activity(sid, user["id"], "summarised")
         hub.broadcast(sid, {"type": "document", "session_id": sid, "document": doc})
         await store.touch(sid, user["id"])
         return {"document": doc}

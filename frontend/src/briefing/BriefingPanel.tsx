@@ -1,5 +1,6 @@
 import { briefing, closeBriefing, playVoice, runBriefing } from './store'
 import { Button } from '../ui'
+import { SaveToSession } from '../collab/docs/SaveToSession'
 import { openShipWindow } from '../windows/open'
 import { fmtMmsi, utcTime } from '../windows/format'
 import './briefing.css'
@@ -39,6 +40,7 @@ export function BriefingPanel() {
           <p className="br-overview">{r.summary.overview}</p>
 
           <div className="br-voice">
+            {!r.mock && <SaveToSession briefing={r} />}
             <Button onClick={playVoice} disabled={!r.voice_available && !r.mock} aria-pressed={s.voice === 'playing'}>
               {s.voice === 'loading' ? 'Preparing voiceover…' : s.voice === 'playing' ? 'Stop voiceover' : 'Play voiceover'}
             </Button>
