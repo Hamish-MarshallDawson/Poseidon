@@ -5,6 +5,7 @@ The database test runs only against a LOCAL TimescaleDB (never Tiger):
   docker run -d --name be-predict-tsdb -p 55525:5432 -e POSTGRES_PASSWORD=local timescale/timescaledb:latest-pg17
   SOURCES_TEST_DATABASE_URL=postgresql://postgres:local@127.0.0.1:55525/postgres pytest tests/test_predict.py
 """
+import time
 import asyncio
 import json
 import math
@@ -327,3 +328,44 @@ async def _db_flow(tmp_path):
 @needs_db
 def test_predict_grade_serve_on_local_db(tmp_path):
     asyncio.run(_db_flow(tmp_path))
+
+
+async def _loop_stays_free(tmp_path, monkeypatch):
+    con = await asyncpg.connect(URL)
+    try:
+        await _reset(con)
+        await _positions(con, [r for r in fixes(A, T - 2 * H, T, 55.0, 11.0, 90.0)])
+    finally:
+        await con.close()
+    real = P.route_rows
+
+    def slow_route_rows(*a, **k):   # stand-in for a heavy LightGBM champion: CPU-bound, holds the thread
+        time.sleep(0.4)
+        return real(*a, **k)
+    monkeypatch.setattr(P, "route_rows", slow_route_rows)
+    p = P.Predictor(URL, tmp_path, sample_n=50, clock=lambda: T, rng=random.Random(0))
+    await p.connect()
+    ticks = 0
+
+    async def ticker():   # the backend's 1 s ship tick, sped up
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.02)
+            ticks += 1
+    task = asyncio.create_task(ticker())
+    try:
+        t0 = time.monotonic()
+        await p.cycle()
+        took = time.monotonic() - t0
+    finally:
+        task.cancel()
+        await p.close()
+    return ticks, took
+
+
+@needs_db
+def test_predict_compute_does_not_block_the_event_loop(tmp_path, monkeypatch):
+    """The 1 s ship tick and the WebSocket must keep running while a cycle computes features and predictions."""
+    ticks, took = asyncio.run(_loop_stays_free(tmp_path, monkeypatch))
+    assert took >= 0.4
+    assert ticks >= 0.4 / 0.02 * 0.5, f"the event loop was blocked: {ticks} ticks in {took:.2f} s"
