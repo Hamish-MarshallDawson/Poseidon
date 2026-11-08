@@ -7,7 +7,8 @@ import { readToken } from '../../theme/tokens'
 import { themeStore } from '../../theme/theme'
 import { rgba } from '../colour'
 import { computeSlots, deadCells, bandOf, type Chip, type View } from '../density'
-import { computeRelations, focusGeometry, openGap, sameRelations } from '../focus'
+import { findNearby, focusGeometry, openGap } from '../focus'
+import { getTrack } from '../../data/track'
 import { headingOf, lonOf, latOf, mercX, mercY, sizeTier, type SizeTier } from '../geo'
 import { isFull, OPACITY, ringOffsets, sortKey, zTier, FAN_RADIUS, type Rank } from '../stacking'
 import { openShipWindow, setFocus } from '../actions'
@@ -40,7 +41,7 @@ const PAD = 0.15                        // fraction of the viewport added on eac
 const L = {
   cells: 'dvm-cells', cellLabels: 'dvm-cell-labels', dead: 'dvm-dead', deadEdge: 'dvm-dead-edge',
   ghost: 'dvm-focus-ghost', ghostEdge: 'dvm-focus-ghost-edge', inferred: 'dvm-focus-inferred',
-  leader: 'dvm-focus-leader', cross: 'dvm-focus-cross', chips: 'dvm-chips', fan: 'dvm-fan', ships: 'dvm-ships',
+  nTrack: 'dvm-nearby-track', cpaLink: 'dvm-nearby-link', cpa: 'dvm-nearby-cpa', cpaLabel: 'dvm-nearby-label', cross: 'dvm-focus-cross', chips: 'dvm-chips', fan: 'dvm-fan', ships: 'dvm-ships',
 }
 const S = { cells: 'dvm-cells', dead: 'dvm-dead', focus: 'dvm-focus', chips: 'dvm-chips', fan: 'dvm-fan' }
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
@@ -79,6 +80,8 @@ export class ShipController {
   private lastFocusPass = 0
   private passTimer: number | undefined
   private focusTimer: number | undefined
+  private nearbyFor: number | null = null          // the ship the running or finished nearby search belongs to
+  private nearbyFeatures: GeoJSON.Feature[] = []   // its tracks, closest-approach markers and labels
   private fadeTimer: number | undefined
   private colourCache = { list: new Float32Array(N_COLOURS * 4), key: new Float32Array(3), dim: 0.45 }
   private unsubs: (() => void)[] = []
@@ -148,7 +151,16 @@ export class ShipController {
     map.addLayer({ id: L.ghostEdge, type: 'line', source: S.focus, filter: kind('ghost'), paint: { 'line-color': readToken('ship-ghost-edge') || '#f26aa0', 'line-width': 1, 'line-dasharray': [4, 3], 'line-opacity': 0.5 } })
     this.track.attach(map)
     map.addLayer({ id: L.inferred, type: 'line', source: S.focus, filter: kind('inferred'), paint: { 'line-color': readToken('accent-default') || '#86c9e8', 'line-width': 1.5, 'line-dasharray': [3, 3] } })
-    map.addLayer({ id: L.leader, type: 'line', source: S.focus, filter: kind('leader'), paint: { 'line-color': ink, 'line-width': 1, 'line-opacity': 0.18 } })
+    // Nearby ships: the others' 6 h tracks (thin, muted: the accent is the focal ship's own track), a link and a marker at
+    // each closest approach, and a "13:40Z · 1.2 km" label that is dropped where it would collide.
+    map.addLayer({ id: L.nTrack, type: 'line', source: S.focus, filter: kind('ntrack'), layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': readToken('text-muted') || ink, 'line-width': 1, 'line-opacity': 0.55 } })
+    map.addLayer({ id: L.cpaLink, type: 'line', source: S.focus, filter: kind('cpa-link'), paint: { 'line-color': ink, 'line-width': 1, 'line-opacity': 0.6 } })
+    map.addLayer({ id: L.cpa, type: 'circle', source: S.focus, filter: kind('cpa'), paint: { 'circle-radius': 3, 'circle-color': readToken('bg-app') || '#000', 'circle-stroke-color': ink, 'circle-stroke-width': 1.5 } })
+    map.addLayer({
+      id: L.cpaLabel, type: 'symbol', source: S.focus, filter: kind('cpa-label'),
+      layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-anchor': 'left', 'text-offset': [0.8, 0], 'text-allow-overlap': false },
+      paint: { 'text-color': ink, 'text-halo-color': readToken('bg-app') || '#000', 'text-halo-width': 1.5 },
+    })
     map.addLayer({ id: L.cross, type: 'symbol', source: S.focus, filter: kind('cross'), layout: { 'icon-image': 'dvm-cross', 'icon-allow-overlap': true, 'icon-ignore-placement': true } })
     map.addLayer({
       id: L.chips, type: 'symbol', source: S.chips,
@@ -671,21 +683,37 @@ export class ShipController {
     this.lastFocusPass = performance.now()
     const s = ui.get()
     const f = s.focusMmsi != null ? vessels.vessels.get(s.focusMmsi) : undefined
-    const map = this.map
-    if (!f || !map) { if (s.focusRelated.length) ui.set({ focusRelated: [] }); return }
-    const b = map.getBounds()
-    const rel = computeRelations({
-      focus: f, vessels: vessels.vessels.values(), gaps: vessels.gaps.values(), trails: vessels.trails,
-      inView: (lon, lat) => b.contains([lon, lat]),
-    })
-    if (!sameRelations(rel, s.focusRelated)) ui.set({ focusRelated: rel })
-    const relViews = rel.map((r) => vessels.vessels.get(r.mmsi)).filter((v): v is VesselView => !!v)
+    if (!f || !this.map) { this.nearbyFor = null; if (s.focusRelated.length || s.focusLoading) ui.set({ focusRelated: [], focusLoading: false }); return }
+    if (this.nearbyFor !== f.mmsi) this.startNearby(f)
+    this.drawFocus(f)
+  }
+
+  /** Nearby ships search for a newly focused ship: once per focus, not every pass. */
+  private startNearby(f: VesselView): void {
+    const mmsi = f.mmsi
+    this.nearbyFor = mmsi
+    this.nearbyFeatures = []
+    ui.set({ focusRelated: [], focusLoading: true })
+    findNearby(f, vessels.vessels.values(), vessels.now_ts || Date.now(), getTrack, () => this.nearbyFor !== mmsi)
+      .then((res) => {
+        if (!res || this.nearbyFor !== mmsi) return
+        this.nearbyFeatures = res.features
+        ui.set({ focusRelated: res.relations, focusLoading: false })
+        this.drawFocus(vessels.vessels.get(mmsi))
+      })
+      .catch(() => { if (this.nearbyFor === mmsi) ui.set({ focusLoading: false }) })
+  }
+
+  private drawFocus(f: VesselView | undefined): void {
+    if (!f) return
     const gap = f.status === 'gap_open' ? openGap(vessels.gaps.values(), f.mmsi) : undefined
-    const geo = focusGeometry(f, relViews, gap, vessels.now_ts || Date.now())
-    ;(map.getSource(S.focus) as GeoJSONSource | undefined)?.setData(geo)
+    const geo = focusGeometry(gap, vessels.now_ts || Date.now())
+    geo.features.push(...this.nearbyFeatures)
+    ;(this.map?.getSource(S.focus) as GeoJSONSource | undefined)?.setData(geo)
   }
 
   private clearFocusGeometry(): void {
+    this.nearbyFor = null; this.nearbyFeatures = []
     ;(this.map?.getSource(S.focus) as GeoJSONSource | undefined)?.setData(EMPTY)
   }
 
