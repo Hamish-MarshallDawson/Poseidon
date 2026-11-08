@@ -10,7 +10,7 @@ Track input follows the contract in docs/handoffs/ml-architecture.md: columns `m
 cog_deg, heading_deg, nav_status, cls, src`, sorted by ts. A Track holds one ship.
 
 Also here, because the backend must compute them without importing `ml/`: the route baseline (dead reckoning on the
-sphere from the last course and speed; "stay put" for anchored, moored or stopped ships) and the local east/north
+sphere at the last course and speed held constant, a rhumb line; "stay put" for anchored, moored or stopped ships) and the local east/north
 offsets that route models predict on top of that baseline.
 
 Change FEATURE_VERSION whenever a feature's meaning or FEATURE_NAMES changes: artifacts record the version they were
@@ -68,6 +68,18 @@ def destination(lat: float, lon: float, bearing: float, dist_m: float) -> tuple[
     p2 = math.asin(max(-1.0, min(1.0, math.sin(p1) * math.cos(d) + math.cos(p1) * math.sin(d) * math.cos(b))))
     l2 = l1 + math.atan2(math.sin(b) * math.sin(d) * math.cos(p1), math.cos(d) - math.sin(p1) * math.sin(p2))
     return math.degrees(p2), (math.degrees(l2) + 540) % 360 - 180
+
+
+def rhumb_destination(lat: float, lon: float, course: float, dist_m: float) -> tuple[float, float]:
+    """The point dist_m from (lat, lon) holding a constant course (a rhumb line): what "keep the last COG" means."""
+    d, th = dist_m / EARTH_R_M, math.radians(course)
+    p1 = math.radians(lat)
+    dp = d * math.cos(th)
+    p2 = max(-math.pi / 2 + 1e-9, min(math.pi / 2 - 1e-9, p1 + dp))
+    dpsi = math.log(math.tan(math.pi / 4 + p2 / 2) / math.tan(math.pi / 4 + p1 / 2))
+    q = dp / dpsi if abs(dpsi) > 1e-12 else math.cos(p1)
+    lon2 = math.radians(lon) + d * math.sin(th) / q
+    return math.degrees(p2), (math.degrees(lon2) + 540) % 360 - 180
 
 
 def enu_offset(lat0: float, lon0: float, lat: float, lon: float) -> tuple[float, float]:
@@ -163,12 +175,12 @@ def is_stopped(fix: Mapping) -> bool:
 
 
 def baseline_point(fix: Mapping, horizon_s: float) -> tuple[float, float]:
-    """Where the route baseline puts the ship horizon_s after `fix`: dead reckoning along the great circle from the
-    last course and speed, or the fix itself for an anchored, moored, stopped or course-less ship."""
+    """Where the route baseline puts the ship horizon_s after `fix`: dead reckoning at the last course and speed held
+    constant (a rhumb line on the sphere), or the fix itself for an anchored, moored, stopped or course-less ship."""
     if is_stopped(fix):
         return fix["lat"], fix["lon"]
     course = _course(fix.get("cog_deg"), fix.get("heading_deg"))
-    return destination(fix["lat"], fix["lon"], course, fix["sog_kn"] * KN_MS * horizon_s)
+    return rhumb_destination(fix["lat"], fix["lon"], course, fix["sog_kn"] * KN_MS * horizon_s)
 
 
 # ---------------------------------------------------------------- features

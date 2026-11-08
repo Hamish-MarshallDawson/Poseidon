@@ -26,6 +26,12 @@ def test_destination_and_offsets_round_trip():
     lat2, lon2 = F.apply_offset(55.0, 11.0, e, n)
     assert F.haversine_m(lat, lon, lat2, lon2) < 0.01
     assert F.destination(0, 179.99, 90, 5000)[1] < -179   # crosses the antimeridian
+    # Rhumb line: constant course. Due east keeps the latitude; the distance is the distance asked for.
+    rl = F.rhumb_destination(55.0, 11.0, 90.0, 100_000)
+    assert rl[0] == pytest.approx(55.0, abs=1e-9) and rl[1] == pytest.approx(11 + 100 / (111.195 * math.cos(math.radians(55))), rel=1e-4)
+    rl = F.rhumb_destination(55.0, 11.0, 30.0, 50_000)
+    assert F.haversine_m(55.0, 11.0, *rl) == pytest.approx(50_000, rel=1e-3)
+    assert F.rhumb_destination(0, 179.99, 90, 5000)[1] < -179
 
 
 def test_baseline_dead_reckons_and_stays_put_when_stopped():
