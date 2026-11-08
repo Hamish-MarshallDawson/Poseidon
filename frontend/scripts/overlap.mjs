@@ -20,7 +20,7 @@ mkdirSync(outDir, { recursive: true })
 function collect() {
   // Exclusions: the map, tooltips, leader lines, the replay edge frame, full-screen layers.
   const SKIP = '.dvm-map, canvas, .maplibregl-marker, .leader, .tl-edge, .dvm-chip-tip, .tl-tip, .dvm-stack, .sw-layer, .dvm-overlay'
-  const POPOVER = '.dvm-theme-menu__panel, .tl-pop'   // absolute children that are separate UI (menus)
+  const POPOVER = '.tl-pop'   // absolute children that are separate UI (menus)
   const MLCTRL = '.maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-top-left, .maplibregl-ctrl-top-right'
   const vw = innerWidth, vh = innerHeight
   const cands = []
@@ -101,8 +101,8 @@ const STATES = [
   ['01-base', async () => {}],
   ['02-ranked', (p) => p.evaluate(() => window.__dev.ui.set({ watchlistOpen: true }))],
   ['03-review', (p) => p.evaluate(() => window.__dev.ui.set({ reviewOpen: true }))],
-  ['04-layers', (p) => p.evaluate(() => window.__dev.ui.set({ layersOpen: true }))],
-  ['05-display', (p) => p.click('.dvm-menu-toggle')],
+  ['04-display', (p) => p.evaluate(() => window.__dev.ui.set({ layersOpen: true }))],
+  ['05-display-settings', async (p) => { await p.evaluate(() => window.__dev.ui.set({ layersOpen: true })); await p.waitForSelector('#layers-panel'); await p.evaluate(() => { const el = document.querySelector('#layers-panel'); el.scrollTop = el.scrollHeight }) }],
   ['06-legend', (p) => p.evaluate(() => window.__dev.ui.set({ legendOpen: true }))],
   ['07-two-windows', (p) => two(p, 0.5, 0.5, 0.55, 0.45)],
   ['08-focus', async (p) => { const a = await open(p, 0.5, 0.5); await p.evaluate((m) => window.__dev.ui.set({ focusMmsi: m }), a) }],
@@ -112,14 +112,15 @@ const STATES = [
     await p.waitForSelector('.br-body', { timeout: 8000 })
   }],
   ['10-replay-two-windows', async (p) => { await p.evaluate(() => window.__dev.replay()); await two(p, 0.5, 0.5, 0.55, 0.45) }],
-  ['11-layers-show-yachts', async (p) => {
+  ['11-display-show-yachts', async (p) => {
     await p.evaluate(() => {
       const d = window.__dev, byMmsi = new Map(), list = []
       for (const m of [...d.vessels.vessels.keys()].slice(0, 6)) { const y = { imo: m, name: `Yacht ${m}`, length_m: 60, owner_reported: null, owner_source_url: null, sanctioned: m % 2 === 0, programs: [], sanctions_source: null, mmsi: m, last_seen_ts: Date.now(), status: 'ais' }; list.push(y); byMmsi.set(m, y) }
       d.yachts.set({ list, byMmsi }); d.ui.set({ layersOpen: true }); d.setShow('yachts')
     })
   }],
-  ['12-layers-show-dark', (p) => p.evaluate(() => { window.__dev.ui.set({ layersOpen: true }); window.__dev.setShow('dark') })],
+  ['12-display-show-dark', (p) => p.evaluate(() => { window.__dev.ui.set({ layersOpen: true }); window.__dev.setShow('dark') })],
+  ['13-display-popular-places', (p) => p.evaluate(() => window.__dev.ui.set({ layersOpen: true, heat: 'popular' }))],
 ]
 
 const browser = await chromium.launch({ channel: 'msedge', headless: false })
