@@ -39,6 +39,6 @@ con.execute(f"SELECT * FROM {tracks_sql(thin=True)} WHERE mmsi = 219000001 ORDER
 2. Placeholder positions dropped (|lat| > 90, |lon| > 180, lat or lon exactly 0), and fixes outside a box round the
    Danish coverage (lat 50 to 62, lon -2 to 22).
 3. AIS "not available" values to NULL: sog >= 102.3, cog >= 360, heading >= 360, nav status 15.
-4. Same mmsi and same second de-duplicated (copies from several receivers; about 56% of rows in Nov 2026).
+4. Same mmsi and same second de-duplicated (copies from several receivers; 35 to 56% of rows, 23 Oct to 5 Nov 2026).
 5. Speed gate at 40 kn with 200 m slack: first isolated spikes (both legs too fast), then any remaining jump from the
    previous kept fix.

@@ -295,6 +295,10 @@ def convert_csv(csv_path: Path, day: str, out: Path, threads: int = 6, memory: s
     n_thin = con.execute(f"SELECT count(*) FROM read_parquet({_q(str(thin))})").fetchone()[0]
     con.close()
     shutil.rmtree(tmp, ignore_errors=True)
+    try:
+        tmp.parent.rmdir()  # out/tmp, once no other conversion is using it
+    except OSError:
+        pass
 
     stats = {
         "day": day,
