@@ -1,0 +1,13 @@
+# ML training and evaluation (ml/). Python 3.12. Install: python3 -m venv ml/.venv && ml/.venv/bin/pip install -r ml/requirements.txt
+lightgbm==4.7.0
+duckdb==1.5.6
+pyarrow==25.0.1
+numpy==2.2.6
+pandas==2.3.3
+scikit-learn==1.7.2
+httpx==0.28.1
+python-dotenv==1.2.4
+asyncpg==0.32.0
+jsonschema==4.26.0
+pytest==9.2.0
+pydantic==2.14.3   # ml/godark replays backend/dvm/gaps.py, which imports dvm.models
