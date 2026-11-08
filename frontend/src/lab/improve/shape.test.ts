@@ -124,3 +124,22 @@ describe('recalLog', () => {
     expect(g.kept).toBe(true)
   })
 })
+
+describe('on the shared fixtures', async () => {
+  const fx = (await import('../fixtures.json')).default as unknown as {
+    summary: { models: ModelSummaryLike[] }; runs: RunLike[]; events: EventLike[]; metrics: Parameters<typeof liveSkill>[1]; proposals: Parameters<typeof markers>[3]
+  }
+  it('every model has a current champion step and markers sorted in time', () => {
+    for (const m of fx.summary.models) {
+      const s = championSteps(m, fx.runs, fx.events)
+      expect(s[s.length - 1].version).toBe(m.champion.version)
+      const mk = markers(m, fx.runs, fx.events, fx.proposals)
+      expect(mk.map((x) => x.t)).toEqual([...mk.map((x) => x.t)].sort((a, b) => a - b))
+    }
+  })
+  it('route has a live series at 3 h and the recalibration is kept', () => {
+    const route = fx.summary.models.find((m) => m.target === 'route')!
+    expect(liveSkill(route, fx.metrics).live.length).toBeGreaterThan(0)
+    expect(recalLog(fx.events).find((r) => r.target === 'route')?.kept).toBe(true)
+  })
+})

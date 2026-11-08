@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Chart, useChart } from '../charts/Chart'
-import { extent, pad, timeFull } from '../charts/scale'
+import { Band, Chart, Legend, Line, Markers, RefLine, Step as StepLine, extent, pad, timeFull, useChart, type Shape, type Tone } from '../charts'
+import type { LabEvent, Metrics, Proposal, Run, Summary } from '../types'
 import {
   BASELINE, MARKER_LABEL, championSteps, hoursLabel, liveSkill, markers, modelKey, pct, recalLog,
   type EventLike, type LivePoint, type Marker, type MarkerKind, type MetricsLike, type ModelSummaryLike, type ProposalLike, type RecalEntry, type RunLike, type Step,
@@ -12,11 +12,11 @@ import './improve.css'
 // recalibration, deployment and Gemini proposal. Below: the recalibration log.
 
 export interface ImproveProps {
-  summary: { generated_at: number; models: ModelSummaryLike[] }
-  runs: RunLike[]
-  events: EventLike[]
-  metrics: MetricsLike | null
-  proposals?: ProposalLike[]
+  summary: Summary
+  runs: Run[]
+  events: LabEvent[]
+  metrics: Metrics | null
+  proposals?: Proposal[]
 }
 
 const SHORT: Record<string, string> = { route: 'Route', godark: 'Go-dark', fishing: 'Fishing' }
@@ -61,6 +61,8 @@ function ModelHistory({ model, runs, events, metrics, proposals, now }: { model:
   const yDomain = pad(extent(ys, [0, 1]), 0.12) as [number, number]
   const hasValues = steps.some((s) => s.value != null) || live.live.length > 0 || live.backtest.length > 0
   const lastLive = live.live[live.live.length - 1]
+  const stepPts = steps.map((st) => ({ x: st.t, y: st.value, s: st }))
+  const band = steps.map((st) => ({ x: st.t, lo: st.lo, hi: st.hi }))
   const livePrimary = model.live?.primary
   const liveNow = livePrimary?.value ?? lastLive?.value
 
@@ -77,15 +79,22 @@ function ModelHistory({ model, runs, events, metrics, proposals, now }: { model:
             : key === 'fishing' || !model.live ? 'Not graded on our live feed yet.' : 'No live grades at this horizon yet.'}
       </p>
       {hasValues || marks.length ? (
-        <Chart label={`${SHORT[key]} champion skill over ${vs} at ${h}, offline and live, with model events`} x={{ type: 'time', domain: xDomain }} y={{ domain: yDomain, percent: true, label: `skill over ${vs}` }} height={240} margin={{ top: 26 }}>
-          <ZeroLine />
-          <ChampionSteps steps={steps} end={xDomain[1]} vs={vs} h={h} />
-          <SkillLine points={live.backtest} cls="backtest" name={`backtest replay, ${live.name}`} />
-          <SkillLine points={live.live} cls="live" name={`live, ${live.name}`} />
-          <EventMarks marks={marks} />
+        <Chart label={`${SHORT[key]} champion skill over ${vs} at ${h}, offline and live, with model events`} x={{ type: 'time', domain: xDomain }} y={{ domain: yDomain, percent: true, label: `skill over ${vs}` }} height={240} margin={{ top: 18 }}>
+          <RefLine y={0} label={`no better than ${vs}`} />
+          <Band data={band} step until={xDomain[1]} tone="ink" />
+          <StepLine data={stepPts} until={xDomain[1]} tone="ink" label="champion skill on the held-out set" tip={(d) => stepTip(d.s, vs, h)} />
+          <Line data={live.backtest.map(xy)} tone="muted" dashed dots label="backtest replay" tip={(d) => pointTip(d, `backtest replay, ${live.name}`)} />
+          <Line data={live.live.map(xy)} tone="accent" dots label="live on our feed" tip={(d) => pointTip(d, `live, ${live.name}`)} />
+          <EventRail marks={marks} />
         </Chart>
       ) : <p className="lab-improve__muted">Nothing recorded for this model yet.</p>}
-      <Legend hasStep={steps.some((s) => s.value != null)} hasBand={steps.some((s) => s.lo != null)} hasLive={live.live.length > 0} hasBacktest={live.backtest.length > 0} kinds={[...new Set(marks.map((m) => m.kind))]} />
+      <Legend items={[
+        ...(stepPts.some((p) => p.y != null) ? [{ label: 'champion, held-out set', tone: 'ink' as const }] : []),
+        ...(band.some((b) => b.lo != null) ? [{ label: '95% interval', tone: 'ink' as const, kind: 'band' as const }] : []),
+        ...(live.live.length ? [{ label: 'live, our feed', tone: 'accent' as const }] : []),
+        ...(live.backtest.length ? [{ label: 'backtest replay', tone: 'muted' as const, kind: 'dashed' as const }] : []),
+        ...[...new Set(marks.map((m) => m.kind))].map((k) => ({ label: MARKER_LABEL[k].toLowerCase(), tone: KIND[k].tone, kind: KIND[k].shape })),
+      ]} />
       {liveNow != null && model.offline.skill != null && liveNow < model.offline.skill && (
         <p className="lab-improve__note">Live skill is below the offline result: our feed is not the held-out set, so we show both.</p>
       )}
@@ -93,103 +102,40 @@ function ModelHistory({ model, runs, events, metrics, proposals, now }: { model:
   )
 }
 
-const ZeroLine = () => {
-  const { X, Y, xNum } = useChart()
-  if (!xNum) return null
-  const [a, b] = xNum.domain
-  return <line className="lab-improve__zero" x1={X(a)} x2={X(b)} y1={Y(0)} y2={Y(0)} />
+const xy = (p: LivePoint) => ({ x: p.t, y: p.value, p })
+const pointTip = (d: { p: LivePoint }, name: string) => <><b>{pct(d.p.value)}</b> {name}<br />{timeFull(d.p.t)} · {d.p.n.toLocaleString('en-GB')} graded</>
+const stepTip = (s: Step, vs: string, h: string) => (
+  <><b>{s.version}</b><br />{s.how === 'current' ? 'current champion' : s.how} {timeFull(s.t)}<br />skill {pct(s.value)} over {vs} at {h}{s.lo != null && s.hi != null ? ` (${pct(s.lo)} to ${pct(s.hi)})` : ''}</>
+)
+
+const KIND: Record<MarkerKind, { shape: Shape; tone: Tone }> = {
+  promoted: { shape: 'triangle', tone: 'good' },
+  rejected: { shape: 'cross', tone: 'bad' },
+  recalibrated: { shape: 'diamond', tone: 'muted' },
+  deployed: { shape: 'square', tone: 'ink' },
+  proposal: { shape: 'circle', tone: 'warn' },
 }
 
-function ChampionSteps({ steps, end, vs, h }: { steps: Step[]; end: number; vs: string; h: string }) {
-  const { X, Y, tip } = useChart()
-  return (
-    <g className="lab-improve__steps">
-      {steps.map((s, i) => {
-        if (s.value == null) return null
-        const x1 = X(s.t)
-        const x2 = X(steps[i + 1]?.t ?? end)
-        const next = steps[i + 1]
-        const show = () => tip({
-          x: (x1 + x2) / 2, y: Y(s.hi ?? s.value!) - 8,
-          content: <><b>{s.version}</b><br />{s.how === 'recalibrated' ? 'recalibrated' : s.how === 'current' ? 'current champion' : s.how} {timeFull(s.t)}<br />skill {pct(s.value)} over {vs} at {h}{s.lo != null && s.hi != null ? ` (${pct(s.lo)} to ${pct(s.hi)})` : ''}</>,
-        })
-        return (
-          <g key={`${s.version}-${s.t}`} tabIndex={0} onPointerEnter={show} onFocus={show} onBlur={() => tip(null)}>
-            {s.lo != null && s.hi != null && <rect className="lab-improve__band" x={x1} width={Math.max(1, x2 - x1)} y={Y(s.hi)} height={Math.max(1, Y(s.lo) - Y(s.hi))} />}
-            <line className="lab-improve__step" x1={x1} x2={x2} y1={Y(s.value)} y2={Y(s.value)} />
-            {next?.value != null && <line className="lab-improve__step" x1={x2} x2={x2} y1={Y(s.value)} y2={Y(next.value)} />}
-            <rect className="lab-improve__hit" x={x1} width={Math.max(6, x2 - x1)} y={Y(s.value) - 6} height={12} />
-          </g>
-        )
-      })}
-    </g>
-  )
-}
-
-function SkillLine({ points, cls, name }: { points: LivePoint[]; cls: string; name: string }) {
-  const { X, Y, tip } = useChart()
-  if (!points.length) return null
-  const d = points.map((p, i) => `${i ? 'L' : 'M'}${X(p.t).toFixed(1)},${Y(p.value).toFixed(1)}`).join('')
-  return (
-    <g className={`lab-improve__line lab-improve__line--${cls}`}>
-      <path d={d} />
-      {points.map((p) => {
-        const show = () => tip({ x: X(p.t), y: Y(p.value) - 8, content: <><b>{pct(p.value)}</b> {name}<br />{timeFull(p.t)} · {p.n.toLocaleString('en-GB')} graded</> })
-        return <circle key={p.t} cx={X(p.t)} cy={Y(p.value)} r={points.length > 40 ? 1.5 : 2.5} tabIndex={0} onPointerEnter={show} onFocus={show} onBlur={() => tip(null)} />
-      })}
-    </g>
-  )
-}
-
-const GLYPH: Record<MarkerKind, string> = {
-  promoted: 'M0,-5L5,4L-5,4Z',                      // up triangle
-  rejected: 'M-4,-4L4,4M4,-4L-4,4',                  // cross
-  recalibrated: 'M0,-5L5,0L0,5L-5,0Z',               // diamond
-  deployed: 'M-4,-4H4V4H-4Z',                         // square
-  proposal: 'M0,-5L1.5,-1.5L5,-1.5L2.2,1L3.2,5L0,2.6L-3.2,5L-2.2,1L-5,-1.5L-1.5,-1.5Z', // star
-}
-
-function EventMarks({ marks }: { marks: Marker[] }) {
-  const { X, box, tip } = useChart()
-  // markers sit in a strip above the plot; ones closer than 9 px stack downward so none hides another
-  const placed: { m: Marker; x: number; row: number }[] = []
+/** Markers on the event rail. Markers closer than 10 px merge into one whose tooltip lists them all, so none hides another. */
+function EventRail({ marks }: { marks: Marker[] }) {
+  const { X } = useChart()
+  const groups: { x: number; ms: Marker[] }[] = []
   for (const m of marks) {
-    const x = X(m.t)
-    let row = 0
-    while (placed.some((p) => p.row === row && Math.abs(p.x - x) < 9)) row++
-    placed.push({ m, x, row })
+    const g = groups[groups.length - 1]
+    if (g && X(m.t) - X(g.ms[g.ms.length - 1].t) < 10) g.ms.push(m)
+    else groups.push({ x: m.t, ms: [m] })
   }
-  return (
-    <g className="lab-improve__marks">
-      {placed.map(({ m, x, row }, i) => {
-        const y = box.top - 14 + row * 11
-        const show = () => tip({
-          x, y: y + 10,
-          content: <><b>{m.title}</b><br />{timeFull(m.t)}{m.target !== modelKey(m.target) ? ` · ${m.target}` : ''}{m.changed && <><br />Changed: {m.changed}</>}{m.why && <><br />Why: {m.why}</>}</>,
-        })
-        return (
-          <g key={i} transform={`translate(${x} ${y})`} className={`lab-improve__mark lab-improve__mark--${m.kind}`} tabIndex={0} role="img" aria-label={`${m.title}, ${timeFull(m.t)}`} onPointerEnter={show} onFocus={show} onBlur={() => tip(null)}>
-            <line className="lab-improve__tick" y1={4} y2={box.bottom - y} />
-            <circle className="lab-improve__hit" r={7} />
-            <path d={GLYPH[m.kind]} />
-          </g>
-        )
-      })}
-    </g>
-  )
+  const data = groups.map((g) => ({ x: g.x, ms: g.ms, shape: KIND[g.ms[0].kind].shape, tone: KIND[g.ms[0].kind].tone, size: g.ms.length > 1 ? 5 : 4 }))
+  return <Markers data={data} label="model event" tip={(d) => d.ms.map((m, i) => <MarkTip key={i} m={m} first={i === 0} />)} />
 }
 
-function Legend({ hasStep, hasBand, hasLive, hasBacktest, kinds }: { hasStep: boolean; hasBand: boolean; hasLive: boolean; hasBacktest: boolean; kinds: MarkerKind[] }) {
+function MarkTip({ m, first }: { m: Marker; first: boolean }) {
   return (
-    <ul className="lab-improve__legend" aria-label="Legend">
-      {hasStep && <li><svg width="18" height="10" aria-hidden><line className="lab-improve__step" x1="0" x2="18" y1="5" y2="5" /></svg>champion, held-out set</li>}
-      {hasBand && <li><svg width="18" height="10" aria-hidden><rect className="lab-improve__band" width="18" height="10" /></svg>95% interval</li>}
-      {hasLive && <li className="lab-improve__line--live"><svg width="18" height="10" aria-hidden><path d="M0,5H18" /></svg>live, our feed</li>}
-      {hasBacktest && <li className="lab-improve__line--backtest"><svg width="18" height="10" aria-hidden><path d="M0,5H18" /></svg>backtest replay</li>}
-      {kinds.map((k) => (
-        <li key={k} className={`lab-improve__mark--${k}`}><svg width="12" height="12" viewBox="-6 -6 12 12" aria-hidden><path d={GLYPH[k]} /></svg>{MARKER_LABEL[k].toLowerCase()}</li>
-      ))}
-    </ul>
+    <div className={first ? undefined : 'lab-improve__tip-more'}>
+      <b>{m.title}</b><br />{timeFull(m.t)}{m.target !== modelKey(m.target) ? ` · ${m.target}` : ''}
+      {m.changed && <><br />Changed: {m.changed}</>}
+      {m.why && <><br />Why: {m.why}</>}
+    </div>
   )
 }
 

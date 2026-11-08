@@ -5,7 +5,7 @@
 export type ModelKey = 'route' | 'godark' | 'fishing'
 
 export interface SkillAt { n?: number | null; skill: number | null; skill_lo?: number | null; skill_hi?: number | null }
-export interface Decision { promote?: boolean; against?: string | null; reasons?: string[] | null; horizons?: Record<string, { win?: boolean | null }> | null }
+export interface Decision { promote?: boolean | null; against?: string | null; reasons?: string[] | null; horizons?: Record<string, { win?: boolean | null }> | null }
 export interface RunLike {
   run_id: string
   target: string

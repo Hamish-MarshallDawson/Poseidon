@@ -1,12 +1,5 @@
 /* "How it improved" (lab-improve). Tokens only; marks are told apart by shape as well as colour. */
 .lab-improve {
-  --imp-step: var(--dvm-text-primary);
-  --imp-live: var(--dvm-ship-selected);
-  --imp-promoted: var(--dvm-accent-default);
-  --imp-rejected: var(--dvm-risk-3);
-  --imp-recal: var(--dvm-text-secondary);
-  --imp-deployed: var(--dvm-ship-normal);
-  --imp-proposal: var(--dvm-heat-4);
   color: var(--dvm-text-primary);
   font: 400 var(--dvm-size-body) / var(--dvm-line-body) var(--dvm-font-ui);
 }
@@ -29,42 +22,16 @@
 .lab-improve__lede { max-width: 72ch; }
 .lab-improve__lede b { font-family: var(--dvm-font-data); font-size: var(--dvm-size-data); }
 
-/* chart marks */
-.lab-improve__zero { stroke: var(--dvm-text-muted); stroke-dasharray: 2 3; }
-.lab-improve__step { stroke: var(--imp-step); stroke-width: 2; fill: none; }
-.lab-improve__band { fill: var(--imp-step); opacity: 0.14; }
-.lab-improve__hit { fill: transparent; }
-.lab-improve__steps g:focus-visible { outline: none; }
-.lab-improve__steps g:focus-visible .lab-improve__step { stroke-width: 3; }
-.lab-improve__line path { fill: none; stroke: var(--imp-live); stroke-width: 1.5; }
-.lab-improve__line circle { fill: var(--imp-live); }
-.lab-improve__line--backtest path { stroke: var(--imp-recal); stroke-dasharray: 4 3; }
-.lab-improve__line--backtest circle { fill: var(--imp-recal); }
-.lab-improve__mark { cursor: default; outline: none; }
-.lab-improve__mark path { fill: var(--imp-c); stroke: var(--imp-c); stroke-width: 1; }
-.lab-improve__mark--rejected path { fill: none; stroke-width: 2; }
-.lab-improve__tick { stroke: var(--imp-c); opacity: 0.35; stroke-dasharray: 1 3; }
-.lab-improve__mark:hover .lab-improve__tick, .lab-improve__mark:focus-visible .lab-improve__tick { opacity: 0.9; }
-.lab-improve__mark:focus-visible path { stroke: var(--dvm-accent-default); stroke-width: 2; }
-.lab-improve__mark--promoted { --imp-c: var(--imp-promoted); }
-.lab-improve__mark--rejected { --imp-c: var(--imp-rejected); }
-.lab-improve__mark--recalibrated { --imp-c: var(--imp-recal); }
-.lab-improve__mark--deployed { --imp-c: var(--imp-deployed); }
-.lab-improve__mark--proposal { --imp-c: var(--imp-proposal); }
-
-.lab-improve__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 0; padding: 0; list-style: none; color: var(--dvm-text-secondary); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
-.lab-improve__legend li { display: inline-flex; align-items: center; gap: 5px; }
-.lab-improve__legend li path { fill: var(--imp-c, none); stroke: var(--imp-c, var(--imp-live)); stroke-width: 1.5; }
-.lab-improve__legend .lab-improve__line--backtest path { stroke: var(--imp-recal); }
-.lab-improve__legend .lab-improve__mark--rejected path { fill: none; stroke-width: 2; }
+/* chart: marks come from lab/charts; extra entries in a merged marker's tooltip get a rule above */
+.lab-improve__tip-more { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--dvm-border-subtle); }
 
 /* recalibration log */
 .lab-improve__recal ol { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .lab-improve__recal > ol > li { padding: 8px 10px; border: 1px solid var(--dvm-border-default); border-radius: var(--dvm-radius-panel); background: var(--dvm-bg-panel); }
 .lab-improve__recal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .lab-improve__recal-head b { font: 600 var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); overflow-wrap: anywhere; }
-.lab-improve__chip { padding: 0 6px; border: 1px solid var(--imp-promoted); font: 500 var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); text-transform: uppercase; letter-spacing: 0.6px; }
-.lab-improve__chip[data-kept='no'] { border-color: var(--imp-rejected); }
+.lab-improve__chip { padding: 0 6px; border: 1px solid var(--lab-good); font: 500 var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); text-transform: uppercase; letter-spacing: 0.6px; }
+.lab-improve__chip[data-kept='no'] { border-color: var(--dvm-risk-3); }
 .lab-improve__factors { margin: 4px 0; padding: 0; list-style: none; font: 400 var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); }
 .lab-improve__factors li { display: grid; grid-template-columns: minmax(120px, 1fr) 90px 2fr; gap: 8px; padding: 1px 0; }
 .lab-improve__factors li[data-kept='no'] { color: var(--dvm-text-muted); }
