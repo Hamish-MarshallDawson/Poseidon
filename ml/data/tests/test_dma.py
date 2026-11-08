@@ -86,3 +86,22 @@ def test_thinned_and_identity_and_stats(out: Path):
     assert (r["dedup_same_second"], r["speed_gate_spikes"], r["clean"], r["thin_1m"]) == (9, 8, 7, 6)
     m = dma.write_manifest(out)
     assert m["days"] == ["2026-11-05"] and m["rows"] == 7 and m["ships"] == 2 and len(m["dataset_hash"]) == 64
+
+
+def test_moved_folder_reads_and_verifies(out: Path, tmp_path: Path):
+    dma.write_manifest(out)
+    moved = tmp_path / "moved"
+    out.rename(moved)
+    assert dma.verify(moved) == []
+    n = duckdb.connect().execute(f"SELECT count(*) FROM {dma.tracks_sql(moved, thin=True)}").fetchone()[0]
+    assert n == 6
+    p = moved / "tracks_1m" / "2026-11-05.parquet"
+    p.write_bytes(p.read_bytes() + b"x")
+    assert dma.verify(moved) == [f"sha256 differs: {p}"]
+
+
+def test_select_days():
+    listing = {f"2026-11-0{i}": 1 for i in range(1, 6)}
+    assert dma.select_days(listing, 2) == ["2026-11-05", "2026-11-04"]
+    assert dma.select_days(listing, 2, until="2026-11-03") == ["2026-11-03", "2026-11-02"]
+    assert dma.select_days(listing, 9, until="2026-10-01") == []

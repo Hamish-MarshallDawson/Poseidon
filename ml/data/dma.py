@@ -6,9 +6,11 @@ Data: Danish Maritime Authority, AIS data, http://aisdata.ais.dk/ (cite "Source:
     python -m ml.data.dma --days 2            # the 2 newest
     python -m ml.data.dma --day 2026-11-05    # one named day (repeatable)
     python -m ml.data.dma --download-only     # zips only
+    python -m ml.data.dma --days 14 --until 2026-11-05   # exactly the 14 days ending 2026-11-05
     python -m ml.data.dma --manifest-only     # rebuild manifest.json from what is on disk
+    python -m ml.data.dma --verify            # re-hash the files against manifest.json
 
-Output under --out (default /home/aiden/data/poseidon/dma, or $POSEIDON_DMA_DIR):
+Output under --out (default $POSEIDON_DMA_DIR, else ~/data/poseidon/dma):
 
     raw/aisdk-YYYY-MM-DD.zip          the archive file as downloaded (size checked against the bucket listing)
     tracks/YYYY-MM-DD.parquet         cleaned positions, contract columns, sorted by mmsi, ts
@@ -50,7 +52,7 @@ import duckdb
 import httpx
 
 BUCKET = "http://aisdata.ais.dk.s3.eu-central-1.amazonaws.com"
-DEFAULT_OUT = Path(os.environ.get("POSEIDON_DMA_DIR", "/home/aiden/data/poseidon/dma"))
+DEFAULT_OUT = Path(os.environ.get("POSEIDON_DMA_DIR", "~/data/poseidon/dma")).expanduser()
 LICENCE = "Source: Danish Maritime Authority (Søfartsstyrelsen), AIS data, http://aisdata.ais.dk/"
 MAX_KN = 40.0
 # Generous box round the Danish receiver network; a fix outside it is a receiver or GPS error (138 of 10.5 M on
@@ -122,6 +124,11 @@ def list_days(client: httpx.Client | None = None) -> dict[str, int]:
         if own:
             client.close()
     return dict(sorted(out.items()))
+
+
+def select_days(listing: dict[str, int], n: int, until: str | None = None) -> list[str]:
+    """The n newest archive days on or before `until` (all days if None), newest first."""
+    return [d for d in sorted(listing, reverse=True) if until is None or d <= until][:n]
 
 
 def download(day: str, size: int, raw_dir: Path, retries: int = 3) -> Path:
@@ -255,7 +262,8 @@ def convert_csv(csv_path: Path, day: str, out: Path, threads: int = 6, memory: s
     con.execute("""
         CREATE TABLE dedup AS
         SELECT mmsi, ts, lat, lon, sog_kn, cog_deg, heading_deg, nav_status, cls FROM typed
-        QUALIFY row_number() OVER (PARTITION BY mmsi, ts ORDER BY lat, lon, sog_kn NULLS LAST) = 1""")
+        QUALIFY row_number() OVER (PARTITION BY mmsi, ts ORDER BY lat, lon, sog_kn NULLS LAST, cog_deg NULLS LAST,
+                                   heading_deg NULLS LAST, nav_status NULLS LAST, cls) = 1""")
     con.execute("DROP TABLE typed")
     n_dedup = con.execute("SELECT count(*) FROM dedup").fetchone()[0]
 
@@ -307,21 +315,30 @@ def convert_csv(csv_path: Path, day: str, out: Path, threads: int = 6, memory: s
                  "dedup_same_second": n_dedup, "speed_gate_spikes": n_spike, "clean": n_clean, "thin_1m": n_thin},
         "ships": n_ships,
         "convert_s": round(time.monotonic() - t0, 1),
-        "files": {sub: _file_info(out / sub / f"{day}.parquet") for sub in ("tracks", "tracks_1m", "identity")},
+        "files": {sub: _file_info(out, sub, day) for sub in SUBS},
     }
     (out / "stats" / f"{day}.json").write_text(json.dumps(stats, indent=2))
     return stats
 
 
-def _file_info(p: Path) -> dict:
+SUBS = ("tracks", "tracks_1m", "identity")
+
+
+def _sha256(p: Path) -> str:
     h = hashlib.sha256()
     with open(p, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 22), b""):
             h.update(chunk)
-    return {"path": str(p), "bytes": p.stat().st_size, "sha256": h.hexdigest()}
+    return h.hexdigest()
 
 
-def convert_day(day: str, out: Path, threads: int, memory: str) -> dict:
+def _file_info(out: Path, sub: str, day: str) -> dict:
+    """Paths are relative to the output folder, so a copied or moved folder still reads."""
+    p = out / sub / f"{day}.parquet"
+    return {"path": f"{sub}/{day}.parquet", "bytes": p.stat().st_size, "sha256": _sha256(p)}
+
+
+def convert_day(day: str, out: Path, threads: int, memory: str, delete_zip: bool = False) -> dict:
     """Unzip one day's CSV to a scratch file next to the output, convert it, delete the CSV."""
     zpath = out / "raw" / f"aisdk-{day}.zip"
     t0 = time.monotonic()
@@ -337,17 +354,33 @@ def convert_day(day: str, out: Path, threads: int, memory: str) -> dict:
     stats["unzip_s"] = round(unzip_s, 1)
     stats["zip_bytes"] = zpath.stat().st_size
     (out / "stats" / f"{day}.json").write_text(json.dumps(stats, indent=2))
+    if delete_zip:
+        zpath.unlink()
     r = stats["rows"]
     log(f"{day}: {r['raw']:,} raw -> {r['clean']:,} clean ({r['thin_1m']:,} at 1/min), {stats['ships']:,} ships, "
         f"unzip {unzip_s:.0f} s + convert {stats['convert_s']:.0f} s")
     return stats
 
 
+def verify(out: Path) -> list[str]:
+    """Re-hash every file the manifest lists; return the problems (empty means the folder matches)."""
+    m = json.loads((out / "manifest.json").read_text())
+    problems = []
+    for s in m["per_day"]:
+        for sub in SUBS:
+            p = out / sub / f"{s['day']}.parquet"
+            if not p.exists():
+                problems.append(f"missing {p}")
+            elif _sha256(p) != s["files"][sub]["sha256"]:
+                problems.append(f"sha256 differs: {p}")
+    return problems
+
+
 def write_manifest(out: Path) -> dict:
     days = []
     for p in sorted((out / "stats").glob("*.json")):
         s = json.loads(p.read_text())
-        if all(Path(f["path"]).exists() for f in s["files"].values()):
+        if all((out / sub / f"{s['day']}.parquet").exists() for sub in SUBS):
             days.append(s)
     h = hashlib.sha256()
     for s in days:
@@ -363,13 +396,14 @@ def write_manifest(out: Path) -> dict:
         "bytes": {sub: sum(s["files"][sub]["bytes"] for s in days) for sub in ("tracks", "tracks_1m", "identity")},
         "zip_bytes": sum(s.get("zip_bytes", 0) for s in days),
         "dataset_hash": h.hexdigest(),
+        "duckdb_version": duckdb.__version__,
         "columns": {c: t for c, t in TRACK_SCHEMA},
         "cleaning": {"max_kn": MAX_KN, "slack_m": SLACK_M, "area": AREA},
         "per_day": days,
     }
     distinct = None
     if days:
-        files = ", ".join(_q(s["files"]["identity"]["path"]) for s in days)
+        files = ", ".join(_q(str(out / "identity" / f"{s['day']}.parquet")) for s in days)
         distinct = duckdb.connect().execute(f"SELECT count(DISTINCT mmsi) FROM read_parquet([{files}])").fetchone()[0]
     manifest["ships"] = distinct or 0
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
@@ -382,7 +416,7 @@ def track_files(out: Path = DEFAULT_OUT, thin: bool = False, days: list[str] | N
     """Paths of the converted track Parquet files, oldest day first, from the manifest."""
     m = json.loads((out / "manifest.json").read_text())
     sub = "tracks_1m" if thin else "tracks"
-    return [s["files"][sub]["path"] for s in m["per_day"] if days is None or s["day"] in days]
+    return [str(out / sub / f"{s['day']}.parquet") for s in m["per_day"] if days is None or s["day"] in days]
 
 
 def tracks_sql(out: Path = DEFAULT_OUT, thin: bool = False, days: list[str] | None = None) -> str:
@@ -395,8 +429,11 @@ def tracks_sql(out: Path = DEFAULT_OUT, thin: bool = False, days: list[str] | No
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    ap.add_argument("--out", type=Path, default=DEFAULT_OUT,
+                    help="output folder (default $POSEIDON_DMA_DIR or ~/data/poseidon/dma)")
     ap.add_argument("--days", type=int, default=14, help="the N newest days in the archive (default 14)")
+    ap.add_argument("--until", help="newest day to take, YYYY-MM-DD (default: the newest in the archive); "
+                                    "with --days, fixes the exact set of days")
     ap.add_argument("--day", action="append", default=[], help="a named day YYYY-MM-DD (repeatable)")
     ap.add_argument("--downloads", type=int, default=3, help="parallel downloads (default 3)")
     ap.add_argument("--converts", type=int, default=2, help="parallel conversions (default 2)")
@@ -404,10 +441,20 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--memory", default="6GB", help="DuckDB memory limit per conversion")
     ap.add_argument("--download-only", action="store_true")
     ap.add_argument("--force", action="store_true", help="re-convert days that already have output")
+    ap.add_argument("--delete-zips", action="store_true", help="delete each zip once its day is converted")
     ap.add_argument("--manifest-only", action="store_true")
+    ap.add_argument("--verify", action="store_true", help="re-hash the files against manifest.json and exit")
     a = ap.parse_args(argv)
-    out: Path = a.out
+    out: Path = a.out.expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
+    if a.verify:
+        problems = verify(out)
+        for p in problems:
+            log(p)
+        m = json.loads((out / "manifest.json").read_text())
+        log(f"verify: {len(m['days'])} days, {m['rows']:,} rows, hash {m['dataset_hash'][:12]}: "
+            f"{'OK' if not problems else f'{len(problems)} problems'}")
+        return 1 if problems else 0
     if a.manifest_only:
         m = write_manifest(out)
         log(f"manifest: {len(m['days'])} days, {m['rows']:,} rows, {m['ships']:,} ships")
@@ -421,10 +468,14 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         days = sorted(a.day, reverse=True)
     else:
-        days = sorted(listing, reverse=True)[: a.days]
+        days = select_days(listing, a.days, a.until)
+        if not days:
+            log(f"no archive days on or before {a.until}")
+            return 2
     log(f"{len(days)} days: {days[-1]} .. {days[0]} ({sum(listing[d] for d in days) / 1e9:.1f} GB zipped)")
 
-    done = {d for d in days if (out / "stats" / f"{d}.json").exists() and (out / "tracks" / f"{d}.parquet").exists()}
+    done = {d for d in days if (out / "stats" / f"{d}.json").exists()
+            and all((out / sub / f"{d}.parquet").exists() for sub in SUBS)}
     todo = [d for d in days if a.force or d not in done]
     failures = []
     t0 = time.monotonic()
@@ -439,7 +490,7 @@ def main(argv: list[str] | None = None) -> int:
                 failures.append((d, f"download: {e}"))
                 continue
             if not a.download_only:
-                convs[cv.submit(convert_day, d, out, a.threads, a.memory)] = d
+                convs[cv.submit(convert_day, d, out, a.threads, a.memory, a.delete_zips)] = d
         for f in cf.as_completed(convs):
             try:
                 f.result()
