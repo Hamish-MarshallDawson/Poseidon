@@ -6,7 +6,9 @@ export interface User { id: string; name: string | null; picture: string | null 
 export interface Member { id: string; name: string | null; picture: string | null; role: 'owner' | 'member'; joined_at: number; last_active_at: number }
 export type Status = 'open' | 'reviewed' | 'no_action'
 export interface Entry { mmsi: number; status: Status; added_by: string; added_at: number; updated_by: string; updated_at: number }
-export interface Doc { id: number; mmsi: number | null; author_id: string; body: string; created_at: number }
+export type DocKind = 'note' | 'briefing' | 'summary'
+/** kind briefing: a saved Brief me result covering `mmsis`; summary: the end-of-session summary. */
+export interface Doc { id: number; mmsi: number | null; author_id: string; body: string; created_at: number; kind: DocKind; mmsis: number[] }
 export interface Session { id: string; title: string; created_by: string; created_at: number; members: Member[]; list: Entry[]; documents: Doc[] }
 export interface SessionRow { id: string; title: string; role: 'owner' | 'member'; created_at: number; last_active_at: number; members: number }
 export interface LastSession { id: string; title: string; role: 'owner' | 'member'; last_active_at: number }
@@ -59,5 +61,7 @@ export const api = {
   listAdd: (id: string, mmsi: number, status: Status = 'open') => call<{ entry: Entry }>('POST', `/sessions/${id}/list`, { mmsi, status }),
   listSet: (id: string, mmsi: number, status: Status) => call<{ entry: Entry }>('PATCH', `/sessions/${id}/list/${mmsi}`, { status }),
   listRemove: (id: string, mmsi: number) => call<void>('DELETE', `/sessions/${id}/list/${mmsi}`),
-  addDocument: (id: string, body: string, mmsi: number | null = null) => call<{ document: Doc }>('POST', `/sessions/${id}/documents`, { mmsi, body }),
+  addDocument: (id: string, body: string, mmsi: number | null = null, extra?: { kind: 'briefing'; mmsis: number[] }) =>
+    call<{ document: Doc }>('POST', `/sessions/${id}/documents`, { mmsi, body, ...extra }),
+  summarise: (id: string) => call<{ document: Doc }>('POST', `/sessions/${id}/summary`),
 }

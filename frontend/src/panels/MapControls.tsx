@@ -6,6 +6,7 @@ import { reducedMotion, usePresence } from '../motion'
 import { fmtInt } from '../windows/format'
 import { WatchlistChip } from './Watchlist'
 import { ReviewChip } from '../review/ReviewPanel'
+import { ChannelChip } from '../collab/docs/Channel'
 import { SHOW_FILTERS, showFilter } from '../show/registry'
 import { setShow, startShow } from '../show/state'
 
@@ -106,6 +107,7 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
       <div className="top-right" data-zone>
         <WatchlistChip />
         <ReviewChip />
+        <ChannelChip />
         <button type="button" className={`chip ${layersOpen ? 'on' : ''}`} aria-expanded={layersOpen} aria-controls="layers-panel"
           onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, watchlistOpen: false, reviewOpen: false }))}>
           <span className="chip-square" aria-hidden />Layers
