@@ -10,9 +10,9 @@ export interface Headline { text: string; value: number | null; unit: string | n
 export interface Status { level: Level; text: string }
 
 export const MODEL_INFO: Record<LabModel, { name: string; question: string }> = {
-  route: { name: 'Route', question: 'Where is a silent ship now?' },
-  godark: { name: 'Go-dark', question: 'Will this ship go dark?' },
-  fishing: { name: 'Fishing', question: 'Will it fish in a protected area?' },
+  route: { name: 'Route', question: 'Predicting the path of a dark vessel' },
+  godark: { name: 'Go-dark', question: 'Predicting which ships go dark' },
+  fishing: { name: 'Fishing', question: 'Predicting fishing in protected areas' },
 }
 
 /** Optional fields lab2-plain adds to each /lab/summary model. */

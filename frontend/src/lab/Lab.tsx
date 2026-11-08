@@ -46,7 +46,6 @@ export function Lab({ onClose }: { onClose: () => void }) {
               ? <><a href="#lab" className="lab-crumb">Model Lab</a> <span aria-hidden>/</span> {MODEL_INFO[route.model].name}</>
               : 'Model Lab'}
           </h1>
-          {!route.model && <p>Three models that learn from our own feed. Each new version must beat the current one on a frozen test before it goes live.</p>}
         </nav>
         <div className="lab-head__meta">
           {state.sample && <span className="lab-tag" role="status" title={state.errors.join('\n') || undefined}>{offline() ? 'Sample data' : 'Server unreachable: sample data'}</span>}
