@@ -1,0 +1,639 @@
+{
+ "source": "https://en.wikipedia.org/wiki/List_of_motor_yachts_by_length",
+ "revision": 1384044411,
+ "license": "CC BY-SA 4.0",
+ "attribution": "Wikipedia contributors, \"List of motor yachts by length\"",
+ "fetched": "2026-11-08",
+ "yachts": [
+  {
+   "imo": 9693367,
+   "name": "Azzam",
+   "length_m": 180.0,
+   "owner": "Estate of Mohammed bin Zayed Al Nahyan",
+   "url": "https://en.wikipedia.org/wiki/Azzam_(2013_yacht)"
+  },
+  {
+   "imo": 9714460,
+   "name": "Fulk Al Salamah",
+   "length_m": 164.0,
+   "owner": "Sultan Haitham bin Tariq",
+   "url": "https://en.wikipedia.org/wiki/Fulk_Al_Salamah_(2016_yacht)"
+  },
+  {
+   "imo": 1009613,
+   "name": "Eclipse",
+   "length_m": 162.5,
+   "owner": "Roman Abramovich",
+   "url": "https://en.wikipedia.org/wiki/Eclipse_(yacht)"
+  },
+  {
+   "imo": 9862231,
+   "name": "Blue",
+   "length_m": 160.0,
+   "owner": "Mansour bin Zayed Al Nahyan",
+   "url": "https://en.wikipedia.org/wiki/Blue_(yacht)"
+  },
+  {
+   "imo": 9661792,
+   "name": "Dilbar",
+   "length_m": 156.0,
+   "owner": "Alisher Usmanov",
+   "url": "https://en.wikipedia.org/wiki/Dilbar_(yacht)"
+  },
+  {
+   "imo": 9463774,
+   "name": "Al Said",
+   "length_m": 155.0,
+   "owner": "Sultan Haitham bin Tariq",
+   "url": "https://en.wikipedia.org/wiki/Al_Said_(yacht)"
+  },
+  {
+   "imo": 9551454,
+   "name": "A+",
+   "length_m": 147.0,
+   "owner": "Mansour bin Zayed Al Nahyan",
+   "url": "https://en.wikipedia.org/wiki/Topaz_(yacht)"
+  },
+  {
+   "imo": 1012933,
+   "name": "Opera",
+   "length_m": 146.4,
+   "owner": "Abdullah bin Zayed Al Nahyan",
+   "url": "https://en.wikipedia.org/wiki/Opera_(yacht)"
+  },
+  {
+   "imo": 9853785,
+   "name": "Nord",
+   "length_m": 142.0,
+   "owner": "Alexei Mordashov",
+   "url": "https://en.wikipedia.org/wiki/Nord_(yacht)"
+  },
+  {
+   "imo": 9907196,
+   "name": "Dragonfly",
+   "length_m": 142.0,
+   "owner": "Sergey Brin",
+   "url": "https://en.wikipedia.org/wiki/Dragonfly_(yacht)"
+  },
+  {
+   "imo": 8652201,
+   "name": "Yas",
+   "length_m": 141.0,
+   "owner": "Hamdan bin Zayed bin Sultan Al Nahyan",
+   "url": "https://en.wikipedia.org/wiki/Yas_(yacht)"
+  },
+  {
+   "imo": 9809980,
+   "name": "Scheherazade",
+   "length_m": 140.0,
+   "owner": "Eduard Khudaynatov",
+   "url": "https://en.wikipedia.org/wiki/Scheherazade_(yacht)"
+  },
+  {
+   "imo": 1007043,
+   "name": "Al Salamah",
+   "length_m": 139.0,
+   "owner": "Salman bin Hamad Al Khalifa",
+   "url": "https://en.wikipedia.org/wiki/Al_Salamah"
+  },
+  {
+   "imo": 9819820,
+   "name": "Solaris",
+   "length_m": 139.0,
+   "owner": "Roman Abramovich",
+   "url": "https://en.wikipedia.org/wiki/Solaris_(yacht)"
+  },
+  {
+   "imo": 9865087,
+   "name": "Luminance",
+   "length_m": 138.8,
+   "owner": "Rinat Akhmetov",
+   "url": "https://en.wikipedia.org/wiki/Luminance_(yacht)"
+  },
+  {
+   "imo": 8982307,
+   "name": "Rising Sun",
+   "length_m": 138.0,
+   "owner": "David Geffen",
+   "url": "https://en.wikipedia.org/wiki/Rising_Sun_(yacht)"
+  },
+  {
+   "imo": 5314810,
+   "name": "Savarona",
+   "length_m": 136.0,
+   "owner": "Republic of Turkey",
+   "url": "https://en.wikipedia.org/wiki/MV_Savarona"
+  },
+  {
+   "imo": 9785108,
+   "name": "Crescent",
+   "length_m": 135.5,
+   "owner": "Igor Sechin",
+   "url": "https://en.wikipedia.org/wiki/Crescent_(yacht)"
+  },
+  {
+   "imo": 1010090,
+   "name": "Serene",
+   "length_m": 134.0,
+   "owner": "Mohammed bin Salman Al Saud",
+   "url": "https://en.wikipedia.org/wiki/Serene_(yacht)"
+  },
+  {
+   "imo": 1009223,
+   "name": "Al Mirqab",
+   "length_m": 133.0,
+   "owner": "Hamad bin Jassim bin Jaber Al Thani",
+   "url": "https://en.wikipedia.org/wiki/Al_Mirqab_(yacht)"
+  },
+  {
+   "imo": 1007213,
+   "name": "Octopus",
+   "length_m": 126.0,
+   "owner": "Roger Samuelsson",
+   "url": "https://en.wikipedia.org/wiki/Octopus_(yacht)"
+  },
+  {
+   "imo": 9857298,
+   "name": "Koru",
+   "length_m": 125.8,
+   "owner": "Jeff Bezos",
+   "url": "https://en.wikipedia.org/wiki/Koru_(yacht)"
+  },
+  {
+   "imo": 9044619,
+   "name": "Maryah",
+   "length_m": 125.0,
+   "owner": "Tahnoun bin Zayed Al Nahyan",
+   "url": "https://en.wikipedia.org/wiki/Maryah_(yacht)"
+  },
+  {
+   "imo": 9772929,
+   "name": "Al Lusail",
+   "length_m": 123.0,
+   "owner": "Tamim bin Hamad Al Thani",
+   "url": "https://en.wikipedia.org/wiki/Al_Lusail_(yacht)"
+  },
+  {
+   "imo": 6603012,
+   "name": "Alexander",
+   "length_m": 122.0,
+   "owner": "Saudi royal family",
+   "url": "https://en.wikipedia.org/wiki/Alexander_(yacht)"
+  },
+  {
+   "imo": 1009340,
+   "name": "A",
+   "length_m": 119.0,
+   "owner": "Andrey Melnichenko",
+   "url": "https://en.wikipedia.org/wiki/A_(motor_yacht)"
+  },
+  {
+   "imo": 9817896,
+   "name": "Infinity",
+   "length_m": 117.0,
+   "owner": "Eric Smidt",
+   "url": "https://en.wikipedia.org/wiki/Infinity_(2022_yacht)"
+  },
+  {
+   "imo": 9855276,
+   "name": "Lady Jorgia",
+   "length_m": 115.1,
+   "owner": "Patrick Dovigi",
+   "url": "https://en.wikipedia.org/wiki/Lady_Jorgia"
+  },
+  {
+   "imo": 8977273,
+   "name": "Pelorus",
+   "length_m": 115.0,
+   "owner": "Samuel Tak Lee",
+   "url": "https://en.wikipedia.org/wiki/Pelorus_(yacht)"
+  },
+  {
+   "imo": 1010222,
+   "name": "Luna",
+   "length_m": 115.0,
+   "owner": "Farkhad Akhmedov",
+   "url": "https://en.wikipedia.org/wiki/Luna_(yacht)"
+  },
+  {
+   "imo": 1006829,
+   "name": "Le Grand Bleu",
+   "length_m": 113.0,
+   "owner": "Eugene Shvidler",
+   "url": "https://en.wikipedia.org/wiki/Le_Grand_Bleu_(yacht)"
+  },
+  {
+   "imo": 1013016,
+   "name": "Alaiya",
+   "length_m": 111.5,
+   "owner": "Lakshmi Mittal",
+   "url": "https://en.wikipedia.org/wiki/Alaiya_(yacht)"
+  },
+  {
+   "imo": 9921491,
+   "name": "Leviathan",
+   "length_m": 111.0,
+   "owner": "Gabe Newell",
+   "url": "https://en.wikipedia.org/wiki/Leviathan_(yacht)"
+  },
+  {
+   "imo": 9526758,
+   "name": "Al Raya",
+   "length_m": 110.0,
+   "owner": "Bahraini royal family",
+   "url": "https://en.wikipedia.org/wiki/Al_Raya_(yacht)"
+  },
+  {
+   "imo": 9571105,
+   "name": "Radiant",
+   "length_m": 110.0,
+   "owner": "Abdulla Al Futtaim",
+   "url": "https://en.wikipedia.org/wiki/Radiant_(yacht)"
+  },
+  {
+   "imo": 1012921,
+   "name": "Bravo Eugenia",
+   "length_m": 109.0,
+   "owner": "Jerry Jones",
+   "url": "https://en.wikipedia.org/wiki/Bravo_Eugenia_(yacht)"
+  },
+  {
+   "imo": 9692545,
+   "name": "Andromeda",
+   "length_m": 107.0,
+   "owner": "Yuri Milner",
+   "url": "https://en.wikipedia.org/wiki/Andromeda_(107m_yacht)"
+  },
+  {
+   "imo": 1012531,
+   "name": "Amadea",
+   "length_m": 106.0,
+   "owner": "Abbas Sajwani",
+   "url": "https://en.wikipedia.org/wiki/Amadea_(yacht)"
+  },
+  {
+   "imo": 1002380,
+   "name": "Lady Moura",
+   "length_m": 105.0,
+   "owner": "Ricardo Salinas Pliego",
+   "url": "https://en.wikipedia.org/wiki/Lady_Moura"
+  },
+  {
+   "imo": 7908433,
+   "name": "Loaloat Al Behar",
+   "length_m": 103.8,
+   "owner": "Sultan Qaboos",
+   "url": "https://en.wikipedia.org/wiki/Loaloat_Al_Behar"
+  },
+  {
+   "imo": 1012098,
+   "name": "Symphony",
+   "length_m": 101.5,
+   "owner": "Bernard Arnault",
+   "url": "https://en.wikipedia.org/wiki/Symphony_(yacht)"
+  },
+  {
+   "imo": 9657545,
+   "name": "I Dynasty",
+   "length_m": 100.8,
+   "owner": "Alijan Ibragimov",
+   "url": "https://en.wikipedia.org/wiki/I_Dynasty"
+  },
+  {
+   "imo": 8963818,
+   "name": "Christina O",
+   "length_m": 99.2,
+   "owner": "Ivor Fitzpatrick",
+   "url": "https://en.wikipedia.org/wiki/Christina_O"
+  },
+  {
+   "imo": 1011331,
+   "name": "Madame Gu",
+   "length_m": 99.0,
+   "owner": "Andrei Skoch",
+   "url": "https://en.wikipedia.org/wiki/Madame_Gu"
+  },
+  {
+   "imo": 8994001,
+   "name": "Carinthia VII",
+   "length_m": 98.0,
+   "owner": "Rubén Cherñajovsky",
+   "url": "https://en.wikipedia.org/wiki/Carinthia_VII"
+  },
+  {
+   "imo": 1012957,
+   "name": "Aviva",
+   "length_m": 98.0,
+   "owner": "Joe Lewis",
+   "url": "https://en.wikipedia.org/wiki/Aviva_(98m_yacht)"
+  },
+  {
+   "imo": 1012828,
+   "name": "Sophia",
+   "length_m": 96.6,
+   "owner": "Michael Latifi",
+   "url": "https://en.wikipedia.org/wiki/Sophia_(yacht)"
+  },
+  {
+   "imo": 1010387,
+   "name": "Vava II",
+   "length_m": 96.0,
+   "owner": "Ernesto Bertarelli",
+   "url": "https://en.wikipedia.org/wiki/Vava_II"
+  },
+  {
+   "imo": 1012000,
+   "name": "Whisper",
+   "length_m": 95.2,
+   "owner": "Eric Schmidt",
+   "url": "https://en.wikipedia.org/wiki/Whisper_(yacht)"
+  },
+  {
+   "imo": 1006245,
+   "name": "H3",
+   "length_m": 95.0,
+   "owner": "Waleed bin Ibrahim Al Ibrahim",
+   "url": "https://en.wikipedia.org/wiki/H3_(yacht)"
+  },
+  {
+   "imo": 1012268,
+   "name": "Royal Romance",
+   "length_m": 92.5,
+   "owner": "Viktor Medvedchuk",
+   "url": "https://en.wikipedia.org/wiki/Royal_Romance_(yacht)"
+  },
+  {
+   "imo": 1006336,
+   "name": "Tatoosh",
+   "length_m": 92.4,
+   "owner": "Estate of Paul Allen",
+   "url": "https://en.wikipedia.org/wiki/Tatoosh_(yacht)"
+  },
+  {
+   "imo": 1012866,
+   "name": "Aquarius",
+   "length_m": 92.0,
+   "owner": "Steve Wynn",
+   "url": "https://en.wikipedia.org/wiki/Aquarius_(yacht)"
+  },
+  {
+   "imo": 1012086,
+   "name": "Draak",
+   "length_m": 91.5,
+   "owner": "Gabe Newell",
+   "url": "https://en.wikipedia.org/wiki/Tranquility_(yacht)"
+  },
+  {
+   "imo": 9332406,
+   "name": "Ice",
+   "length_m": 91.1,
+   "owner": "Teodoro Obiang Nguema Mbasogo",
+   "url": "https://en.wikipedia.org/wiki/Ice_(yacht)"
+  },
+  {
+   "imo": 1012311,
+   "name": "Lady Lara",
+   "length_m": 91.0,
+   "owner": "Alexander Mashkevitch",
+   "url": "https://en.wikipedia.org/wiki/Lady_Lara_(yacht)"
+  },
+  {
+   "imo": 1013066,
+   "name": "Dar",
+   "length_m": 90.1,
+   "owner": "Ziyad Manasir",
+   "url": "https://en.wikipedia.org/wiki/Dar_(yacht)"
+  },
+  {
+   "imo": 1008449,
+   "name": "Nero",
+   "length_m": 90.1,
+   "owner": "Neil Taylor",
+   "url": "https://en.wikipedia.org/wiki/Nero_(yacht)"
+  },
+  {
+   "imo": 1012414,
+   "name": "Here Comes The Sun",
+   "length_m": 89.0,
+   "owner": "Graeme Hart",
+   "url": "https://en.wikipedia.org/wiki/Here_Comes_The_Sun_(yacht)"
+  },
+  {
+   "imo": 1012177,
+   "name": "Samsara",
+   "length_m": 88.5,
+   "owner": "J.K. Rowling",
+   "url": "https://en.wikipedia.org/wiki/Samsara_(yacht)"
+  },
+  {
+   "imo": 1010753,
+   "name": "Fountainhead",
+   "length_m": 87.8,
+   "owner": "Eddie Lampert",
+   "url": "https://en.wikipedia.org/wiki/Fountainhead_(yacht)"
+  },
+  {
+   "imo": 1010131,
+   "name": "Musashi",
+   "length_m": 87.8,
+   "owner": "Larry Ellison",
+   "url": "https://en.wikipedia.org/wiki/Musashi_(yacht)"
+  },
+  {
+   "imo": 1011537,
+   "name": "Eye",
+   "length_m": 87.0,
+   "owner": "Samvel Karapetyan",
+   "url": "https://en.wikipedia.org/wiki/Eye_(yacht)"
+  },
+  {
+   "imo": 1002213,
+   "name": "Kingdom 5KR",
+   "length_m": 86.0,
+   "owner": "Al-Waleed bin Talal Al Saud",
+   "url": "https://en.wikipedia.org/wiki/Kingdom_5KR_(yacht)"
+  },
+  {
+   "imo": 1008102,
+   "name": "Ecstasea",
+   "length_m": 86.0,
+   "owner": "Alshair Fiyaz",
+   "url": "https://en.wikipedia.org/wiki/Ecstasea"
+  },
+  {
+   "imo": 1009833,
+   "name": "HBC",
+   "length_m": 85.6,
+   "owner": null,
+   "url": "https://en.wikipedia.org/wiki/HBC_(yacht)"
+  },
+  {
+   "imo": 1010002,
+   "name": "Vibrant Curiosity",
+   "length_m": 85.5,
+   "owner": "Reinhold Wuerth",
+   "url": "https://en.wikipedia.org/wiki/Vibrant_Curiosity"
+  },
+  {
+   "imo": 1010351,
+   "name": "Sunrays",
+   "length_m": 85.5,
+   "owner": "Ravi Ruia",
+   "url": "https://en.wikipedia.org/wiki/Sunrays_(yacht)"
+  },
+  {
+   "imo": 9288215,
+   "name": "Moonlight II",
+   "length_m": 85.3,
+   "owner": "Sultan bin Khalifa Al Nahyan",
+   "url": "https://en.wikipedia.org/wiki/Alysia"
+  },
+  {
+   "imo": 1012517,
+   "name": "Savannah",
+   "length_m": 83.5,
+   "owner": "Lukas H. Lundin",
+   "url": "https://en.wikipedia.org/wiki/Savannah_(yacht)"
+  },
+  {
+   "imo": 1004625,
+   "name": "Talitha",
+   "length_m": 82.6,
+   "owner": "Mark Getty",
+   "url": "https://en.wikipedia.org/wiki/Talitha_(yacht)"
+  },
+  {
+   "imo": 8503151,
+   "name": "Emir",
+   "length_m": 82.5,
+   "owner": null,
+   "url": "https://en.wikipedia.org/wiki/Emir_(yacht)"
+  },
+  {
+   "imo": 1009376,
+   "name": "Alfa Nero",
+   "length_m": 82.0,
+   "owner": null,
+   "url": "https://en.wikipedia.org/wiki/Alfa_Nero"
+  },
+  {
+   "imo": 1011551,
+   "name": "Kosatka",
+   "length_m": 82.0,
+   "owner": "Vladimir Putin",
+   "url": "https://en.wikipedia.org/wiki/Kosatka_(yacht)"
+  },
+  {
+   "imo": 1012309,
+   "name": "Romea",
+   "length_m": 81.8,
+   "owner": "Alexander Nesis",
+   "url": "https://en.wikipedia.org/wiki/Romea_(yacht)"
+  },
+  {
+   "imo": 1012294,
+   "name": "Grace",
+   "length_m": 81.0,
+   "owner": "John Reece",
+   "url": "https://en.wikipedia.org/wiki/Grace_(yacht)"
+  },
+  {
+   "imo": 1005899,
+   "name": "Constellation",
+   "length_m": 80.0,
+   "owner": "Hamad bin Khalifa Al Thani",
+   "url": "https://en.wikipedia.org/wiki/Constellation_(motor_yacht)"
+  },
+  {
+   "imo": 1005904,
+   "name": "Yasmine of The Sea",
+   "length_m": 80.0,
+   "owner": "Abdullah Al Thani",
+   "url": "https://en.wikipedia.org/wiki/Yasmine_of_The_Sea_(yacht)"
+  },
+  {
+   "imo": 1009118,
+   "name": "Batello",
+   "length_m": 80.0,
+   "owner": null,
+   "url": "https://en.wikipedia.org/wiki/Batello_(yacht)"
+  },
+  {
+   "imo": 1010478,
+   "name": "Titan",
+   "length_m": 80.0,
+   "owner": "Alexander Abramov",
+   "url": "https://en.wikipedia.org/wiki/Titan_(yacht)"
+  },
+  {
+   "imo": 9823144,
+   "name": "Excellence",
+   "length_m": 80.0,
+   "owner": "Herb Chambers",
+   "url": "https://en.wikipedia.org/wiki/Excellence_(yacht)"
+  },
+  {
+   "imo": 8971815,
+   "name": "SS Delphine",
+   "length_m": 78.6,
+   "owner": "Jacques Bruynooghe",
+   "url": "https://en.wikipedia.org/wiki/SS_Delphine_(1921)"
+  },
+  {
+   "imo": 1007794,
+   "name": "Pegasus VIII",
+   "length_m": 78.6,
+   "owner": "Mohammed bin Salman Al Saud",
+   "url": "https://en.wikipedia.org/wiki/Pegasus_VIII"
+  },
+  {
+   "imo": 4537661,
+   "name": "HDMY Dannebrog",
+   "length_m": 78.4,
+   "owner": "Frederik X of Denmark",
+   "url": "https://en.wikipedia.org/wiki/HDMY_Dannebrog_(A540)"
+  },
+  {
+   "imo": 1009481,
+   "name": "Eminence",
+   "length_m": 78.4,
+   "owner": "Alexander Khloponin",
+   "url": "https://en.wikipedia.org/wiki/Eminence_(yacht)"
+  },
+  {
+   "imo": 1010519,
+   "name": "Amaryllis",
+   "length_m": 78.4,
+   "owner": "Andrey Borodin",
+   "url": "https://en.wikipedia.org/wiki/Amaryllis_(yacht)"
+  },
+  {
+   "imo": 1011836,
+   "name": "Venus",
+   "length_m": 78.2,
+   "owner": "Laurene Powell Jobs",
+   "url": "https://en.wikipedia.org/wiki/Venus_(yacht)"
+  },
+  {
+   "imo": 9965605,
+   "name": "Boardwalk",
+   "length_m": 76.5,
+   "owner": "Tilman Fertitta",
+   "url": "https://en.wikipedia.org/wiki/Boardwalk_(yacht)"
+  },
+  {
+   "imo": 1009388,
+   "name": "Wheels",
+   "length_m": 75.5,
+   "owner": "Ralf Schmid",
+   "url": "https://en.wikipedia.org/wiki/Anastasia_(yacht)"
+  },
+  {
+   "imo": 9857298,
+   "name": "Abeona",
+   "length_m": 75.0,
+   "owner": "Jeff Bezos",
+   "url": "https://en.wikipedia.org/wiki/Koru_(yacht)"
+  }
+ ]
+}
