@@ -17,6 +17,7 @@ import { Review } from './review/ReviewPanel'
 import { AUTH_OFF, bindCollabAuth, devUser } from './collab/client'
 import { loadMe } from './collab/store'
 import { bindSocket } from './collab/socket'
+import { Presence } from './collab/presence/Presence'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
 const WindowsDemo = lazy(() => import('./windows/demo/WindowsDemo'))
@@ -76,6 +77,7 @@ export function Monitor({ getToken, onLogout, profile }: { getToken: () => Promi
       <WindowsRoot onLogout={onLogout} />
       <BriefingPanel />
       <Review />
+      <Presence />
       <ReplayChrome />
       <ScrubBar />
       <ThemeMenu />
