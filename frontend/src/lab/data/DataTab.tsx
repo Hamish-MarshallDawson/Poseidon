@@ -28,7 +28,7 @@ export function DataTab({ model, data }: DataTabProps) {
         <div className="ll-tile ll-tile--none">
           <div className="ll-tile__title">Graded predictions</div>
           <div className="ll-count">{c.graded == null ? '–' : `${data.truncated ? '≥ ' : ''}${count(c.graded)}`}</div>
-          <div className="ll-tile__caption">{from == null ? 'None graded yet' : `Checked against what happened, since ${fmtDay(from)}`}</div>
+          <div className="ll-tile__caption">{from == null ? 'None graded yet' : `All three models, checked against what happened, since ${fmtDay(from)}`}</div>
         </div>
         <div className="ll-tile ll-tile--none">
           <div className="ll-tile__title">Training examples</div>
