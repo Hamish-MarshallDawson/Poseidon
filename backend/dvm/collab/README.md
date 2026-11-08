@@ -31,7 +31,7 @@ Shapes used below:
 User    {id, name|null, picture|null}
 Member  {id, name, picture, role: "owner"|"member", joined_at, last_active_at}
 Entry   {mmsi, status: "open"|"reviewed"|"no_action", added_by: userId, added_at, updated_by: userId, updated_at}
-Doc     {id, mmsi|null, author_id: userId, body, created_at}
+Doc     {id, mmsi|null, author_id: userId, body, created_at, kind: "note"|"briefing"|"summary", mmsis: [mmsi]}
 Session {id, title, created_by: userId, created_at, members: [Member], list: [Entry], documents: [Doc]}
 ```
 
@@ -52,10 +52,11 @@ Session {id, title, created_by: userId, created_at, members: [Member], list: [En
 | `POST /sessions/{id}/list` | `{mmsi, status?: "open"}` | 201, `{entry: Entry}`; a ship already listed comes back unchanged |
 | `PATCH /sessions/{id}/list/{mmsi}` | `{status}` | `{entry: Entry}`; 404 if not listed |
 | `DELETE /sessions/{id}/list/{mmsi}` | | 204 |
-| `POST /sessions/{id}/documents` | `{mmsi?: number\|null, body}` (1 to 4000 chars, trimmed) | 201, `{document: Doc}` |
+| `POST /sessions/{id}/documents` | `{mmsi?: number\|null, body, kind?: "note"\|"briefing", mmsis?: [mmsi]}` (body 1 to 4000 chars, trimmed; a `briefing` needs 1 to 10 `mmsis`, the ships it covers) | 201, `{document: Doc}` |
+| `POST /sessions/{id}/summary` | | 201, `{document: Doc}` of kind `summary`: Gemini summarises the notes, saved briefings and tracked ships in neutral wording. Any member. 503 without `GEMINI_API_KEY`, 502 if Gemini fails |
 
 Activity `kind`s: `created`, `joined`, `added`, `removed`, `status_open`, `status_reviewed`, `status_no_action`,
-`noted`.
+`noted`, `briefing_saved`, `summarised`.
 
 **Wording for documents and the list (show it above the note box):** "A flag is a prompt to review, not an
 accusation." Statuses are deliberately neutral (`open`, `reviewed`, `no_action`); there is no free-text status.

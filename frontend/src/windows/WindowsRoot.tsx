@@ -4,7 +4,6 @@ import { StatusLine } from '../panels/StatusLine'
 import { MapControls } from '../panels/MapControls'
 import { Watchlist } from '../panels/Watchlist'
 import { Legend } from '../panels/Legend'
-import { FocusBar } from '../panels/FocusBar'
 import { WindowLayer } from './ShipWindow'
 import { LeaderLines } from './Leader'
 import { clampWindows, closeShipWindow, reflowWindows } from './open'
@@ -14,7 +13,7 @@ import './windows.css'
 
 // Everything the windows agent puts over the map, in one mount: <WindowsRoot onLogout={...} />.
 // Esc closes the innermost thing: the window holding keyboard focus, then the layers pop-over, the watchlist,
-// the legend, focus mode, and finally the front window.
+// the legend, and finally the front window.
 function onKey(e: KeyboardEvent) {
   if (e.key !== 'Escape' || e.defaultPrevented) return
   const s = ui.get()
@@ -24,7 +23,6 @@ function onKey(e: KeyboardEvent) {
   else if (s.watchlistOpen) ui.set({ watchlistOpen: false })
   else if (s.reviewOpen) ui.set({ reviewOpen: false })
   else if (s.legendOpen) ui.set({ legendOpen: false })
-  else if (s.focusMmsi !== null) ui.set({ focusMmsi: null, focusRelated: [], focusLoading: false })
   else if (s.frontMmsi !== null) closeShipWindow(s.frontMmsi)
   else return
   e.preventDefault()
@@ -35,7 +33,7 @@ export function WindowsRoot({ onLogout }: { onLogout?: () => void }) {
     let raf = 0
     const onResize = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(clampWindows) }
     let timer = 0
-    const zoneKey = () => { const s = ui.get(); return [s.watchlistOpen, s.reviewOpen, s.layersOpen, s.legendOpen, s.focusMmsi !== null, briefing.get().open, briefing.get().status].join() }
+    const zoneKey = () => { const s = ui.get(); return [s.watchlistOpen, s.reviewOpen, s.layersOpen, s.legendOpen, briefing.get().open, briefing.get().status].join() }
     let last = zoneKey()
     const onZone = () => {
       const k = zoneKey()
@@ -59,7 +57,6 @@ export function WindowsRoot({ onLogout }: { onLogout?: () => void }) {
     <div className="dvm-overlay">
       <LeaderLines />
       <StatusLine />
-      <FocusBar />
       <MapControls onLogout={onLogout} />
       <Watchlist />
       <Legend />

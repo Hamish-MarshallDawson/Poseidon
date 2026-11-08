@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { ui } from '../store/ui'
 import { vessels } from '../store/vessels'
-import { openShipWindow, setFocus } from './actions'
+import { openShipWindow } from './actions'
 
 // Minimal fallback for the stack list (a chip of 9+ ships): rows in z-order, anchored to the chip. Hovering a row
-// highlights that ship on the map; clicking a row focuses it and opens its window. The windows agent may replace it
+// highlights that ship on the map; clicking a row opens its window. The windows agent may replace it
 // by rendering `ui.stack` itself.
 const MAX_ROWS = 200
 
@@ -25,7 +25,7 @@ export function StackList() {
           return (
             <li key={m}>
               <button type="button" onMouseEnter={() => ui.set({ hoverMmsi: m })} onFocus={() => ui.set({ hoverMmsi: m })}
-                onClick={() => { ui.set({ stack: null }); openShipWindow(m); setFocus(m) }}>
+                onClick={() => { ui.set({ stack: null }); openShipWindow(m) }}>
                 <span className="dvm-stack__name">{v?.name ?? 'Unnamed'}</span>
                 <span className="dvm-stack__meta">{v?.type_group ?? ''} · {m}</span>
               </button>

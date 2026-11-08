@@ -5,7 +5,7 @@ import { MAX_OPEN, WINDOW_W, clampToViewport, fitHeight, findSpot, placeWindow, 
 import { requestDetail } from './detail'
 
 // The canonical way to open, close and arrange ship windows. The map (ship click), the watchlist (row click)
-// and focus mode all call these; ui.windows stays the one source of truth that the map draws brackets from.
+// all call these; ui.windows stays the one source of truth that the map draws brackets from.
 
 // Where each window grew from, so the open and close animations scale from and back to the ship.
 export const openOrigins = new Map<number, Rect>()
@@ -90,7 +90,7 @@ export function clampWindows(): void {
   }))
 }
 
-// When a zone appears (a panel, the legend, the briefing, the focus bar), windows under it move to the nearest free
+// When a zone appears (a panel, the legend, the briefing), windows under it move to the nearest free
 // spot. Later drags are the user's choice and are left alone.
 export function reflowWindows(): void {
   const z = zonesFor(innerHeight, blockedBoxes())

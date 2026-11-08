@@ -1,0 +1,32 @@
+/* Session channel. Reuses the Watchlist panel (panels.css) and the review empty state; additions only, tokens only. */
+.ch-summarise { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.ch-err { margin: 0; color: var(--dvm-text-secondary); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
+.ch-offer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 12px 8px; padding: 8px; border-left: 3px solid var(--dvm-accent-default); background: var(--dvm-accent-subtle); }
+.ch-offer span { flex: 1 1 100%; }
+.ch-pinned, .ch-feed { margin: 0; padding: 0; list-style: none; }
+.ch-pinned { flex: none; border-top: 1px solid var(--dvm-border-subtle); border-bottom: 1px solid var(--dvm-border-default); background: var(--dvm-bg-raised); max-height: 180px; overflow-y: auto; }
+.ch-feed { flex: 1 1 auto; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--dvm-border-subtle); }
+.ch-item { display: flex; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--dvm-border-subtle); }
+.ch-item.is-hit { box-shadow: inset 3px 0 0 var(--dvm-accent-default); }
+.ch-avatar { flex: none; width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+.ch-avatar-i { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--dvm-border-strong); font: 600 10px / 1 var(--dvm-font-data); color: var(--dvm-text-secondary); }
+.ch-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ch-meta { display: flex; align-items: baseline; gap: 8px; }
+.ch-meta b { font-weight: 600; }
+.ch-meta span, .ch-id { color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
+.ch-id { margin-left: auto; padding: 0; border: 0; background: none; cursor: pointer; }
+.ch-id:hover, .ch-id:focus-visible { color: var(--dvm-text-primary); text-decoration: underline; }
+.ch-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ch-doc { color: var(--dvm-text-secondary); }
+.ch-kind, .ch-about { color: var(--dvm-text-secondary); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
+.ch-kind { font-family: var(--dvm-font-data); text-transform: uppercase; letter-spacing: 0.8px; }
+.ch-ships { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.ch-ref { padding: 0; border: 0; background: none; color: var(--dvm-accent-default); font: inherit; text-decoration: underline; cursor: pointer; }
+.ch-ref:focus-visible, .ch-id:focus-visible { outline: 1px solid var(--dvm-accent-default); outline-offset: 2px; }
+.ch-compose { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 12px; border-top: 1px solid var(--dvm-border-default); }
+.ch-banner { margin: 0; color: var(--dvm-text-secondary); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
+.ch-about-pick { display: flex; align-items: center; gap: 6px; color: var(--dvm-text-secondary); }
+.ch-compose textarea { width: 100%; box-sizing: border-box; resize: none; padding: 6px 8px; border: 1px solid var(--dvm-border-default); border-radius: 2px; background: var(--dvm-bg-panel); color: var(--dvm-text-primary); font: inherit; }
+.ch-compose textarea:focus-visible { outline: 1px solid var(--dvm-accent-default); outline-offset: 1px; }
+.ch-compose-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ch-count { color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }

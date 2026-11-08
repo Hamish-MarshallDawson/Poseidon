@@ -5,7 +5,7 @@ import { bringToFront, closeShipWindow, moveShipWindow, openOrigins, setMinimise
 import { clampToViewport, dockSlot } from './place'
 import { ShipCard } from './ShipCard'
 import { useVessel } from './hooks'
-import { TYPE_LABEL, fmtMmsi } from './format'
+import { fmtMmsi } from './format'
 import { scheduleLeader, windowGeom } from './leaderBus'
 import dragHandle from './assets/drag-handle.svg'
 
@@ -88,7 +88,6 @@ const ShipWindowView = memo(function ShipWindowView({ w, slot, exiting, onExited
   })
 
   const hover = (on: boolean) => ui.set((s) => ({ hoverMmsi: on ? w.mmsi : s.hoverMmsi === w.mmsi ? null : s.hoverMmsi }))
-  const focus = () => ui.set({ focusMmsi: w.mmsi })
 
   return (
     <section
@@ -105,17 +104,13 @@ const ShipWindowView = memo(function ShipWindowView({ w, slot, exiting, onExited
       onPointerEnter={() => hover(true)}
       onPointerLeave={() => hover(false)}
     >
-      <header className="sw-bar" onPointerDown={onDragStart} onDoubleClick={slot === null ? focus : undefined}
-        title={slot === null ? 'Drag to move · double-click to focus' : undefined}>
+      <header className="sw-bar" onPointerDown={onDragStart}
+        title={slot === null ? 'Drag to move' : undefined}>
         <img className="sw-handle" src={dragHandle} width={8} height={14} alt="" />
-        <span className="badge" aria-label={`Window ${w.letter}`}>{w.letter}</span>
         {slot !== null ? (
           <button type="button" className="sw-pillname" id={titleId} onClick={() => setMinimised(w.mmsi, false)}>{name}</button>
         ) : (
-          <span className="sw-title">
-            <span className="sw-name" id={titleId}>{name}</span>
-            {v && <span className="sw-type">{TYPE_LABEL[v.type_group]}</span>}
-          </span>
+          <span className="sw-title"><span className="sw-name" id={titleId}>{name}</span></span>
         )}
         {slot !== null ? (
           <button type="button" className="sw-btn" aria-label={`Restore ${name}`} onClick={() => setMinimised(w.mmsi, false)}>▢</button>
@@ -124,7 +119,7 @@ const ShipWindowView = memo(function ShipWindowView({ w, slot, exiting, onExited
         )}
         <button type="button" className="sw-btn" aria-label={`Close ${name}`} onClick={() => closeShipWindow(w.mmsi)}>×</button>
       </header>
-      {slot === null && <ShipCard mmsi={w.mmsi} onFocus={focus} />}
+      {slot === null && <ShipCard mmsi={w.mmsi} />}
     </section>
   )
 })
