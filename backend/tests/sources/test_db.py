@@ -38,6 +38,11 @@ async def _run():
         await schema.write_observations(con, [obs(1), obs(2)])
         await schema.write_observations(con, [obs(1), obs(2)])
         assert await con.fetchval("SELECT count(*) FROM observations WHERE id LIKE 'test:%'") == 2
+        # More rows than one batch: all written, in several executemany calls.
+        many = [obs(i) for i in range(100, 100 + 2 * schema.OBS_BATCH + 7)]
+        assert await schema.write_observations(con, many) == len(many)
+        assert await con.fetchval("SELECT count(*) FROM observations WHERE id LIKE 'test:%'") == 2 + len(many)
+        await con.execute("DELETE FROM observations WHERE id LIKE 'test:%' AND ts >= $1", T0 + 100)
 
         # A revision updates the provider's numbers but keeps the first available_ts (the as-of clock).
         await schema.write_observations(con, [obs(1, end_ts=T0 + 999, available_ts=T0 + 5000, value=7.0)])

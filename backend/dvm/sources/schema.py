@@ -116,10 +116,13 @@ async def db_size_bytes(con) -> int:
     return await con.fetchval("SELECT pg_database_size(current_database())")
 
 
+OBS_BATCH = 2_000   # rows per executemany: one 30-day GFW block in one call ran Tiger's 2 GiB compute out of memory
+
+
 async def write_observations(con: asyncpg.Connection, obs: Iterable[Observation]) -> int:
     rows = [obs_args(o) for o in obs]
-    if rows:
-        await con.executemany(UPSERT_OBS, rows)
+    for i in range(0, len(rows), OBS_BATCH):
+        await con.executemany(UPSERT_OBS, rows[i:i + OBS_BATCH])
     return len(rows)
 
 
