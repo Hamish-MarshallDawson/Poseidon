@@ -26,8 +26,7 @@ export interface SlotInput {
   view: View
   nowMs: number                    // feed clock (epoch ms), for recency
   now: number                      // page clock (s), for hysteresis
-  pinned: Set<number>              // tier 0: windows, focus, hover; always drawn, never counted against the cap
-  related: Set<number>             // focus relations: drawn like tier 0 but counted
+  pinned: Set<number>              // tier 0: windows, hover; always drawn, never counted against the cap
   ranks: Map<number, Rank>
   held: Map<number, number>        // mmsi → held until (page clock s); updated in place
   capOverride?: number             // dev switch: ?cap=0 draws every ship in view (stress test)
@@ -43,8 +42,8 @@ export interface SlotResult {
 }
 
 // Slot priority 0..7; 9 = may not take a slot (silent or stale without a flag).
-function slotTier(v: VesselView, pinned: boolean, related: boolean, rank: Rank | undefined): number {
-  if (pinned || related) return 0
+function slotTier(v: VesselView, pinned: boolean, rank: Rank | undefined): number {
+  if (pinned) return 0
   if (rank?.decision === 'inspect') return 1
   if (v.status === 'gap_open') return 2
   if (rank?.decision === 'watch') return 3
@@ -55,7 +54,7 @@ function slotTier(v: VesselView, pinned: boolean, related: boolean, rank: Rank |
 }
 
 export function computeSlots(inp: SlotInput): SlotResult {
-  const { state, view, nowMs, now, pinned, related, ranks, held } = inp
+  const { state, view, nowMs, now, pinned, ranks, held } = inp
   const band = bandOf(view.zoom)
   const cap = inp.capOverride === 0 ? Infinity : (inp.capOverride ?? band.cap)
   const pad = inp.pad ?? 0.05
@@ -79,7 +78,7 @@ export function computeSlots(inp: SlotInput): SlotResult {
     px[s] = view.width / 2 + dx * view.worldSize
     py[s] = view.height / 2 + dy * view.worldSize
     const r = ranks.get(v.mmsi)
-    const t = slotTier(v, pinned.has(v.mmsi), related.has(v.mmsi), r)
+    const t = slotTier(v, pinned.has(v.mmsi), r)
     tier[s] = t
     const age = Math.min(SEC, Math.max(0, Math.floor((nowMs - v.last_ts) / 1000)))
     let sec: number

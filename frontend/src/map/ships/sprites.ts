@@ -15,7 +15,6 @@ const KEYLINE: Record<SizeTier, number> = { far: 1, mid: 1.5, near: 2 }       //
 const HOLLOW: Record<SizeTier, number> = { far: 1.25, mid: 1.25, near: 1.5 }  // outline width of No AIS hulls
 const SCALE = 2   // atlas at @2x; sprites are drawn at CSS size, so they stay sharp on 1× and 2× screens
 const PAD = 4     // CSS px around each sprite for the keyline
-export const LETTER_PX = 14
 
 export interface Sprite { u0: number; v0: number; u1: number; v1: number; w: number; h: number }  // w/h in CSS px incl. pad
 export interface Atlas { width: number; height: number; pixels: Uint8Array; sprites: Map<string, Sprite> }
@@ -55,20 +54,7 @@ function svgJob(key: string, svg: Svg, tier: SizeTier, hollow: boolean): Job {
   }
 }
 
-function letterJob(letter: string): Job {
-  return {
-    key: `letter:${letter}`, w: LETTER_PX, h: LETTER_PX,
-    draw(g, grow) {
-      if (grow) { g.fillRect(0, 0, LETTER_PX, LETTER_PX); return }      // badge background (keyline colour)
-      g.lineWidth = 1; g.strokeRect(0.5, 0.5, LETTER_PX - 1, LETTER_PX - 1)
-      g.font = `600 11px "Barlow Semi Condensed", "Arial Narrow", sans-serif`
-      g.textAlign = 'center'; g.textBaseline = 'middle'
-      g.fillText(letter, LETTER_PX / 2, LETTER_PX / 2 + 0.5)
-    },
-  }
-}
-
-export function buildAtlas(letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'): Atlas {
+export function buildAtlas(): Atlas {
   const jobs: Job[] = []
   for (const tier of TIERS) {
     for (const type of TYPES) for (const heading of [true, false]) for (const hollow of [false, true]) {
@@ -77,7 +63,6 @@ export function buildAtlas(letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'): Atlas {
     jobs.push(svgJob(`ovl:selected:${tier}`, SVG.get(`overlay-selected-${tier}`)!, tier, false))
     jobs.push(svgJob(`ovl:sanctioned:${tier}`, SVG.get(`overlay-sanctioned-${tier}`)!, tier, false))
   }
-  for (const l of letters) jobs.push(letterJob(l))
 
   // Shelf packing into a 1024 px wide atlas.
   const W = 1024
