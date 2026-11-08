@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import os
 
 import asyncpg
@@ -329,7 +330,12 @@ async def _fishing_flow():
         await pool.close()
     fishing = s["models"][2]
     assert fishing["fishing_live"] == {"latest_week": W, "scored_latest_week": 2, "scored": 2, "graded": 1,
-                                       "positives": 1, "hit_rate": 1.0, "model_version": "fishing-x"}
+                                       "positives": 1, "hit_rate": 1.0, "model_version": "fishing-x",
+                                       "top_share": 0.1, "top_hit_rate": 1.0, "all_hit_rate": 1.0}
+    # read from the weekly scores, not the 24 h grade window; the week is 40 days old, so amber
+    assert fishing["headline"] == {"text": "Top 10% right 100% of the time", "value": 100, "unit": "%"}
+    wk = time.strftime("%d %b", time.gmtime(W / 1000))
+    assert fishing["status"] == {"level": "warn", "text": f"Live: 2 vessels scored week of {wk} · 1 graded"}
     assert fishing["note"] == "scored 2 vessels this week; 1 weekly predictions graded so far"
     (fw,) = m["fishing"]
     assert (fw["week"], fw["scored"], fw["graded"], fw["positives"]) == (W, 2, 1, 1)
@@ -340,6 +346,15 @@ async def _fishing_flow():
 @needs_db
 def test_fishing_live_on_local_db():
     asyncio.run(_fishing_flow())
+
+
+def test_fishing_live_card():
+    now = 100 * 24 * M.H_MS
+    fish = {"latest_week": now - 3 * 24 * M.H_MS, "scored_latest_week": 357, "graded": 0, "top_hit_rate": None}
+    assert M.fishing_live_card(fish, now) == (None, {"level": "ok", "text": "Live: 357 vessels scored this week"})
+    head, st = M.fishing_live_card(fish | {"graded": 1200, "top_hit_rate": 0.774}, now)
+    assert head == {"text": "Top 10% right 77% of the time", "value": 77, "unit": "%"}
+    assert st == {"level": "ok", "text": "Live: 357 vessels scored this week · 1,200 graded"}
 
 
 def test_fishing_live_totals():
