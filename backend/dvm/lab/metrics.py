@@ -90,6 +90,10 @@ TOTALS = ("SELECT (SELECT count(*) FROM outcomes) AS graded, "
           "(SELECT count(*) FROM outcomes WHERE made_at >= $1 - 26 * 3600000::bigint AND resolved_at >= $1 - 3600000)"
           " AS graded_last_hour")
 OPTIONAL_COUNT = "SELECT count(*) FROM {}"
+# lab-store's additions (dvm/lab/schema.py): model_runs.source and ml_events; both optional here.
+RUN_SOURCES = "SELECT run_id, max(source) AS source FROM model_runs WHERE source IS NOT NULL GROUP BY 1"
+EVENTS = ("SELECT ts, target, kind, run_id, version FROM ml_events "
+          "WHERE kind IN ('trained', 'promoted', 'deployed', 'recalibrated') ORDER BY ts")
 LIVE_ROUTE = ("SELECT o.model_version, count(*) AS n, avg(o.in_r80::int) AS cov80, "
               "percentile_cont(0.5) WITHIN GROUP (ORDER BY o.error_m) AS med, "
               "percentile_cont(0.5) WITHIN GROUP (ORDER BY o.baseline_error_m) AS base "
@@ -214,6 +218,20 @@ def find_run(runs: list[dict], key: str, version: Optional[str]) -> Optional[dic
     return max(champs, key=lambda r: r["recorded_at"]) if champs else None
 
 
+def champion_since(events: list[dict], key: str, version: Optional[str], run: Optional[dict]) -> Optional[int]:
+    """When the served champion took over: the newest promoted, deployed or recalibrated event of exactly this
+    version, else of its run (or the version it was recalibrated from), else the run's champion row."""
+    targets = REG_TARGETS[key]
+    mine = [e for e in events if e["target"] in targets and e["kind"] in ("promoted", "deployed", "recalibrated")]
+    base = re.sub(r"-cal\d+$", "", version) if version else None
+    for match in (lambda e: version and e["version"] == version,
+                  lambda e: run and e["run_id"] == run["run_id"] or base and e["version"] == base):
+        hits = [e["ts"] for e in mine if match(e)]
+        if hits:
+            return max(hits)
+    return run["recorded_at"] if run and run["status"] == "champion" else None
+
+
 def route_live(rows: list[dict], version: Optional[str]) -> Optional[dict]:
     v = pick_version({r["model_version"]: r["n"] for r in rows}, version)
     r = next((r for r in rows if r["model_version"] == v), None)
@@ -254,7 +272,7 @@ def note(offline: dict, live: Optional[dict], deployed: bool) -> str:
         parts.append(f"live worse than {live['primary']['ref_label']}")
     c = live["calibration"]
     if not c["ok"]:
-        parts.append(f"{c['name']} off target ({c['value']:.2f} vs {c['nominal']:.2f})")
+        parts.append(f"{c['name']} off target ({c['value']:.1%} vs {c['nominal']:.1%})")
     return "; ".join(parts) or "on target"
 
 
@@ -274,10 +292,13 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
         except (asyncpg.UndefinedTableError, asyncpg.UndefinedColumnError):
             raise HTTPException(503, "the prediction ledger is not set up (the backend runs it with PREDICT=1)")
 
-    async def _optional(con, sql, *args, default=None):
-        """A query on a table that may not exist yet (ml_proposals, positions in a test database)."""
+    async def _optional(con, sql, *args, default=None, rows=False):
+        """A query on a table or column that may not exist yet (lab-store's ml_* tables and model_runs.source,
+        positions' row estimate in a test database)."""
         try:
             async with con.transaction():
+                if rows:
+                    return [_row(x) for x in await con.fetch(sql, *args)]
                 return await con.fetchval(sql, *args)
         except (asyncpg.UndefinedTableError, asyncpg.UndefinedFunctionError, asyncpg.UndefinedColumnError):
             return default
@@ -347,6 +368,8 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                 live_dark = await _fetch(con, LIVE_DARK, since, dark_target)
             totals = await con.fetchrow(TOTALS, now)
             proposals = await _optional(con, OPTIONAL_COUNT.format("ml_proposals"), default=0)
+            sources = {x["run_id"]: x["source"] for x in await _optional(con, RUN_SOURCES, default=[], rows=True)}
+            events = await _optional(con, EVENTS, default=[], rows=True)
         for x in runs:
             x["metrics"] = _json(x["metrics"])
         models = []
@@ -357,9 +380,9 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
             if version is None and run is not None and key == "fishing":
                 version = run["run_id"]
             champion = {"run_id": run["run_id"] if run else None, "version": version or (run or {}).get("run_id"),
-                        "since": run["recorded_at"] if run and run["status"] == "champion" else None,
+                        "since": champion_since(events, key, version, run),
                         "proposer": run.get("proposer") if run else None,
-                        "source": (run["metrics"].get("source") if run else None)}
+                        "source": (sources.get(run["run_id"]) or run["metrics"].get("source")) if run else None}
             offline = offline_skill(run["metrics"] if run else {}, PRIMARY_H[key])
             live = None
             if deployed:
@@ -367,7 +390,8 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                     if key == "godark" else None
             models.append({"target": key, "label": LABELS[key], "champion": champion, "offline": offline,
                            "live": live, "deployed": deployed, "note": note(offline, live, deployed)})
-        last = max((x["created_at"] for x in runs), default=None)
+        last = max([x["created_at"] for x in runs] + [e["ts"] for e in events
+                                                       if e["kind"] in ("trained", "recalibrated")], default=None)
         return {"generated_at": now, "models": models, "cycle": {"state": "manual", "last": last, "next": None},
                 "totals": {"runs": len(runs), "proposals": proposals or 0, "graded_outcomes": totals["graded"],
                            "graded_last_hour": totals["graded_last_hour"]}}

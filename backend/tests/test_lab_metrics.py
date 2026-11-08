@@ -66,7 +66,7 @@ def test_offline_skill_and_find_run():
 def test_live_cards_and_note():
     live = M.route_live([{"model_version": "r", "n": 4, "cov80": 0.6, "med": 300.0, "base": 600.0}], "r-cal1")
     assert live["primary"]["value"] == pytest.approx(0.5) and live["calibration"]["ok"] is False
-    assert M.note({"skill": 0.62}, live, True) == "live skill below offline; 80% circle coverage off target (0.60 vs 0.80)"
+    assert M.note({"skill": 0.62}, live, True) == "live skill below offline; 80% circle coverage off target (60.0% vs 80.0%)"
     dark = M.dark_live([{"model_version": "g", "n": 10, "mean_p": 0.05, "hit_rate": 0.046, "brier": 0.05}], "g",
                        "dark_1h")
     assert dark["primary"]["name"] == "Brier skill over the base rate, 1 h" and dark["calibration"]["ok"]
@@ -94,6 +94,8 @@ async def _seed(con):
         await con.execute(f"TRUNCATE {t}")
         await con.execute(f"ALTER TABLE {t} ENABLE TRIGGER USER")
     await con.execute("TRUNCATE positions")
+    await con.execute("DROP TABLE IF EXISTS ml_events, ml_proposals")   # lab-store's tables: absent at first
+    await con.execute("ALTER TABLE model_runs DROP COLUMN IF EXISTS source")
     routes, outs = [], []
     # 4 live route-x predictions at 3 h: errors 100..400 against DR 200..800, 3 of 4 inside the 80% circle.
     for i, (err, base, in80) in enumerate([(100, 200, True), (200, 400, True), (300, 600, True), (400, 800, False)]):
@@ -198,6 +200,39 @@ async def _db_flow():
     assert fishing["deployed"] is False and fishing["live"] is None
     assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 16, "graded_last_hour": 0}
     assert s["cycle"] == {"state": "manual", "last": T - H / 2, "next": None}
+
+    # lab-store's columns and tables (dvm/lab/schema.py) arrive: source, since and the cycle come from them.
+    con = await asyncpg.connect(URL)
+    try:
+        await con.execute("ALTER TABLE model_runs ADD COLUMN IF NOT EXISTS source text")
+        await con.execute(LAB_DDL)
+        await con.execute("INSERT INTO model_runs (run_id, target, model, status, created_at, recorded_at, source) "
+                          "VALUES ('route-x', 'route', 'dma', 'deployed-note', $1, $1, 'desktop-hamish')", T - H)
+        await con.executemany("INSERT INTO ml_events VALUES ($1, $2, $3, $4, $5, $6, NULL, '{}', 0)", [
+            ("e1", T - H + 5, "route", "promoted", "route-x", "route-x"),
+            ("e2", T + 2 * H, "route", "recalibrated", "route-x", "route-x-cal1"),
+            ("e3", T + 3 * H, "route", "trained", "route-z", "route-z"),
+            ("e4", T + 4 * H, "godark", "deployed", None, "godark-x")])
+        await con.execute("INSERT INTO ml_proposals (id) VALUES ('p1'), ('p2')")
+    finally:
+        await con.close()
+    pool = await asyncpg.create_pool(URL, min_size=1, max_size=1)
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as http:
+            s = (await http.get("/lab/summary")).json()
+    finally:
+        await pool.close()
+    route, godark, _ = s["models"]
+    assert route["champion"]["source"] == "desktop-hamish" and route["champion"]["since"] == T + 2 * H
+    assert godark["champion"]["since"] == T + 4 * H
+    assert s["cycle"]["last"] == T + 3 * H and s["totals"]["proposals"] == 2
+
+
+LAB_DDL = """
+CREATE TABLE IF NOT EXISTS ml_events (id text PRIMARY KEY, ts bigint NOT NULL, target text NOT NULL, kind text NOT NULL,
+  run_id text, version text, label text, detail jsonb NOT NULL DEFAULT '{}', recorded_at bigint NOT NULL);
+CREATE TABLE IF NOT EXISTS ml_proposals (id text PRIMARY KEY);
+"""
 
 
 @needs_db
