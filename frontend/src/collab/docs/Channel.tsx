@@ -116,7 +116,7 @@ function Composer() {
         </label>
       )}
       <textarea
-        aria-label="Note to the session" placeholder="Say what you see (plain text)" rows={2} maxLength={NOTE_MAX} value={text}
+        aria-label="Note" placeholder="Say what you see (plain text)" rows={2} maxLength={NOTE_MAX} value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() } }}
       />
@@ -144,10 +144,10 @@ function ChannelPanel() {
     <div className="panel watchlist ch-panel" id="channel-panel" role="region" aria-labelledby="ch-title">
       <div className="wl-header">
         <div className="wl-titlerow">
-          <h2 id="ch-title">Session channel</h2>
+          <h2 id="ch-title">Channel</h2>
           <Button className="btn-small" onClick={closeChannel}>Close <Kbd>Esc</Kbd></Button>
         </div>
-        <p className="wl-meta">{session?.title} · {docs.length} {docs.length === 1 ? 'item' : 'items'}</p>
+        <p className="wl-meta">{docs.length} {docs.length === 1 ? 'item' : 'items'}</p>
         <span className="ch-summarise">
           <Button className="btn-small" disabled={summary === 'busy'} onClick={() => void summariseSession()}>
             {summary === 'busy' ? 'Summarising…' : 'Summarise session'}
@@ -157,14 +157,14 @@ function ChannelPanel() {
       </div>
       {offer && (
         <div className="ch-offer" role="status">
-          <span>Everyone else has left. Summarise the session from this channel?</span>
+          <span>Everyone else has left. Summarise this session?</span>
           <Button className="btn-small" variant="filled" onClick={() => void summariseSession()}>Summarise</Button>
           <Button className="btn-small" onClick={() => channel.set({ offer: false })}>Not now</Button>
         </div>
       )}
       {pinned && <ul className="ch-pinned"><Item d={pinned} members={members} docIds={docIds} onQuote={quote} /></ul>}
       {rest.length === 0 && !pinned
-        ? <p className="rv-empty">Nothing yet. Notes and saved briefings from this session appear here.</p>
+        ? <p className="rv-empty">Nothing yet. Notes and saved briefings appear here.</p>
         : <ul className="ch-feed" ref={feed} aria-live="polite">{rest.map((d) => <Item key={d.id} d={d} members={members} docIds={docIds} onQuote={quote} />)}</ul>}
       <Composer />
     </div>

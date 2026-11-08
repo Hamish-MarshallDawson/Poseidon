@@ -68,7 +68,7 @@ function SessionSwitcher() {
             <span className="session-bar__faces">{faces.map((m) => <Avatar key={m.id} user={m} size={18} online={online.some((u) => u.id === m.id)} />)}</span>
             <span>{session.title}</span>
           </>
-        ) : <span>No session</span>}
+        ) : <span>{sessions.length === 0 ? 'Start a session' : 'Resume session'}</span>}
       </button>
       {open && (
         <div className="entry-menu" role="menu">
@@ -144,9 +144,8 @@ export function InvitePanel() {
 
   return (
     <div className="panel invite-panel" id="invite-panel" role="dialog" aria-label="Invite / Join">
-      <section aria-label="Incoming invites">
+      {incoming.length > 0 && <section aria-label="Incoming invites">
         <h2>Invites for you</h2>
-        {incoming.length === 0 && <p className="muted">None waiting.</p>}
         {incoming.map((i) => (
           <div className="invite-row" key={i.id}>
             <Avatar user={i.from} size={20} />
@@ -155,9 +154,9 @@ export function InvitePanel() {
             <button type="button" className="chip" onClick={() => declineInvite(i.id)}>Decline</button>
           </div>
         ))}
-      </section>
+      </section>}
       <section aria-label="Invites you sent">
-        <h2>{session ? <>Invite to <em>{session.title}</em></> : 'Invites you sent'}</h2>
+        {session && <h2>Invite</h2>}   {/* the session's name is in the bar */}
         {session && role === 'owner' && (
           <form className="invite-create" onSubmit={create}>
             <input type="text" value={to} maxLength={254} placeholder="Email, or blank for a link" aria-label="Email to invite" onChange={(e) => setTo(e.target.value)} />

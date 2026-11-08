@@ -64,7 +64,7 @@ function JoinedToast() {
   if (!t) return null
   return (
     <div className="panel entry-toast" role="status">
-      You have joined <em>{t[0]}</em>{t[1] ? ` with ${t[1]}` : ''}
+      Joined <em>{t[0]}</em>{t[1] ? ` with ${t[1]}` : ''}
     </div>
   )
 }

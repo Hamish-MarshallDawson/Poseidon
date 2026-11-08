@@ -190,7 +190,6 @@ export function ScrubBar() {
         aria-label={live || !paused ? 'Pause (Space)' : 'Play (Space)'} title={live || !paused ? 'Pause (Space)' : 'Play (Space)'}>
         {live || !paused ? <PauseIcon /> : <PlayIcon />}
       </button>
-      <span className="tl-mode">{live ? <><i className="tl-dot" aria-hidden />LIVE</> : 'REPLAY'}</span>
       <Readout live={live} loading={loading} wall={wall} />
       <div ref={trackRef} className="tl-track" role="slider" tabIndex={0} aria-label="Shown time"
         aria-valuemin={Math.round(view.from)} aria-valuemax={Math.round(view.to)} aria-valuenow={aria.now} aria-valuetext={aria.text}
