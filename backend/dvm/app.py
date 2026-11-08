@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -35,6 +36,44 @@ WARM_BATCH = 5000
 
 def _dt(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000, timezone.utc)
+
+
+TRAIL_POINTS = 30              # 06 section 4.3: at most 30 points per vessel,
+TRAIL_SPACING_MS = 60_000      # at least 60 s apart,
+TRAIL_WINDOW_MS = 3_600_000    # over the last 60 minutes
+
+
+class Trails:
+    """Recent track per ship for the `detail` reply: [ts, lon, lat], oldest first, event time (ts), in memory only."""
+
+    def __init__(self):
+        self.by_mmsi: dict[int, deque] = {}
+
+    def add(self, rec: PositionReport) -> None:
+        t = self.by_mmsi.get(rec.mmsi)
+        if t is None:
+            t = self.by_mmsi[rec.mmsi] = deque(maxlen=TRAIL_POINTS)
+        elif rec.ts < t[-1][0] + TRAIL_SPACING_MS:   # too soon after the last kept point, or an older fix
+            return
+        t.append((rec.ts, rec.lon, rec.lat))
+
+    def get(self, mmsi: int, now: int) -> list[list]:
+        cutoff = now - TRAIL_WINDOW_MS
+        return [list(p) for p in self.by_mmsi.get(mmsi, ()) if p[0] >= cutoff]
+
+    def drop(self, mmsis) -> None:
+        for m in mmsis:
+            self.by_mmsi.pop(m, None)
+
+    def prune(self, now: int, keep) -> None:
+        """Drop points older than the window, and ships the map no longer shows (memory stays bounded)."""
+        cutoff = now - TRAIL_WINDOW_MS
+        for m in list(self.by_mmsi):
+            t = self.by_mmsi[m]
+            while t and t[0][0] < cutoff:
+                t.popleft()
+            if not t or m not in keep:
+                del self.by_mmsi[m]
 
 
 class Client:
@@ -69,6 +108,7 @@ class Hub:
             self.gaps.note_stall(a, b)
         self.pending_gaps: list[dict] = []     # gap versions not yet sent to browsers
         self.gaps_warm: str = "pending" if self.store else "off"   # pending | ready | failed: <error> | off
+        self.trails = Trails()
 
     def ingest(self, rec, now: int) -> None:
         """One normalised record from any feed: merge it across feeds, then map and store what the merger emits."""
@@ -80,6 +120,7 @@ class Hub:
             if self.store:
                 self.store.add(rec)
             if isinstance(rec, PositionReport):
+                self.trails.add(rec)
                 self._gap_events(self.gaps.observe(rec))
 
     def _gap_events(self, events: list[dict]) -> None:
@@ -167,6 +208,9 @@ class Hub:
                 except Exception as e:  # never let a detector bug stop the 1 Hz loop
                     self._bad(e)
             vessels, removed = self.live.take_changes(now, config.STALE_AFTER_S)
+            self.trails.drop(removed)
+            if n % 60 == 0:
+                self.trails.prune(now, self.live.pos)
             gap_msgs, self.pending_gaps = self.pending_gaps, []
             if vessels or removed or gap_msgs:
                 msg = {"type": "delta", "now_ts": now, "vessels": vessels, "removed": removed, "gaps": gap_msgs,
@@ -458,9 +502,13 @@ async def ws(websocket: WebSocket) -> None:
                     log.exception("Replay request failed: %s", msg.get("action"))
             elif kind == "detail":
                 state = c.replay.live if c.replay else hub.live   # in replay, details are as of the replay time
-                if msg.get("mmsi") in state.pos:
+                mmsi = msg.get("mmsi")
+                if isinstance(mmsi, int) and mmsi in state.pos:   # a list or dict here would raise and drop the socket
+                    reply = state.detail(mmsi)
+                    if not c.replay:   # live trails only; replay has no trail of its own yet
+                        reply["trail"] = hub.trails.get(mmsi, now_ms())
                     async with c.lock:
-                        await c.send(state.detail(msg["mmsi"]))
+                        await c.send(reply)
     except (WebSocketDisconnect, asyncio.TimeoutError, RuntimeError):
         pass
     finally:
