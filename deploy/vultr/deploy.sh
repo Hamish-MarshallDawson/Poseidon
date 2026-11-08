@@ -37,7 +37,13 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
     chown -R dvm:dvm /opt/dvm/backend
     systemctl start dvm
     for _ in $(seq 1 30); do
-      if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then echo "backend deployed and healthy"; exit 0; fi
+      if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1; then
+        echo "backend deployed and healthy"
+        # The delayed-source jobs (poll and backfill) run this same code: restart the running ones so they pick it
+        # up. SIGINT stop, and each resumes from the source_windows ledger, so nothing is lost or refetched.
+        systemctl try-restart 'dvm-poll-*' 'dvm-backfill-*' && echo "source jobs restarted"
+        exit 0
+      fi
       sleep 2
     done
     echo "backend did not answer /health within 60 s" >&2
