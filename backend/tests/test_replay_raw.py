@@ -24,6 +24,7 @@ T0 = replay_raw.parse_time("2023-11-14T22:57:00Z")   # 6 minutes over an hour bo
 MIN = 60_000
 BOTH, AIS_ONLY, DT_ONLY = 230_990_001, 230_990_002, 230_990_003   # the first is heard by both feeds
 SHIPS = (BOTH, AIS_ONLY, DT_ONLY)
+FLEET0 = 230_991_000   # extra AISStream-only ships for the batching test
 
 
 def _utc(ms: int) -> str:
@@ -53,7 +54,7 @@ def dt_meta(mmsi, ts):
                         "refD": 10}}
 
 
-def record_logs(root):
+def record_logs(root, extra=0):
     """6 minutes from T0: every ship one fix every 10 s. BOTH's fixes arrive on both feeds (Digitraffic 0.4 s after
     the fix, AISStream 0.9 s), with a Digitraffic repeat now and then; plus Digitraffic metadata once a minute."""
     events = []
@@ -68,6 +69,9 @@ def record_logs(root):
         events.append((fix + 300, "digitraffic", dt_loc(DT_ONLY, fix + 300 - 300, lat + 1, lon)))
         if i % 6 == 0:
             events.append((fix + 500, "digitraffic", dt_meta(DT_ONLY, fix)))
+        for k in range(extra):
+            m = FLEET0 + k
+            events.append((fix + 1_200 + k, "aisstream", ais(m, fix + 1_000, fix + 1_200 + k, 58 + k * 0.01, lon)))
     events.append((T0 + 5_000, "aisstream", "not json"))   # junk lines are logged raw too
     events.append((T0 + 6_000, "aisstream", {"MessageType": "SubscriptionConfirmation", "Message": {}}))
     # one RawLog per hour, closed without rotating (its rotation gzips in a background thread); gzipped by hand below
@@ -167,3 +171,66 @@ def test_refuses_tiger_writes(monkeypatch):
     monkeypatch.setenv("TIGER_DATABASE_URL", "postgres://u:p@x.tsdb.cloud.timescale.com:5432/tsdb")
     with pytest.raises(SystemExit, match="allow-tiger"):
         replay_raw.main(["--from", "2023-11-14T22:57:00Z", "--to", "2023-11-14T23:00:00Z", "--write"])
+
+
+class Spy:
+    """Wraps the replay's connection to record each existence query's mmsi list and time range."""
+
+    def __init__(self, con, calls):
+        self._con, self.calls = con, calls
+
+    async def fetch(self, sql, *args):
+        self.calls.append((sql, args))
+        return await self._con.fetch(sql, *args)
+
+    def __getattr__(self, name):
+        return getattr(self._con, name)
+
+
+async def _batch_flow(tmp_path, monkeypatch):
+    extra = 40
+    ships = list(SHIPS) + [FLEET0 + k for k in range(extra)]
+    record_logs(tmp_path, extra=extra)
+    calls = []
+    real_connect = asyncpg.connect
+
+    async def spy_connect(*a, **kw):
+        return Spy(await real_connect(*a, **kw), calls)
+
+    monkeypatch.setattr(replay_raw, "BATCH_KEYS", 7)
+    monkeypatch.setattr(replay_raw.asyncpg, "connect", spy_connect)
+    con = await real_connect(URL)
+    try:
+        await store.setup(con)
+        for t in ("positions", "statics"):
+            await con.execute(f"DELETE FROM {t} WHERE mmsi = ANY($1::int[])", ships)
+        envs, _ = replay_raw.read_window(tmp_path, T0, T0 + 6 * MIN)
+        recs, _ = replay_raw.run_pipeline(envs, T0 + 6 * MIN)
+        assert sum(r.kind == "pos" for r in recs) == len(ships) * 36
+        live = [r for r in recs if not T0 + 3 * MIN <= r.ts < T0 + 5 * MIN]
+        for kind, table, cols in (("pos", "positions", store.POS_COLS), ("static", "statics", store.STATIC_COLS)):
+            await con.copy_records_to_table(table, records=[store._row(r, cols) for r in live if r.kind == kind],
+                                            columns=["time", *cols])
+        out = []
+        res = await replay_raw.replay(URL, tmp_path, T0, T0 + 6 * MIN, dry_run=False, echo=out.append)
+        assert res["written_positions"] == len(ships) * 12 and res["pos_skip"] == len(ships) * 24
+        assert res["written_statics"] == 0
+        rows = await con.fetch("SELECT mmsi, ts, src FROM positions WHERE mmsi = ANY($1::int[])", ships)
+        assert len(rows) == len(ships) * 36 and len({tuple(r) for r in rows}) == len(rows)
+        # every existence query: at most BATCH_KEYS mmsis, and positions over about one minute only
+        assert calls and all(len(args[0]) <= 7 for _, args in calls)
+        pos_q = [args for sql, args in calls if "FROM positions" in sql]
+        assert len(pos_q) >= 6 * -(-len(ships) // 7)   # 6 minutes x 7 batches
+        assert all((hi - lo).total_seconds() <= 62 for _, lo, hi in pos_q)
+        calls.clear()
+        again = await replay_raw.replay(URL, tmp_path, T0, T0 + 6 * MIN, dry_run=False, echo=out.append)
+        assert again["written_positions"] == 0 and again["written_statics"] == 0
+        for t in ("positions", "statics"):
+            await con.execute(f"DELETE FROM {t} WHERE mmsi = ANY($1::int[])", ships)
+    finally:
+        await con.close()
+
+
+@needs_db
+def test_replay_batches_queries_and_writes_per_minute(tmp_path, monkeypatch):
+    asyncio.run(_batch_flow(tmp_path, monkeypatch))

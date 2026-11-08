@@ -14,9 +14,12 @@ stored is ever inserted again:
   (the merger's own rule: ts within 1 s, position within 0.5 m), which catches a fix whose first copy the live
   merger stored before the window started;
 - a static is skipped when a row with the same (mmsi, ts, src) exists, or when it says nothing new against the latest
-  stored identity of the ship (replay starts with an empty merger, so every first sighting would emit a static).
-Both tables are written with COPY in one transaction, so a run writes all of its rows or none. Run it twice and the
-second run writes nothing. gaps are not replayed.
+  stored identity of the ship in the last STATIC_LOOKBACK_H hours (replay starts with an empty merger, so every
+  first sighting would emit a static).
+The work goes one minute of record ts at a time, so memory on the database stays flat: that minute's existence checks
+(at most BATCH_KEYS mmsis per query, on the (mmsi, time) indexes), then with --write its COPY into both tables, all
+in one transaction under an advisory lock. An interrupted run leaves whole minutes written; run it again and it
+writes only what is still missing, and a second complete run writes nothing. gaps are not replayed.
 
 The database is --db, or TIGER_DATABASE_URL (the live store's). A dry run opens a read-only session and is allowed on
 any database; writing to Tiger Cloud needs --allow-tiger, which only the Vultr server uses.
@@ -46,7 +49,9 @@ from dvm.sources.digitraffic import Dedup, normalise_digitraffic
 log = logging.getLogger(__name__)
 
 SOURCES = ("aisstream", "digitraffic")
-STATIC_LOOKBACK = timedelta(days=30)   # how far back the latest stored identity of a ship is looked up
+MINUTE_MS = 60_000
+BATCH_KEYS = 5_000          # most mmsis in one existence query (the whole window in one query ran Tiger out of memory)
+STATIC_LOOKBACK_H = 12      # how far back a ship's latest stored identity is looked for (15-min chunks: 48 of them)
 RECV_KEY = '"recv_ts":'
 
 
@@ -149,17 +154,27 @@ def _minute(ms: int) -> str:
     return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
 
 
+def _chunks(xs: list, n: int):
+    for i in range(0, len(xs), n):
+        yield xs[i:i + n]
+
+
+def _t(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, timezone.utc)
+
+
 async def existing_positions(con, recs: list[PositionReport]) -> dict[int, list[tuple]]:
-    if not recs:
-        return {}
-    lo, hi = min(r.ts for r in recs) - MATCH_TS_MS, max(r.ts for r in recs) + MATCH_TS_MS
-    rows = await con.fetch(
-        "SELECT mmsi, ts, src, lat, lon FROM positions WHERE time >= $1 AND time <= $2 AND mmsi = ANY($3::int[])",
-        datetime.fromtimestamp(lo / 1000, timezone.utc), datetime.fromtimestamp(hi / 1000, timezone.utc),
-        sorted({r.mmsi for r in recs}))
+    """Stored fixes near `recs` (one minute of record ts), at most BATCH_KEYS mmsis per query on (mmsi, time)."""
     have: dict[int, list[tuple]] = {}
-    for r in rows:
-        have.setdefault(r["mmsi"], []).append((r["ts"], r["src"], r["lat"], r["lon"]))
+    if not recs:
+        return have
+    lo, hi = min(r.ts for r in recs) - MATCH_TS_MS, max(r.ts for r in recs) + MATCH_TS_MS
+    for mmsis in _chunks(sorted({r.mmsi for r in recs}), BATCH_KEYS):
+        rows = await con.fetch(
+            "SELECT mmsi, ts, src, lat, lon FROM positions WHERE mmsi = ANY($1::int[]) AND time >= $2 AND time <= $3",
+            mmsis, _t(lo), _t(hi))
+        for r in rows:
+            have.setdefault(r["mmsi"], []).append((r["ts"], r["src"], r["lat"], r["lon"]))
     return have
 
 
@@ -174,29 +189,36 @@ def position_stored(rec: PositionReport, have: dict[int, list[tuple]]) -> bool:
 
 
 STATIC_FIELDS = list(ID_FIELDS)
+STATIC_SELECT = f"SELECT mmsi, ts, src, {', '.join(STATIC_FIELDS)} FROM statics"
 
 
-async def existing_statics(con, recs: list[VesselStatic]) -> tuple[set[tuple], dict[int, list[dict]]]:
-    """(mmsi, ts, src) keys already stored around the window, and every stored identity row per ship from the
-    lookback until the window's end, oldest first, so a static is compared with the identity as it stood then."""
-    if not recs:
-        return set(), {}
-    lo, hi = min(r.ts for r in recs), max(r.ts for r in recs)
-    t_lo = datetime.fromtimestamp(lo / 1000, timezone.utc) - STATIC_LOOKBACK
-    t_hi = datetime.fromtimestamp(hi / 1000, timezone.utc)
-    rows = await con.fetch(
-        f"SELECT mmsi, ts, src, {', '.join(STATIC_FIELDS)} FROM statics WHERE time >= $1 AND time <= $2 "
-        "AND mmsi = ANY($3::int[]) AND src <> 'gfw' ORDER BY mmsi, time",
-        t_lo, t_hi, sorted({r.mmsi for r in recs}))
-    keys = {(r["mmsi"], r["ts"], r["src"]) for r in rows}
+async def existing_statics(con, recs: list[VesselStatic], m0: int, lookback_ms: int
+                           ) -> tuple[set[tuple], dict[int, list[dict]]]:
+    """For one minute [m0, m0 + 1 min) of record ts: the (mmsi, ts, src) keys stored in it, and per ship the
+    stored identity rows from `lookback_ms` before it to its end, oldest first (each row is the full merged identity
+    at its time). At most BATCH_KEYS mmsis per query, on (mmsi, time)."""
+    keys: set[tuple] = set()
     hist: dict[int, list[dict]] = {}
-    for r in rows:
-        hist.setdefault(r["mmsi"], []).append(dict(r))
+    if not recs:
+        return keys, hist
+    for mmsis in _chunks(sorted({r.mmsi for r in recs}), BATCH_KEYS):
+        rows = await con.fetch(
+            STATIC_SELECT + " WHERE mmsi = ANY($1::int[]) AND time >= $2 AND time < $3 AND src <> 'gfw' "
+            "ORDER BY mmsi, time", mmsis, _t(m0 - lookback_ms), _t(m0 + MINUTE_MS))
+        for r in rows:
+            d = dict(r)
+            if d["ts"] >= m0:
+                keys.add((d["mmsi"], d["ts"], d["src"]))
+            h = hist.setdefault(d["mmsi"], [])
+            if h and h[-1]["ts"] < m0 and d["ts"] < m0:
+                h[-1] = d   # only the latest identity before the minute matters
+            else:
+                h.append(d)
     return keys, hist
 
 
 def _identity_before(hist: list[dict], ts: int) -> dict:
-    """Fields as of `ts`: each stored static row is the full merged identity at its time, the newest one wins."""
+    """Fields as of `ts`: the newest identity row at or before it."""
     cur: dict = {}
     for row in hist:
         if row["ts"] > ts:
@@ -221,23 +243,26 @@ def static_adds_nothing(rec: VesselStatic, ident: dict) -> bool:
     return True
 
 
-async def plan(con, recs: list[Record]) -> dict:
-    """Split emitted records into what to write and what is already stored."""
-    pos = [r for r in recs if isinstance(r, PositionReport)]
-    sta = [r for r in recs if isinstance(r, VesselStatic)]
+async def plan_minute(con, pos: list[PositionReport], sta: list[VesselStatic], m0: int, lookback_ms: int,
+                      planned: dict[int, dict]) -> dict:
+    """Split one minute of emitted records into what to write and what is already stored. `planned` carries the
+    identity each ship got from statics planned in earlier minutes (a dry run has not stored them)."""
     have = await existing_positions(con, pos)
-    keys, hist = await existing_statics(con, sta)
+    keys, hist = await existing_statics(con, sta, m0, lookback_ms)
     out = {"pos_write": [], "pos_skip": [], "static_write": [], "static_skip": []}
     for r in pos:
         out["pos_skip" if position_stored(r, have) else "pos_write"].append(r)
     for r in sorted(sta, key=lambda r: (r.mmsi, r.ts)):
         h = hist.setdefault(r.mmsi, [])
+        if r.mmsi in planned and not any(x is planned[r.mmsi] for x in h):
+            h.append(planned[r.mmsi])
+            h.sort(key=lambda x: x["ts"])
         if (r.mmsi, r.ts, r.src) in keys or static_adds_nothing(r, _identity_before(h, r.ts)):
             out["static_skip"].append(r)
             continue
         out["static_write"].append(r)
-        # later statics of this ship in the window compare with the merged identity this one now stores
-        row = {"ts": r.ts, "src": r.src, **{f: getattr(r, f) for f in STATIC_FIELDS}}
+        # later statics of this ship compare with the merged identity this one now stores
+        row = planned[r.mmsi] = {"ts": r.ts, "src": r.src, **{f: getattr(r, f) for f in STATIC_FIELDS}}
         h.append(row)
         h.sort(key=lambda x: x["ts"])
         keys.add((r.mmsi, r.ts, r.src))
@@ -258,14 +283,22 @@ def table(p: dict) -> list[str]:
 
 
 async def write(con, p: dict) -> tuple[int, int]:
+    """COPY one minute's planned rows; the caller holds the transaction and the lock."""
     pos = [dvm_store._row(r, dvm_store.POS_COLS) for r in p["pos_write"]]
     sta = [dvm_store._row(r, dvm_store.STATIC_COLS) for r in p["static_write"]]
-    async with con.transaction():
-        if pos:
-            await con.copy_records_to_table("positions", records=pos, columns=["time", *dvm_store.POS_COLS])
-        if sta:
-            await con.copy_records_to_table("statics", records=sta, columns=["time", *dvm_store.STATIC_COLS])
+    if pos:
+        await con.copy_records_to_table("positions", records=pos, columns=["time", *dvm_store.POS_COLS])
+    if sta:
+        await con.copy_records_to_table("statics", records=sta, columns=["time", *dvm_store.STATIC_COLS])
     return len(pos), len(sta)
+
+
+def by_minute(recs: list[Record]) -> dict[int, tuple[list, list]]:
+    out: dict[int, tuple[list, list]] = {}
+    for r in recs:
+        pos, sta = out.setdefault(r.ts - r.ts % MINUTE_MS, ([], []))
+        (pos if isinstance(r, PositionReport) else sta).append(r)
+    return dict(sorted(out.items()))
 
 
 def is_tiger(url: str) -> bool:
@@ -273,7 +306,8 @@ def is_tiger(url: str) -> bool:
     return bool((tiger and url == tiger) or "tsdb.cloud" in url or "timescale.com" in url)
 
 
-async def replay(url: str, data_dir: Path, t0: int, t1: int, dry_run: bool = True, echo=print) -> dict:
+async def replay(url: str, data_dir: Path, t0: int, t1: int, dry_run: bool = True, echo=print,
+                 lookback_h: float = STATIC_LOOKBACK_H) -> dict:
     envs, rstats = read_window(data_dir, t0, t1)
     recs, mstats = run_pipeline(envs, t1)
     echo(f"read {len(envs)} lines from {rstats['files']} files in {data_dir / 'raw'} "
@@ -281,18 +315,27 @@ async def replay(url: str, data_dir: Path, t0: int, t1: int, dry_run: bool = Tru
          f"merger emitted {mstats['pos_out']} positions, {mstats['static_out']} statics "
          f"(merged {mstats['merged']}, repeats dropped {mstats['dup_dropped'] + mstats['late_dup_dropped']})")
     kw = {"server_settings": {"default_transaction_read_only": "on"}} if dry_run else {}
+    lookback_ms = int(lookback_h * 3_600_000)
+    p: dict = {"pos_write": [], "pos_skip": [], "static_write": [], "static_skip": []}
+    planned: dict[int, dict] = {}
+    written = [0, 0]
     con = await asyncpg.connect(url, **kw)
     try:
-        if dry_run:
-            p = await plan(con, recs)
-            written = (0, 0)
-        else:
-            # check and COPY in one transaction under a lock, so two replays can't both write the same rows (the live
-            # writer only adds rows at the current time, outside any past window)
-            async with con.transaction():
-                await con.execute("SELECT pg_advisory_xact_lock(151151)")
-                p = await plan(con, recs)
-                written = await write(con, p)
+        # One minute of record ts at a time: its existence checks (BATCH_KEYS mmsis per query), then, when writing,
+        # its COPY in the same transaction under an advisory lock, so two replays can't both write a row and a
+        # failure loses at most the minute being written (a re-run skips the minutes already done).
+        for m0, (pos, sta) in by_minute(recs).items():
+            if dry_run:
+                part = await plan_minute(con, pos, sta, m0, lookback_ms, planned)
+            else:
+                async with con.transaction():
+                    await con.execute("SELECT pg_advisory_xact_lock(151151)")
+                    part = await plan_minute(con, pos, sta, m0, lookback_ms, planned)
+                    n_pos, n_sta = await write(con, part)
+                written[0] += n_pos
+                written[1] += n_sta
+            for k, v in part.items():
+                p[k] += v
     finally:
         await con.close()
     for line in table(p):
@@ -314,6 +357,8 @@ def main(argv=None) -> None:
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--dry-run", action="store_true", default=True, help="print what would be written (default)")
     g.add_argument("--write", action="store_true", help="write the missing rows")
+    ap.add_argument("--static-lookback-hours", type=float, default=STATIC_LOOKBACK_H,
+                    help=f"how far back a ship's stored identity is compared (default {STATIC_LOOKBACK_H})")
     ap.add_argument("--allow-tiger", action="store_true", help="allow --write to Tiger Cloud (the server only)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -325,7 +370,8 @@ def main(argv=None) -> None:
         sys.exit("No database: pass --db or set TIGER_DATABASE_URL")
     if args.write and is_tiger(url) and not args.allow_tiger:
         sys.exit("Refusing to write to Tiger Cloud without --allow-tiger (only the Vultr server writes to Tiger).")
-    asyncio.run(replay(url, args.data_dir, t0, t1, dry_run=not args.write))
+    asyncio.run(replay(url, args.data_dir, t0, t1, dry_run=not args.write,
+                       lookback_h=args.static_lookback_hours))
 
 
 if __name__ == "__main__":
