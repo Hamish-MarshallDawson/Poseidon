@@ -88,6 +88,7 @@ class VesselView(BaseModel):        # what goes to the browser (06 section 4.3)
     last_ts: int
     status: Literal["active", "silent", "gap_open", "stale"] = "active"
     open_gap_id: Optional[str] = None
+    cls: Optional[Literal["A", "B"]] = None   # AIS class of the latest position (#95); null when unknown
     risk_p: Optional[float] = None
     risk_rank: Optional[int] = None
     sanctioned: bool = False

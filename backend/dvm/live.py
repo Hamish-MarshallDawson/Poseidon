@@ -45,7 +45,8 @@ class Live:
         return VesselView(mmsi=mmsi, name=s.get("name"), imo=s.get("imo"), flag=s.get("flag_iso2"),
                           type_group=s.get("type_group", "unknown"), length_m=s.get("length_m"),
                           lat=p.lat, lon=p.lon, sog_kn=p.sog_kn, cog_deg=p.cog_deg, heading_deg=p.heading_deg,
-                          last_ts=p.ts, status=self._status(mmsi), open_gap_id=self.open_gap.get(mmsi)).model_dump()
+                          last_ts=p.ts, status=self._status(mmsi), open_gap_id=self.open_gap.get(mmsi),
+                          cls=p.cls).model_dump()
 
     def _status(self, mmsi: int) -> str:
         """gap_open only when the open gap looks like the ship (deliberate_candidate); other open gaps are silent."""
