@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict
 USER_AGENT = "hacktheburgh-poseidon/1.0"
 
 ObsSrc = Literal["gfw", "sentinel1"]
-Kind = Literal["ais_presence", "sar_detection", "gap", "encounter", "loitering", "port_visit", "radar_scene"]
+Kind = Literal["ais_presence", "sar_detection", "gap", "encounter", "loitering", "port_visit", "radar_scene", "fishing"]
 # Observation quality flags (the observations.q column; positions/statics keep the models.py Q list).
 ObsQ = Literal["available_est", "region_level", "cell_level"]
 

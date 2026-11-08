@@ -30,7 +30,7 @@ MODEL_DEFAULT_LIMIT, MODEL_MAX_LIMIT = 10_000, 50_000
 MAX_MMSIS = 1000
 MMSI_MIN, MMSI_MAX = 100_000_000, 999_999_999   # a valid MMSI has 9 digits
 TRACK_MAX_HOURS = 24
-KINDS = {"ais_presence", "sar_detection", "gap", "encounter", "loitering", "port_visit", "radar_scene"}
+KINDS = {"ais_presence", "sar_detection", "gap", "encounter", "loitering", "port_visit", "radar_scene", "fishing"}
 MAX_MS = 4_102_444_800_000   # year 2100: anything above is a seconds/ms mix-up or junk
 
 
