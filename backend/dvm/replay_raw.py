@@ -51,6 +51,7 @@ log = logging.getLogger(__name__)
 SOURCES = ("aisstream", "digitraffic")
 MINUTE_MS = 60_000
 BATCH_KEYS = 5_000          # most mmsis in one existence query (the whole window in one query ran Tiger out of memory)
+STATIC_BATCH_KEYS = 1_000   # mmsis per statics query (one LIMIT 1 probe each for the identity before the minute)
 STATIC_LOOKBACK_H = 12      # how far back a ship's latest stored identity is looked for (15-min chunks: 48 of them)
 RECV_KEY = '"recv_ts":'
 
@@ -201,19 +202,22 @@ async def existing_statics(con, recs: list[VesselStatic], m0: int, lookback_ms: 
     hist: dict[int, list[dict]] = {}
     if not recs:
         return keys, hist
-    for mmsis in _chunks(sorted({r.mmsi for r in recs}), BATCH_KEYS):
-        rows = await con.fetch(
-            STATIC_SELECT + " WHERE mmsi = ANY($1::int[]) AND time >= $2 AND time < $3 AND src <> 'gfw' "
-            "ORDER BY mmsi, time", mmsis, _t(m0 - lookback_ms), _t(m0 + MINUTE_MS))
-        for r in rows:
+    cols = ", ".join(["mmsi", "ts", "src", *STATIC_FIELDS])
+    for mmsis in _chunks(sorted({r.mmsi for r in recs}), min(BATCH_KEYS, STATIC_BATCH_KEYS)):
+        # The minute's own rows, then per ship only its newest identity before the minute (one index probe each);
+        # fetching every row of the lookback ran Tiger out of memory.
+        now_rows = await con.fetch(
+            STATIC_SELECT + " WHERE mmsi = ANY($1::int[]) AND time >= $2 AND time < $3 AND src <> 'gfw'",
+            mmsis, _t(m0), _t(m0 + MINUTE_MS))
+        prev_rows = await con.fetch(
+            f"SELECT s.* FROM unnest($1::int[]) AS m(mmsi) CROSS JOIN LATERAL ("
+            f"SELECT {cols} FROM statics WHERE statics.mmsi = m.mmsi AND time >= $2 AND time < $3 AND src <> 'gfw' "
+            f"ORDER BY time DESC LIMIT 1) s", mmsis, _t(m0 - lookback_ms), _t(m0))
+        for r in sorted([*prev_rows, *now_rows], key=lambda r: (r["mmsi"], r["ts"])):
             d = dict(r)
             if d["ts"] >= m0:
                 keys.add((d["mmsi"], d["ts"], d["src"]))
-            h = hist.setdefault(d["mmsi"], [])
-            if h and h[-1]["ts"] < m0 and d["ts"] < m0:
-                h[-1] = d   # only the latest identity before the minute matters
-            else:
-                h.append(d)
+            hist.setdefault(d["mmsi"], []).append(d)
     return keys, hist
 
 
