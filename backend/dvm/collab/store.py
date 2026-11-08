@@ -7,6 +7,8 @@ import time
 import uuid
 from datetime import datetime
 
+from dvm.collab.invites import MemInvites, PgInvites
+
 DOCS_IN_DETAIL = 200          # newest documents returned with a session
 
 
@@ -25,12 +27,13 @@ def _entry(r) -> dict:
 
 def _doc(r) -> dict:
     return {"id": r["id"], "mmsi": r["mmsi"], "author_id": str(r["author_id"]), "body": r["body"],
-            "created_at": _ms(r["created_at"])}
+            "created_at": _ms(r["created_at"]), "kind": r["kind"], "mmsis": list(r["mmsis"])}
 
 
 class PgStore:
     def __init__(self, pool):
         self.pool = pool
+        self.inv = PgInvites(pool)       # invites with an addressee (invites.py)
 
     async def upsert_user(self, sub: str) -> dict:
         r = await self.pool.fetchrow(
@@ -112,7 +115,7 @@ class PgStore:
         uid = uuid.UUID(user_id)
         async with self.pool.acquire() as con, con.transaction():
             r = await con.fetchrow("SELECT session_id, used_by FROM collab_invites WHERE token_hash = $1 "
-                                   "AND expires_at > now() FOR UPDATE", token_hash)
+                                   "AND expires_at > now() AND revoked_at IS NULL AND declined_at IS NULL FOR UPDATE", token_hash)
             if r is None or r["used_by"] not in (None, uid):
                 return None
             sid = r["session_id"]
@@ -144,10 +147,11 @@ class PgStore:
         return await self.pool.fetchval("DELETE FROM collab_list WHERE session_id = $1 AND mmsi = $2 RETURNING true",
                                         uuid.UUID(session_id), mmsi) is not None
 
-    async def add_document(self, session_id: str, user_id: str, mmsi: int | None, body: str) -> dict:
-        r = await self.pool.fetchrow("INSERT INTO collab_documents (session_id, mmsi, author_id, body) "
-                                     "VALUES ($1, $2, $3, $4) RETURNING *",
-                                     uuid.UUID(session_id), mmsi, uuid.UUID(user_id), body)
+    async def add_document(self, session_id: str, user_id: str, mmsi: int | None, body: str,
+                           kind: str = "note", mmsis: list[int] = ()) -> dict:
+        r = await self.pool.fetchrow("INSERT INTO collab_documents (session_id, mmsi, author_id, body, kind, mmsis) "
+                                     "VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+                                     uuid.UUID(session_id), mmsi, uuid.UUID(user_id), body, kind, list(mmsis))
         return _doc(r)
 
     async def add_activity(self, session_id: str, user_id: str, kind: str, mmsi: int | None = None) -> None:
@@ -172,6 +176,7 @@ class MemoryStore:
         self.lists: dict[tuple, dict] = {}          # (sid, mmsi) -> entry
         self.docs: list[dict] = []
         self.acts: list[dict] = []
+        self.inv = MemInvites(self)
         self._ids = itertools.count(1)
         self._clock = 0
 
@@ -236,7 +241,7 @@ class MemoryStore:
 
     async def accept_invite(self, token_hash: str, user_id: str):
         inv = self.invites.get(token_hash)
-        if inv is None or inv["used_by"] not in (None, user_id) or inv["expires_at"] <= time.time() * 1000:
+        if inv is None or inv.get("revoked") or inv.get("declined") or inv["used_by"] not in (None, user_id) or inv["expires_at"] <= time.time() * 1000:
             return None
         sid = inv["session_id"]
         if (sid, user_id) in self.members:
@@ -264,9 +269,10 @@ class MemoryStore:
     async def list_remove(self, session_id: str, mmsi: int) -> bool:
         return self.lists.pop((session_id, mmsi), None) is not None
 
-    async def add_document(self, session_id: str, user_id: str, mmsi, body: str) -> dict:
+    async def add_document(self, session_id: str, user_id: str, mmsi, body: str, kind: str = "note",
+                           mmsis: list[int] = ()) -> dict:
         d = {"id": next(self._ids), "session_id": session_id, "mmsi": mmsi, "author_id": user_id, "body": body,
-             "created_at": self._now()}
+             "created_at": self._now(), "kind": kind, "mmsis": list(mmsis)}
         self.docs.append(d)
         return {k: v for k, v in d.items() if k != "session_id"}
 

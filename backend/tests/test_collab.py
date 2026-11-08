@@ -174,6 +174,7 @@ def test_identity_sessions_invites_list_and_documents(api):
     assert api.post(f"/invites/{inv['token']}/accept", headers=aid).status_code == 200    # its user can reopen it
     assert api.post(f"/sessions/{sid}/invites", headers=aid).status_code == 403          # owner only
     assert api.get("/sessions", headers=aid).json()["sessions"][0]["role"] == "member"
+    assert api.get("/sessions", headers=aid).json()["sessions"][0]["online"] == []
 
     e = api.post(f"/sessions/{sid}/list", json={"mmsi": SHIP}, headers=aid).json()["entry"]
     assert e["status"] == "open" and e["added_by"] == joined.json()["members"][1]["id"]
@@ -224,3 +225,54 @@ def test_live_over_the_real_socket(api):
         assert users[0]["viewing"] == SHIP
         api.post(f"/sessions/{sid}/list", json={"mmsi": SHIP}, headers=ham)
         assert _until(w2, "list_delta")["entry"]["mmsi"] == SHIP
+
+
+def test_briefing_documents_and_session_summary(api, monkeypatch):
+    from dvm.briefing import gemini
+    ham, aid = as_("hamish"), as_("aiden")
+    sid = api.post("/sessions", json={"title": "Baltic gaps"}, headers=ham).json()["id"]
+    tok = api.post(f"/sessions/{sid}/invites", headers=ham).json()["token"]
+    api.post(f"/invites/{tok}/accept", headers=aid)
+
+    saved = api.post(f"/sessions/{sid}/documents", headers=aid,
+                     json={"kind": "briefing", "mmsis": [SHIP, OTHER], "body": "Two ships went quiet."})
+    assert saved.status_code == 201 and saved.json()["document"]["kind"] == "briefing"
+    assert saved.json()["document"]["mmsis"] == [SHIP, OTHER]
+    note = api.post(f"/sessions/{sid}/documents", json={"mmsi": SHIP, "body": "this is sus"}, headers=ham).json()["document"]
+    assert note["kind"] == "note" and note["mmsis"] == []
+    # a briefing must name its ships, and the summary kind can't be posted by hand
+    assert api.post(f"/sessions/{sid}/documents", json={"kind": "briefing", "body": "x"}, headers=ham).status_code == 422
+    assert api.post(f"/sessions/{sid}/documents", json={"kind": "summary", "body": "x"}, headers=ham).status_code == 422
+
+    seen = {}
+
+    async def fake(facts, key=None):
+        seen.update(facts)
+        return "The team looked at two ships."
+    monkeypatch.setattr(gemini, "summarise_session", fake)
+    api.post(f"/sessions/{sid}/list", json={"mmsi": SHIP}, headers=aid)
+    r = api.post(f"/sessions/{sid}/summary", headers=ham)
+    assert r.status_code == 201 and r.json()["document"]["kind"] == "summary"
+    assert r.json()["document"]["body"] == "The team looked at two ships." and r.json()["document"]["mmsis"] == [SHIP]
+    assert seen["session"] == "Baltic gaps" and {d["author"] for d in seen["documents"]} == {"A member"}
+    assert seen["tracked_ships"][0]["mmsi"] == SHIP and len(seen["documents"]) == 2
+    assert api.get(f"/sessions/{sid}", headers=aid).json()["documents"][-1]["kind"] == "summary"
+    assert api.post(f"/sessions/{sid}/summary", headers=as_("mano")).status_code == 404   # not a member
+
+
+def test_session_summary_without_a_gemini_key_is_503(api, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    sid = api.post("/sessions", json={"title": "x"}, headers=as_("hamish")).json()["id"]
+    assert api.post(f"/sessions/{sid}/summary", headers=as_("hamish")).status_code == 503
+
+
+def test_summarise_session_parses_the_model_answer_and_retries_once(monkeypatch):
+    from dvm.briefing import gemini
+    good = {"steps": [{"type": "model_output", "content": [{"type": "text", "text": '{"summary": " Fine. "}'}]}]}
+    bad = {"steps": [{"type": "model_output", "content": [{"type": "text", "text": "not json"}]}]}
+    answers = [bad, good]
+    monkeypatch.setattr(gemini, "_post", lambda payload, key: answers.pop(0))
+    assert asyncio.run(gemini.summarise_session({"session": "x"}, key="k")) == "Fine."
+    monkeypatch.setattr(gemini, "_post", lambda payload, key: bad)
+    with pytest.raises(gemini.BriefingError):
+        asyncio.run(gemini.summarise_session({}, key="k"))

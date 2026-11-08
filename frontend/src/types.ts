@@ -95,4 +95,5 @@ export type ClientMsg =
   | { type: "detail"; mmsi: number }
   | { type: "session_join"; session_id: string; dev_user?: string }   // collaboration (src/collab/socket.ts)
   | { type: "session_leave" }
+  | { type: "auth"; dev_user: string }                                  // local dev only (VITE_AUTH=off)
   | { type: "presence"; viewing: number | null; following: number[]; bbox: [number, number, number, number] | null; private: boolean };
