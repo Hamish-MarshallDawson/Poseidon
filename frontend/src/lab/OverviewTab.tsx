@@ -62,13 +62,13 @@ const VS: Record<string, string> = { route: 'a straight-line guess', godark: 'gu
 /** The champion's held-out number over time as steps (higher is better), with the live hourly figure as dots when the
  *  live figure is the same measure at the same horizon (route); never two measures on one axis. */
 function ChampionChart({ target, name, series, metrics, champion, h, sameStat }: { target: string; name: string; series: { t: number; v: number }[]; metrics: OverviewTabProps['metrics']; champion: string; h: number; sameStat: boolean }) {
+  const [now] = useState(() => Date.now())
   if (!series.length) return <p className="lab-empty">No champion history recorded yet.</p>
   const live = sameStat && target === 'route'
     ? metrics.route.filter((r) => r.horizon_s === h && (r.mode ?? 'live') === 'live' && r.n > 0 && (r.model_version === champion || champion.replace(/-cal\d+$/, '') === r.model_version)
         && r.median_err_m != null && r.baseline_median_err_m)
         .map((r) => ({ x: r.t, y: 1 - r.median_err_m! / r.baseline_median_err_m!, n: r.n }))
     : []
-  const [now] = useState(() => Date.now())
   const xs = [...series.map((p) => p.t), ...live.map((p) => p.x), now]
   const xd = pad(extent(xs), 0.04)
   const yd = pad(extent([0, ...series.map((p) => p.v), ...live.map((p) => p.y)]), 0.1)
