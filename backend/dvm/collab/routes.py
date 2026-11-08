@@ -151,8 +151,8 @@ def make_router() -> APIRouter:
                 raise HTTPException(422, "to must be a user id or an email address")
             if not await store.inv.exists(to_user):
                 raise HTTPException(404, "no such user")
-        if to_user == user["id"]:
-            raise HTTPException(422, "you are already in this session")
+        if to_user and await store.member(sid, to_user):   # you, or someone in already: else a pending invite nobody sees
+            raise HTTPException(409, "already in this session")
         token = secrets.token_urlsafe(24)
         expires = int((time.time() + INVITE_DAYS * 86400) * 1000)
         inv = await store.inv.create(sid, user["id"], hashlib.sha256(token.encode()).hexdigest(), expires,
@@ -185,6 +185,7 @@ def make_router() -> APIRouter:
         sid, joined = got
         detail = await _joined(store, sid, joined, user)
         await _poke(detail["created_by"], {"type": "invites_changed"})
+        await _poke(user["id"], {"type": "invites_changed"})   # the invite also leaves my other tabs
         return detail
 
     @r.post("/invites/{invite_id}/decline", status_code=204)
@@ -193,6 +194,7 @@ def make_router() -> APIRouter:
         if got is None:
             raise HTTPException(404, "invite not found")
         await _poke(got["created_by"], {"type": "invites_changed"})
+        await _poke(user["id"], {"type": "invites_changed"})   # and from my other tabs
 
     @r.delete("/invites/{invite_id}", status_code=204)
     async def revoke_invite(invite_id: uuid.UUID, user: dict = Depends(current_user)) -> None:

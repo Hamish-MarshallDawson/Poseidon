@@ -66,7 +66,7 @@ def test_email_invite_matches_once_the_user_has_an_email(api):
     ham, aid, mano, ids, sid = setup(api)
     assert api.post(f"/sessions/{sid}/invites", json={"to": "not-an-email@"}, headers=ham).status_code == 422
     assert api.post(f"/sessions/{sid}/invites", json={"to": "nobody"}, headers=ham).status_code == 422
-    assert api.post(f"/sessions/{sid}/invites", json={"to": ids["ham"]}, headers=ham).status_code == 422
+    assert api.post(f"/sessions/{sid}/invites", json={"to": ids["ham"]}, headers=ham).status_code == 409
     inv = api.post(f"/sessions/{sid}/invites", json={"to": " Aiden@Example.com "}, headers=ham).json()
     assert api.get("/invites", headers=aid).json()["incoming"] == []
     api.post("/me", json={"name": "Aiden", "email": "aiden@example.com"}, headers=aid)
@@ -85,3 +85,55 @@ def test_push_when_an_invite_arrives_and_when_it_changes(api):
         assert m["invite_id"] == inv["id"] and m["session_id"] == sid
         api.delete(f"/invites/{inv['id']}", headers=ham)
         _until(w, "invites_changed")
+
+
+def test_no_invite_for_a_member_and_my_other_tabs_hear_of_accept_and_decline(api):
+    ham, aid, mano, ids, sid = setup(api)
+    inv = api.post(f"/sessions/{sid}/invites", json={"to": ids["aid"]}, headers=ham).json()
+    with api.websocket_connect("/ws") as w:
+        w.send_json({"type": "auth", "dev_user": "aiden"})
+        w.send_json({"type": "presence"})
+        assert api.post(f"/invites/{inv['id']}/accept", headers=aid).status_code == 200
+        _until(w, "invites_changed")                                                      # Aiden's other tab clears its badge
+    assert api.post(f"/sessions/{sid}/invites", json={"to": ids["aid"]}, headers=ham).status_code == 409   # already in
+    b = api.post(f"/sessions/{sid}/invites", json={"to": ids["mano"]}, headers=ham).json()
+    with api.websocket_connect("/ws") as w:
+        w.send_json({"type": "auth", "dev_user": "mano"})
+        w.send_json({"type": "presence"})
+        assert api.post(f"/invites/{b['id']}/decline", headers=mano).status_code == 204
+        _until(w, "invites_changed")
+
+
+def test_a_dropped_connection_is_retried_once():
+    import asyncio
+    import asyncpg
+    from dvm.collab.invites import retry_dropped
+
+    @retry_dropped
+    class Store:
+        calls = 0
+
+        def __init__(self, err):
+            self.err = err
+
+        async def get(self):
+            Store.calls += 1
+            if Store.calls == 1:
+                raise self.err
+            return "ok"
+
+    for err in (asyncpg.exceptions.AdminShutdownError("terminating connection due to administrator command"),
+                asyncpg.ConnectionDoesNotExistError(), asyncpg.InterfaceError("connection is closed"),
+                ConnectionResetError()):
+        Store.calls = 0
+        assert asyncio.run(Store(err).get()) == "ok" and Store.calls == 2
+    @retry_dropped
+    class Dead(Store):
+        async def get(self):
+            Store.calls += 1
+            raise self.err
+
+    Store.calls = 0   # fails again on the retry: the error surfaces, no endless loop
+    with pytest.raises(asyncpg.InterfaceError):
+        asyncio.run(Dead(asyncpg.InterfaceError("closed")).get())
+    assert Store.calls == 2

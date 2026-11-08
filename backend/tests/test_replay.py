@@ -13,8 +13,33 @@ def pos(mmsi, t, lat, lon=20.0):
 
 
 class FakeHistory:
-    def __init__(self, positions, identities=None):
+    """The SQL in replay.TigerHistory, in Python."""
+
+    def __init__(self, positions, identities=None, gaps=(), scores=(), routes=()):
         self.positions, self.ids = positions, identities or {}
+        self.gaps, self.score_rows, self.route_rows = list(gaps), list(scores), list(routes)
+
+    async def last_positions_of(self, mmsis, t, since):
+        return [p for p in await self.latest_positions(t, (t - since) // 1000) if p["mmsi"] in mmsis]
+
+    async def gap_versions(self, a, b):
+        known = lambda g: max(g["detected_at"], g["start_ts"] + g["duration_s"] * 1000)   # noqa: E731
+        newest = {}
+        for g in sorted(self.gaps, key=lambda g: g["version"]):
+            if b - replay.GAP_LOOKBACK_MS < g["detected_at"] <= b and (a is None or a < known(g)) and known(g) <= b:
+                newest[g["id"]] = g
+        return list(newest.values())
+
+    async def scores(self, a, b):
+        newest = {}
+        for r in sorted(self.score_rows, key=lambda r: r["made_at"]):
+            if a < r["made_at"] <= b:
+                newest[(r["mmsi"], r["target"])] = r
+        return list(newest.values())
+
+    async def routes(self, a, b, gap_ids=None):
+        return [r for r in self.route_rows if a < r["made_at"] <= b and r["gap_id"]
+                and (gap_ids is None or r["gap_id"] in gap_ids)]
 
     async def range(self):
         times = [p["ts"] for p in self.positions]
@@ -27,7 +52,7 @@ class FakeHistory:
                 latest[p["mmsi"]] = p
         return list(latest.values())
 
-    async def identities(self, t, window_s):
+    async def identities(self, t, window_s, extra=()):
         return dict(self.ids)
 
     async def between(self, a, b):
@@ -186,3 +211,119 @@ def test_failed_first_seek_leaves_the_client_live(monkeypatch):
     except ConnectionError:
         pass
     assert c.replay is None   # still gets live deltas instead of a frozen map
+
+
+# ---- gaps, go-dark risk and route predictions as known at the replay time (#121) ----
+
+M = 60_000
+SHIP, OTHER = 230000001, 244000002
+
+
+def gap(version, state, detected_at, known_at, end_ts=None, flag="deliberate_candidate", start=T0 + 2 * M):
+    return {"id": f"gap-{SHIP}-{start}", "version": version, "mmsi": SHIP, "state": state, "start_ts": start,
+            "end_ts": end_ts, "detected_at": detected_at, "duration_s": (known_at - start) // 1000,
+            "expected_interval_s": 10.0, "last_lat": 60.2, "last_lon": 20.0, "last_sog_kn": 10.0,
+            "last_cog_deg": 90.0, "last_nav_status": 0, "next_lat": None, "next_lon": None, "implied_speed_kn": None,
+            "draught_before_m": None, "draught_after_m": None, "neighbours_heard": 5, "neighbours_baseline": 5,
+            "cell_id": "c", "coverage_flag": flag, "src": "derived", "gfw_intentional": None, "q": []}
+
+
+def score(mmsi, made_at, p, mode="backtest"):
+    return {"id": f"s-{mmsi}-{made_at}", "mmsi": mmsi, "target": "dark_6h", "made_at": made_at, "horizon_s": 21600,
+            "p": p, "model_version": "godark-test", "feature_version": "f1", "features": {"sog": 10.0},
+            "contrib": {}, "mode": mode}
+
+
+def route(made_at, horizon_s, lat):
+    return {"id": f"r-{made_at}-{horizon_s}", "mmsi": SHIP, "made_at": made_at, "as_of": T0 + 2 * M,
+            "model_version": "route-test", "horizon_s": horizon_s, "lat": lat, "lon": 20.5, "radius_m_80": 5000.0,
+            "radius_m_95": 9000.0, "base_lat": lat, "base_lon": 20.4, "gap_id": f"gap-{SHIP}-{T0 + 2 * M}",
+            "feature_version": "f1", "mode": "backtest"}
+
+
+# SHIP reports until T0 + 2 min, a gap is detected at +35 min and closes when it reappears at +90 min. OTHER keeps
+# reporting. Scores at +10 and +50 min, route predictions at +40 and +100 min (the second after the close).
+TRACK = ([pos(SHIP, T0 + i * M, 60.0 + i / 100) for i in range(3)] + [pos(SHIP, T0 + 90 * M, 60.9)]
+         + [pos(OTHER, T0 + i * 5 * M, 59.5) for i in range(40)])
+GAPS = [gap(1, "open", T0 + 35 * M, T0 + 35 * M, flag="unknown"),
+        gap(2, "open", T0 + 35 * M, T0 + 45 * M),                          # re-check: now deliberate
+        gap(3, "closed", T0 + 35 * M, T0 + 90 * M, end_ts=T0 + 90 * M)]
+SCORES = [score(SHIP, T0 + 10 * M, 0.3), score(OTHER, T0 + 10 * M, 0.1, mode="live"),
+          score(OTHER, T0 + 50 * M, 0.6)]
+ROUTES = [route(T0 + 40 * M, 3600, 60.4), route(T0 + 40 * M, 10800, 60.7), route(T0 + 100 * M, 3600, 61.0)]
+GID = f"gap-{SHIP}-{T0 + 2 * M}"
+
+
+def history():
+    return FakeHistory(TRACK, {SHIP: {"name": "ALPHA"}}, GAPS, SCORES, ROUTES)
+
+
+def ships(msg):
+    return {v["mmsi"]: v for v in msg["vessels"]}
+
+
+def test_seek_shows_gaps_risk_and_predictions_known_at_t():
+    async def main():
+        s, sent = session(history())
+        await s.seek(T0 + 60 * M)
+        snap = sent[-1]
+        [g] = snap["gaps"]
+        assert g["id"] == GID and g["state"] == "open" and g["version"] == 2   # the close at +90 min is not known yet
+        assert (g["pred_lat"], g["pred_horizon_s"], g["pred_model"]) == (60.4, 3600, "route-test")
+        v = ships(snap)
+        assert v[SHIP]["status"] == "gap_open" and v[SHIP]["open_gap_id"] == GID   # silent 58 min, kept by its gap
+        assert (v[SHIP]["risk_p"], v[SHIP]["risk_rank"]) == (0.3, 2)
+        assert (v[OTHER]["risk_p"], v[OTHER]["risk_rank"]) == (0.6, 1)             # newest score by t, any mode
+        wl = snap["watchlist"]["entries"]
+        assert [e["mmsi"] for e in wl] == [OTHER, SHIP]
+        assert "OPEN_GAP" in wl[1]["reason_codes"] and wl[1]["decision"] in ("watch", "inspect")
+    asyncio.run(main())
+
+
+def test_seek_before_anything_was_known_has_none_of_it():
+    async def main():
+        s, sent = session(history())
+        await s.seek(T0 + 5 * M)
+        snap = sent[-1]
+        assert snap["gaps"] == [] and snap["watchlist"]["entries"] == []
+        assert all(v["risk_p"] is None and v["status"] == "active" for v in snap["vessels"])
+    asyncio.run(main())
+
+
+def test_seek_after_the_close_shows_the_closed_gap_for_an_hour():
+    async def main():
+        s, sent = session(history())
+        await s.seek(T0 + 100 * M)
+        [g] = sent[-1]["gaps"]
+        assert g["state"] == "closed" and "pred_lat" not in g
+        assert ships(sent[-1])[SHIP]["status"] == "active"
+        await s.seek(T0 + 151 * M)
+        assert sent[-1]["gaps"] == []
+    asyncio.run(main())
+
+
+def test_play_carries_gap_risk_and_prediction_changes_in_deltas():
+    async def main():
+        s, sent = session(history())
+        await s.seek(T0 + 30 * M)
+        assert sent[-1]["gaps"] == []
+        await s.set_speed(300)   # 5 min a step
+        deltas = []
+        for _ in range(14):     # to +100 min
+            n = len(sent)
+            await s.step()
+            deltas += [m for m in sent[n:] if m["type"] == "delta"]
+        at = {d["now_ts"]: d for d in deltas}
+        opened = at[T0 + 35 * M]
+        assert [(g["id"], g["version"], g["state"]) for g in opened["gaps"]] == [(GID, 1, "open")]
+        assert ships(opened)[SHIP]["status"] == "silent"           # coverage flag unknown at first
+        assert ships(at[T0 + 45 * M])[SHIP]["status"] == "gap_open"
+        [p] = at[T0 + 40 * M]["gaps"]
+        assert p["pred_lat"] == 60.4                                # the prediction arrives on the open gap
+        risk = at[T0 + 50 * M]
+        assert ships(risk)[OTHER]["risk_p"] == 0.6 and risk["watchlist"]["entries"][0]["mmsi"] == OTHER
+        closed = at[T0 + 90 * M]
+        assert closed["gaps"][0]["state"] == "closed" and ships(closed)[SHIP]["status"] == "active"
+        assert at[T0 + 70 * M]["watchlist"] is not None             # SHIP's +10 min score aged out after an hour
+        assert all(not d["gaps"] for d in deltas if d["now_ts"] == T0 + 100 * M)   # post-close prediction: no gap
+    asyncio.run(main())

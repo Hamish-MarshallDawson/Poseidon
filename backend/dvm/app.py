@@ -14,8 +14,9 @@ import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import auth, collab, config, coverage, gaps, limits, replay, store as store_sql
+from dvm import auth, collab, config, coverage, gaps, limits, predict, replay, store as store_sql
 from dvm.briefing.routes import make_router as briefing_router
+from dvm.predict.routes import make_router as predict_router
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import GAP_KEEP_MS as LIVE_GAP_KEEP_MS, Live
 from dvm.merge import FeedMerger
@@ -112,6 +113,10 @@ class Hub:
         self.pending_gaps: list[dict] = []     # gap versions not yet sent to browsers
         self.gaps_warm: str = "pending" if self.store else "off"   # pending | ready | failed: <error> | off
         self.trails = Trails()
+        self.watchlist: dict | None = None         # from the predictor (dvm/predict/forecast.py), when PREDICT=1
+        self.pending_watchlist: dict | None = None
+        self._gap_pred_sent: dict[str, dict] = {}
+        self._risk_sent: dict[int, tuple] = {}
 
     def ingest(self, rec, now: int) -> None:
         """One normalised record from any feed: merge it across feeds, then map and store what the merger emits."""
@@ -135,6 +140,29 @@ class Hub:
         if self.store:
             self.store.add_gaps(events)
 
+    def on_forecast(self, fc) -> None:
+        """After each predictor cycle: risk on the ships, route predictions on open gaps, and the watchlist."""
+        now = now_ms()
+        self.live.forecast = fc   # the predictor updates this object in place: compare with what was last sent
+        risk = {m: fc.risk_of(m) for m in fc.risk}
+        for m in set(self._risk_sent) | set(risk):
+            if m in self.live.pos and self._risk_sent.get(m) != risk.get(m):
+                self.live.changed.add(m)
+        self._risk_sent = risk
+        sent = {}
+        for gid, g in self.live.gaps.items():
+            if g["state"] == "open" and (fields := fc.gap_fields(gid, now)):
+                sent[gid] = fields
+                if self._gap_pred_sent.get(gid) != fields:
+                    self.pending_gaps.append(g)
+        self._gap_pred_sent = sent
+        prev = {e["mmsi"]: e["rank"] for e in (self.watchlist or {}).get("entries", [])}
+        wl = fc.watchlist(self.live, now, prev)
+        key = lambda w: [(e["mmsi"], e["rank"], e["decision"], e["reason_codes"]) for e in w["entries"]]   # noqa: E731
+        if self.watchlist is None or key(wl) != key(self.watchlist):
+            self.pending_watchlist = wl
+        self.watchlist = wl
+
     def digitraffic_sink(self, rec) -> None:
         try:
             self.ingest(rec, now_ms())
@@ -147,7 +175,8 @@ class Hub:
     def snapshot_msg(self, now: int) -> dict:
         return {"type": "snapshot", "now_ts": now, "vessels": self.live.snapshot(), "trails": {},
                 "gaps": self.live.snapshot_gaps(now),
-                "spoofs": [], "watchlist": {"snapshot_ts": now, "entries": []}, "coverage": [], "stats": self.stats()}
+                "spoofs": [], "watchlist": self.watchlist or {"snapshot_ts": now, "entries": []}, "coverage": [],
+                "stats": self.stats()}
 
     def sources(self) -> list[dict]:
         out = [{"src": "aisstream", "state": self.feed.state, "msgs_per_s": round(self.msgs_per_s, 1)}]
@@ -214,10 +243,11 @@ class Hub:
             self.trails.drop(removed)
             if n % 60 == 0:
                 self.trails.prune(now, self.live.pos)
-            gap_msgs, self.pending_gaps = self.pending_gaps, []
-            if vessels or removed or gap_msgs:
+            gap_msgs, self.pending_gaps = [self.live.gap_out(g, now) for g in self.pending_gaps], []
+            wl, self.pending_watchlist = self.pending_watchlist, None
+            if vessels or removed or gap_msgs or wl:
                 msg = {"type": "delta", "now_ts": now, "vessels": vessels, "removed": removed, "gaps": gap_msgs,
-                       "spoofs": [], "watchlist": None, "stats": self.stats()}
+                       "spoofs": [], "watchlist": wl, "stats": self.stats()}
             elif now - last_sent >= 10_000:
                 msg = {"type": "ping", "now_ts": now}
             else:
@@ -356,6 +386,8 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(hub.store.run()))
         tasks.append(asyncio.create_task(hub.setup_sources_schema()))
         tasks.append(asyncio.create_task(hub.warm_gaps()))
+        if config.PREDICT:   # route and go-dark predictor plus graders (dvm/predict, #121)
+            tasks.append(asyncio.create_task(predict.start(hub.store, hub.on_forecast)))
     else:
         log.warning("TIGER_DATABASE_URL is not set: positions go to the JSONL log only")
     tasks.append(asyncio.create_task(collab.hub.run(hub.store)))   # sessions and presence fan-out (dvm/collab)
@@ -384,6 +416,7 @@ def health() -> dict:
                              "positions": dt.positions, "statics": dt.statics, "last_error": dt.last_error}
                             if (dt := hub.digitraffic) else {"enabled": False}),
             "merger": hub.merger.stats, "sources_schema": hub.sources_schema,
+            "predict": predict.health() if config.PREDICT else {"enabled": False},
             "gaps": {**hub.gaps.stats, "open": len(hub.gaps.open), "warm": hub.gaps_warm,
                      "written": store.gaps_written if store else 0},
             "stats": hub.stats(), "clients": len(hub.clients),
@@ -478,6 +511,8 @@ app.include_router(briefing_router(_CurrentHub(), require_login))   # POST /brie
 # GET /observations, /sources, /model/observations, /model/positions, /model/statics (dvm/sources/routes.py)
 app.include_router(sources_router(lambda: hub.store.pool if hub.store else None, require_login))
 app.include_router(yachts_router(lambda: hub.store.pool if hub.store else None, lambda: hub.live, require_login))   # GET /yachts (#101)
+app.include_router(predict_router(lambda: hub.store.pool if hub.store else None, predict.health, require_login,
+                                 report_dir=config.PREDICT_REPORT_DIR))   # GET /predictions, /model/leaderboard (#121)
 app.include_router(collab.make_router())   # /me, /sessions, /invites (dvm/collab/README.md)
 
 

@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { ui } from '../../store/ui'
 import { Avatar } from '../Avatar'
-import { api } from '../client'
+import { api, CollabError } from '../client'
 import type { IncomingInvite, OutgoingInvite } from '../client'
 import { acceptInviteId, collab, createSession, declineInvite, leaveSession, openSession, refreshInvites, revokeInvite } from '../store'
-import { entry, linkFor, openPanel, saveLink, savedLinks, showJoined } from './state'
+import { entry, linkFor, openPanel, saveLink, savedLinks, say, showJoined } from './state'
 import './entry.css'
 
 // The session bar sits in the toolbar: the session title with members' faces (a switcher), Invite / Join with a red
@@ -28,7 +28,8 @@ export function SessionBar({ onLogout }: { onLogout?: () => void }) {
   const me = collab.use((s) => s.me)
   const incoming = collab.use((s) => s.invites.incoming.length)
   const panel = entry.use((s) => s.panel)
-  if (!me) return null
+  const reconnecting = collab.use((s) => s.reconnecting)
+  if (!me) return reconnecting ? <span className="chip chip-quiet" role="status">Reconnecting…</span> : null
   return (
     <div className="session-bar">
       <SessionSwitcher />
@@ -42,46 +43,53 @@ export function SessionBar({ onLogout }: { onLogout?: () => void }) {
   )
 }
 
+const DEFAULT_TITLE = 'Baltic dark ships'
+
 function SessionSwitcher() {
   const session = collab.use((s) => s.session)
   const sessions = collab.use((s) => s.sessions)
   const me = collab.use((s) => s.me)
   const open = entry.use((s) => s.menu === 'switch')
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(DEFAULT_TITLE)
   const close = () => entry.set({ menu: null })
   const ref = useDismiss(open, close)
   const online = collab.use((s) => s.presence)
   const faces = session ? session.members.slice(0, 4) : []
-  const go = async (id: string) => { close(); const s = await openSession(id); if (s) showJoined(s) }
+  // Keyboard: the menu opens on its first row, or with no sessions yet on the title field (selected).
+  useEffect(() => {
+    if (!open) return
+    const first = ref.current?.querySelector<HTMLElement>('[role=menuitem], input')
+    first?.focus(); if (first instanceof HTMLInputElement) first.select()
+  }, [open, ref])
+  const go = async (id: string) => { close(); if (id === session?.id) return; const s = await openSession(id); if (s) showJoined(s) }
+  const leave = () => { const t = session?.title; close(); leaveSession(); if (t) say(`Left ${t}. Resume it from the session menu.`) }
   const create = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
-    close(); setTitle('')
-    await createSession(title)
+    close(); setTitle(DEFAULT_TITLE)
+    if (await createSession(title)) openPanel(true)       // the next step is inviting someone
   }
+  const label = session ? session.title : sessions.length ? 'Resume session' : 'Start a session'
   return (
     <div className="session-bar__wrap" ref={ref}>
       <button type="button" className={`chip session-bar__title ${open ? 'on' : ''}`} aria-haspopup="menu" aria-expanded={open}
         onClick={() => entry.set({ menu: open ? null : 'switch' })}>
-        {session ? (
-          <>
-            <span className="session-bar__faces">{faces.map((m) => <Avatar key={m.id} user={m} size={18} online={online.some((u) => u.id === m.id)} />)}</span>
-            <span>{session.title}</span>
-          </>
-        ) : <span>No session</span>}
+        {session && <span className="session-bar__faces">{faces.map((m) => <Avatar key={m.id} user={m} size={18} online={online.some((u) => u.id === m.id)} />)}</span>}
+        <span>{label}</span>
       </button>
       {open && (
         <div className="entry-menu" role="menu">
           {sessions.map((s) => (
             <button key={s.id} type="button" role="menuitem" onClick={() => go(s.id)} aria-current={s.id === session?.id}>
-              <span className="invite-row__text">{s.title}</span><span className="muted">{s.members}</span>
+              <span className="invite-row__text">{s.title}</span>
+              <span className="muted">{s.id === session?.id ? 'open' : s.members > 1 ? `${s.members} people` : 'just you'}</span>
             </button>
           ))}
-          {session && <button type="button" role="menuitem" onClick={() => { close(); leaveSession() }}>Just the map</button>}
+          {session && <button type="button" role="menuitem" onClick={leave}>Leave session</button>}
           {(sessions.length > 0 || session) && <hr />}
           <form onSubmit={create}>
-            <input type="text" value={title} maxLength={120} placeholder="New session title" aria-label="New session title" onChange={(e) => setTitle(e.target.value)} />
-            <button type="submit" className="chip" disabled={!title.trim() || !me}>Create</button>
+            <input type="text" value={title} maxLength={120} placeholder="Session title" aria-label="Session title" onChange={(e) => setTitle(e.target.value)} />
+            <button type="submit" className="chip on" disabled={!title.trim() || !me}>{sessions.length || session ? 'New' : 'Start'}</button>
           </form>
         </div>
       )}
@@ -115,63 +123,95 @@ function ProfileMenu({ onLogout }: { onLogout?: () => void }) {
   )
 }
 
-/** The right-column panel: invites waiting for you, invites you sent, and Create invite. Mounted by CollabPanel. */
+/** Copy text that is only known after a server call, inside the click's permission (Safari needs the promise form). */
+async function copyLater(text: Promise<string>) {
+  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+    await navigator.clipboard.write([new ClipboardItem({ 'text/plain': text.then((t) => new Blob([t], { type: 'text/plain' })) })])
+  } else await navigator.clipboard.writeText(await text)
+}
+
+/** Why an invite call failed, in words. */
+function whyNot(e: unknown, to = ''): string {
+  const c = e instanceof CollabError ? e.status : -1
+  if (c === 403) return 'Only the session owner can invite.'
+  if (c === 409) return `${to || 'They'} ${to ? 'is' : 'are'} already in this session.`
+  if (c === 422) return 'That is not a valid email address.'
+  return c === 0 ? 'Cannot reach the server. Try again.' : 'Could not create the invite. Try again.'
+}
+
+/** The right-column panel: invites waiting for you, then (in a session you own) one-click link and email invites. */
 export function InvitePanel() {
   const session = collab.use((s) => s.session)
   const role = collab.use((s) => s.role)
   const { incoming, outgoing } = collab.use((s) => s.invites)
   const [to, setTo] = useState('')
   const [links, setLinks] = useState(savedLinks)
-  const [note, setNote] = useState<string | null>(null)
+  const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => { ref.current?.querySelector<HTMLElement>('[data-first]')?.focus() }, [])   // the keyboard lands on the first action
 
+  const flash = (id: string) => { setCopied(id); window.setTimeout(() => setCopied(null), 1500) }
   const accept = async (i: IncomingInvite) => { const s = await acceptInviteId(i.id); if (s) { openPanel(false); showJoined(s) } }
-  const create = async (e: React.FormEvent) => {
+  const make = async (email?: string) => {
+    const inv = await api.createInvite(session!.id, email)
+    saveLink(inv.id, inv.token); setLinks(savedLinks()); void refreshInvites()
+    return inv
+  }
+  const copyNew = async () => {
+    setNote(null)
+    try { await copyLater(make().then((i) => linkFor(i.token))); flash('new') } catch (e) { setNote({ text: whyNot(e), bad: true }) }
+  }
+  const send = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!session) return
-    try {
-      const inv = await api.createInvite(session.id, to.trim() || undefined)
-      saveLink(inv.id, inv.token); setLinks(savedLinks()); setTo('')
-      setNote(to.trim() ? `Invite sent to ${to.trim()}` : 'Link created. Copy it below.')
-      await refreshInvites()
-    } catch { setNote('Could not create the invite.') }
+    const addr = to.trim()
+    if (!addr) return
+    try { await make(addr); setTo(''); setNote({ text: `Invited ${addr}. They see it on their Invite / Join badge.`, bad: false }) }
+    catch (err) { setNote({ text: whyNot(err, addr), bad: true }) }
   }
   const copy = async (id: string) => {
-    try { await navigator.clipboard.writeText(linkFor(links[id])); setCopied(id); window.setTimeout(() => setCopied(null), 1500) } catch { setNote('Copy failed; select the link yourself.') }
+    try { await navigator.clipboard.writeText(linkFor(links[id])); flash(id) } catch { setNote({ text: 'Copy failed. Allow clipboard access.', bad: true }) }
   }
-  const who = (o: OutgoingInvite) => (o.to === null ? 'Link' : 'email' in o.to ? o.to.email : o.to.name ?? 'Someone')
-  const mine = outgoing.filter((o) => !session || o.session_id === session.id)
+  const who = (o: OutgoingInvite) => (o.to === null ? 'Invite link' : 'email' in o.to ? o.to.email : o.to.name ?? 'Someone')
+  // Accepted invites are the member faces already; pending and declined ones need an action.
+  const mine = session ? outgoing.filter((o) => o.session_id === session.id && o.status !== 'accepted') : []
 
   return (
-    <div className="panel invite-panel" id="invite-panel" role="dialog" aria-label="Invite / Join">
-      <section aria-label="Incoming invites">
-        <h2>Invites for you</h2>
-        {incoming.length === 0 && <p className="muted">None waiting.</p>}
-        {incoming.map((i) => (
-          <div className="invite-row" key={i.id}>
-            <Avatar user={i.from} size={20} />
-            <span className="invite-row__text"><b>{i.from.name ?? 'Someone'}</b> invited you to <em>{i.session_title}</em></span>
-            <button type="button" className="chip on" onClick={() => accept(i)}>Accept</button>
-            <button type="button" className="chip" onClick={() => declineInvite(i.id)}>Decline</button>
-          </div>
-        ))}
-      </section>
-      <section aria-label="Invites you sent">
-        <h2>{session ? <>Invite to <em>{session.title}</em></> : 'Invites you sent'}</h2>
+    <div className="panel invite-panel" id="invite-panel" role="dialog" aria-label="Invite / Join" ref={ref}>
+      {incoming.length > 0 && (
+        <section aria-label="Invites for you">
+          <h2>Invites for you</h2>
+          {incoming.map((i, n) => (
+            <div className="invite-row" key={i.id}>
+              <Avatar user={i.from} size={20} />
+              <span className="invite-row__text"><b>{i.from.name ?? 'Someone'}</b> invited you to <em>{i.session_title}</em></span>
+              <button type="button" className="chip on" onClick={() => accept(i)} data-first={n === 0 ? '' : undefined}>Accept</button>
+              <button type="button" className="chip" onClick={() => declineInvite(i.id)}>Decline</button>
+            </div>
+          ))}
+        </section>
+      )}
+      <section aria-label="Invite people">
         {session && role === 'owner' && (
-          <form className="invite-create" onSubmit={create}>
-            <input type="text" value={to} maxLength={254} placeholder="Email, or blank for a link" aria-label="Email to invite" onChange={(e) => setTo(e.target.value)} />
-            <button type="submit" className="chip on">Create invite</button>
-          </form>
+          <>
+            <h2>Invite to <em>{session.title}</em></h2>
+            <button type="button" className="chip on invite-copy" onClick={copyNew} data-first={incoming.length ? undefined : ''}>
+              {copied === 'new' ? 'Link copied' : 'Copy invite link'}
+            </button>
+            <form className="invite-create" onSubmit={send}>
+              <input type="email" value={to} maxLength={254} placeholder="or invite by email" aria-label="Invite by email" onChange={(e) => { setTo(e.target.value); setNote(null) }} />
+              <button type="submit" className="chip" disabled={!to.trim()}>Send</button>
+            </form>
+          </>
         )}
         {session && role !== 'owner' && <p className="muted">Only the session owner can invite.</p>}
-        {!session && <p className="muted">Open or create a session to invite people.</p>}
-        {note && <p className="muted" role="status">{note}</p>}
+        {!session && incoming.length === 0 && <p className="muted">Start a session to invite people.</p>}
+        {note && <p className={`muted ${note.bad ? 'bad' : ''}`} role={note.bad ? 'alert' : 'status'}>{note.text}</p>}
         {mine.map((o) => (
           <div className="invite-row" key={o.id}>
-            <span className="invite-row__text">{who(o)} · {o.status}</span>
-            {links[o.id] && <button type="button" className="chip" onClick={() => copy(o.id)}>{copied === o.id ? 'Copied' : 'Copy link'}</button>}
-            <button type="button" className="chip" onClick={() => revokeInvite(o.id)}>Revoke</button>
+            <span className="invite-row__text">{who(o)} · {o.status === 'declined' ? 'declined' : 'waiting'}</span>
+            {o.status === 'pending' && links[o.id] && <button type="button" className="chip" onClick={() => copy(o.id)}>{copied === o.id ? 'Copied' : 'Copy'}</button>}
+            <button type="button" className="chip" onClick={() => revokeInvite(o.id)}>{o.status === 'declined' ? 'Remove' : 'Revoke'}</button>
           </div>
         ))}
       </section>
@@ -185,7 +225,7 @@ export function InvitePanelSlot() {
   const layers = ui.use((s) => s.layersOpen)
   useEffect(() => {
     if (!open) return
-    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') openPanel(false) }
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { openPanel(false); document.querySelector<HTMLElement>('.invite-btn')?.focus() } }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
   }, [open])

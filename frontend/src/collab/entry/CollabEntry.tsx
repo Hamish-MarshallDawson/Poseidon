@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { acceptInviteToken, collab, openSession } from '../store'
-import { entry, showJoined } from './state'
+import { entry, showJoined, takeInvite } from './state'
 import './entry.css'
 
 // Mounted once in the logged-in app: the ?invite=<token> link flow, the one entry pop-up, and the joined toast.
@@ -10,9 +10,8 @@ import './entry.css'
 function useInviteLink(ready: boolean) {
   useEffect(() => {
     if (!ready) return
-    const token = new URLSearchParams(location.search).get('invite')
+    const token = takeInvite()
     if (!token) return
-    const u = new URL(location.href); u.searchParams.delete('invite'); history.replaceState(null, '', u)
     entry.set({ popupDone: true })                    // an invite link replaces the pop-up
     void acceptInviteToken(token).then((s) => { if (s) showJoined(s) })
   }, [ready])
@@ -61,6 +60,8 @@ function EntryPopup() {
 
 function JoinedToast() {
   const t = entry.use((s) => s.toast)
+  const n = entry.use((s) => s.notice)
+  if (n) return <div className={`panel entry-toast ${n.bad ? 'bad' : ''}`} role={n.bad ? 'alert' : 'status'}>{n.text}</div>
   if (!t) return null
   return (
     <div className="panel entry-toast" role="status">
