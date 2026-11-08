@@ -19,6 +19,7 @@ export function ChampionsTab({ model, runs, proposals, loadDetail, now }: Champi
   const latest = useMemo(() => latestDecided(all, target), [all, target])
   const rows = useMemo(() => proposalRows(proposals ?? [], target), [proposals, target])
   const [open, setOpen] = useState<string | null>(null)
+  const [mountedAt] = useState(() => Date.now())
   const openRun = open ? byId.get(open) : undefined
 
   if (runs == null) return <p className="lc-muted" role="status">Loading runs…</p>
@@ -48,7 +49,7 @@ export function ChampionsTab({ model, runs, proposals, loadDetail, now }: Champi
 
       <section className="lc-card" aria-label="Timeline of runs">
         <h3 className="lc-h">Every run, and the champion over time</h3>
-        <Timeline points={points} target={target} now={now ?? Date.now()} onOpen={setOpen} />
+        <Timeline points={points} target={target} now={now ?? mountedAt} onOpen={setOpen} />
         <p className="lc-caption">
           {champ ? <>Champion now: <button type="button" className="lc-link lc-mono" onClick={() => setOpen(champ.run.run_id)}>{champ.run.run_id}</button>. </> : 'No champion yet. '}
           Click a dot for the run's story.
