@@ -94,3 +94,15 @@ def test_every_refresh_writes_under_poseidon_data(tmp_path):
     out = subprocess.run([sys.executable, "-c", code], env=env | {"POSEIDON_DATA": str(tmp_path)},
                          capture_output=True, text=True, check=True, cwd=auto.ROOT).stdout.split()
     assert len(out) == 6 and all(p.startswith(str(tmp_path)) for p in out), out
+
+
+def test_every_target_default_config_runs_on_a_fresh_registry():
+    """Round 0 of a fresh registry (the server's first cycle) runs each target's default config, then the
+    second-seed check runs it with seed + 1: both must validate."""
+    from ml.core.propose import validate
+    from ml.core.target import get_target
+    for t in ("godark", "fishing", "route"):
+        spec = get_target(t)
+        cfg = dict(spec.default_config)
+        assert validate(spec, cfg) == [], t
+        assert validate(spec, cfg | {"seed": cfg["seed"] + 1}) == [], t
