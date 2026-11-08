@@ -10,6 +10,7 @@
 .lab-chart__dot { fill: currentColor; }
 .lab-chart__band { fill: currentColor; fill-opacity: 0.16; stroke: none; }
 .lab-chart__bar { fill: currentColor; fill-opacity: 0.75; }
+.lab-chart__bar.soft { fill-opacity: 0.3; }
 .lab-chart__marker { fill: currentColor; stroke: var(--dvm-bg-panel); stroke-width: 1; }
 .lab-chart__marker.stroke { fill: none; stroke: currentColor; stroke-width: 2; }
 .lab-chart__rule { stroke: currentColor; stroke-opacity: 0.25; }

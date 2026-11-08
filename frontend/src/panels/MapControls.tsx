@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef } from 'react'
 import { SessionBar, InvitePanelSlot } from '../collab/entry/SessionBar'
+import { LabChip } from '../lab/LabEntry'
 import { collab } from '../collab/store'
 import { ui, type UIState } from '../store/ui'
 import { Switch } from '../ui'
@@ -131,6 +132,7 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
         <SessionBar onLogout={onLogout} />
         <ReviewChip />
         <ChannelChip />
+        <LabChip />
         <button type="button" className={`chip ${layersOpen ? 'on' : ''}`} aria-expanded={layersOpen} aria-controls="layers-panel"
           onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, reviewOpen: false }))}>
           <span className="chip-square" aria-hidden />Display

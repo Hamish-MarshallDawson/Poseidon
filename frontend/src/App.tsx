@@ -20,6 +20,7 @@ import { loadMe } from './collab/store'
 import { bindSocket } from './collab/socket'
 import { Presence } from './collab/presence/Presence'
 import { CollabEntry } from './collab/entry/CollabEntry'
+import { LabRoot } from './lab/LabEntry'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
 const WindowsDemo = lazy(() => import('./windows/demo/WindowsDemo'))
@@ -85,6 +86,7 @@ export function Monitor({ getToken, onLogout, profile }: { getToken: () => Promi
       <ReplayChrome />
       <ScrubBar />
       <CollabEntry />
+      <LabRoot getToken={getToken} />
     </>
   )
 }

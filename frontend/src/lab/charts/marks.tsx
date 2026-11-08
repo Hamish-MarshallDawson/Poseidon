@@ -102,12 +102,14 @@ export function Band<T extends Interval>({ data, tone = 'accent', step, until, t
   )
 }
 
-export type Marker = { x: number; y?: number | null; shape?: Shape; tone?: Tone; size?: number }
+export type Marker = { x: number; y?: number | string | null; shape?: Shape; tone?: Tone; size?: number }
 
-/** Point markers. A marker with no y sits on the event rail along the top of the plot, with a faint rule down. */
+/** Point markers. y may be a number, or a category on a band y axis (centred in its band). A marker with no y sits
+ * on the event rail along the top of the plot, with a faint rule down. */
 export function Markers<T extends Marker>({ data, tone = 'accent', shape = 'circle', size = 4, rule, tip, label }: { data: T[]; tone?: Tone; shape?: Shape; size?: number; rule?: boolean; tip?: (d: T) => ReactNode; label?: string }) {
-  const { X, Y, box } = useChart()
-  const at = (d: T): [number, number] => [X(d.x), fin(d.y) ? Y(d.y) : box.top + 6]
+  const { X, Y, box, yBand } = useChart()
+  const placed = (d: T) => typeof d.y === 'string' || fin(d.y)
+  const at = (d: T): [number, number] => [X(d.x), typeof d.y === 'string' ? Y(d.y) + yBand / 2 : fin(d.y) ? Y(d.y) : box.top + 6]
   return (
     <g>
       {data.map((d, i) => {
@@ -115,7 +117,7 @@ export function Markers<T extends Marker>({ data, tone = 'accent', shape = 'circ
         const s = d.shape ?? shape
         return (
           <g key={i} className={`lab-tone-${d.tone ?? tone}`}>
-            {(rule || !fin(d.y)) && <line x1={cx} x2={cx} y1={cy} y2={box.bottom} className="lab-chart__rule" />}
+            {(rule || !placed(d)) && <line x1={cx} x2={cx} y1={cy} y2={box.bottom} className="lab-chart__rule" />}
             <path d={shapePath(s, cx, cy, d.size ?? size)} className={`lab-chart__marker${s === 'cross' ? ' stroke' : ''}`} />
           </g>
         )
@@ -159,13 +161,16 @@ export function Bars<T extends Bar>({ data, tone = 'accent', tip, label }: { dat
 
 export type Range = { y: string; x0: number; x1: number; tone?: Tone }
 
-/** Horizontal bars from x0 to x1 on a categorical y axis, e.g. each source's history from oldest to newest. */
-export function Ranges<T extends Range>({ data, tone = 'accent', tip, label }: { data: T[]; tone?: Tone; tip?: (d: T) => ReactNode; label?: string }) {
+/** Horizontal bars from x0 to x1 on a categorical y axis, e.g. each source's history from oldest to newest.
+ * `thickness` (px) draws a thin bar centred in the band, e.g. an interval behind a marker. */
+export function Ranges<T extends Range>({ data, tone = 'accent', thickness, tip, label }: { data: T[]; tone?: Tone; thickness?: number; tip?: (d: T) => ReactNode; label?: string }) {
   const { X, Y, yBand } = useChart()
+  const h = thickness != null ? Math.min(thickness, yBand) : yBand
+  const off = (yBand - h) / 2
   return (
     <g>
       {data.map((d, i) => (
-        <rect key={i} x={X(d.x0)} y={Y(d.y)} width={Math.max(2, X(d.x1) - X(d.x0))} height={yBand} className={`lab-chart__bar lab-tone-${d.tone ?? tone}`} />
+        <rect key={i} x={X(d.x0)} y={Y(d.y) + off} width={Math.max(2, X(d.x1) - X(d.x0))} height={h} rx={thickness != null ? h / 2 : 0} className={`lab-chart__bar lab-tone-${d.tone ?? tone}${thickness != null ? ' soft' : ''}`} />
       ))}
       <Hits data={data} at={(d) => [(X(d.x0) + X(d.x1)) / 2, Y(d.y) + yBand / 2]} tip={tip} label={label} />
     </g>
@@ -189,7 +194,9 @@ export function RefLine({ y, x, label, tone = 'muted', solid }: { y?: number; x?
     return (
       <g className={`lab-tone-${tone}`}>
         <line x1={px} x2={px} y1={box.top} y2={box.bottom} className={`lab-chart__ref${solid ? '' : ' dashed'}`} />
-        {label && <text x={px + 4} y={box.top + 10} className="lab-chart__reflabel">{label}</text>}
+        {label && (px > box.right - 60
+          ? <text x={px - 4} y={box.top + 10} textAnchor="end" className="lab-chart__reflabel">{label}</text>
+          : <text x={px + 4} y={box.top + 10} className="lab-chart__reflabel">{label}</text>)}
       </g>
     )
   }
@@ -219,8 +226,8 @@ export function Legend({ items }: { items: LegendItem[] }) {
       {items.map((it, i) => {
         const kind = it.kind ?? 'line'
         return (
-          <li key={i} className={`lab-tone-${it.tone ?? 'accent'}`}>
-            <svg width={18} height={10} aria-hidden>
+          <li key={i}>
+            <svg width={18} height={10} aria-hidden className={`lab-tone-${it.tone ?? 'accent'}`}>
               {kind === 'line' || kind === 'dashed' ? <line x1={1} x2={17} y1={5} y2={5} className={`lab-chart__line${kind === 'dashed' ? ' dashed' : ''}`} />
                 : kind === 'band' ? <rect x={1} y={1} width={16} height={8} className="lab-chart__band" />
                 : kind === 'bar' ? <rect x={4} y={1} width={10} height={8} className="lab-chart__bar" />
