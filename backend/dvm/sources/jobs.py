@@ -10,6 +10,8 @@ import asyncio
 import gzip
 import json
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -34,6 +36,8 @@ SPEC = {
 RECENT_STATICS_DAYS = 30
 DEFAULT_MAX_DB_GB = 60.0    # stop backfilling at this database size (Tiger bills storage; we have $1000 of credit)
 EMPTY_STOP_DAYS = 21        # stop going back after this many consecutive days with no data in any region
+DEFAULT_INFLIGHT = 4        # GFW requests in flight at once, across all regions and workers (see README)
+REPORT_PATH = "/4wings/report"
 
 
 def needs_fetch(row, day_end: int, now: int, spec: dict, force: bool = False) -> bool:
@@ -45,10 +49,12 @@ def needs_fetch(row, day_end: int, now: int, spec: dict, force: bool = False) ->
 
 
 class RawDump:
-    """Original responses, gzipped, under <data>/raw/<src>/<region>/<day>/<name>.json.gz (outside the repo)."""
+    """Original responses, gzipped, under <data>/raw/<src>/<region>/<day>/<name>.json.gz (outside the repo).
+    A multi-day fetch goes under <first day>_<last day>/ instead."""
 
-    def __init__(self, root: Path | None, src: str, region: str, day: date):
-        self.dir = root / "raw" / src / region / day.isoformat() if root else None
+    def __init__(self, root: Path | None, src: str, region: str, day: date, last: date | None = None):
+        span = day.isoformat() if last is None or last == day else f"{day.isoformat()}_{last.isoformat()}"
+        self.dir = root / "raw" / src / region / span if root else None
 
     def __call__(self, name: str, body) -> None:
         if self.dir is None:
@@ -71,6 +77,61 @@ def fetch(src: str, region: str, bbox, day: date, recv_ts: int, data_dir: Path |
     raise ValueError(f"no windowed fetch for {src}")
 
 
+def has_range(src: str) -> bool:
+    """gfw.fetch_range (one call per stream for a block of days) is used when that module provides it."""
+    return src == "gfw" and hasattr(gfw, "fetch_range")
+
+
+def fetch_block(src: str, region: str, bbox, first: date, last: date, recv_ts: int, data_dir: Path | None,
+                client=None) -> dict:
+    """Blocking fetch of several days at once -> {day: (observations, statics, info)}."""
+    raw = RawDump(data_dir, src, region, first, last)
+    res = gfw.fetch_range(client, region, bbox, first, last, recv_ts, raw)
+    span = days(first, last)
+    if isinstance(res, dict):
+        return {d: res[k] for d in span for k in (d, d.isoformat()) if k in res}
+    return dict(zip(span, res))
+
+
+def share_client(client, inflight: int = DEFAULT_INFLIGHT):
+    """Make one GFW client safe to use from many windows at once, within GFW's limits.
+
+    GFW lets a token run only one 4Wings report at a time (a second one gets 429 "not currently enabled to perform
+    more than one concurrent report"); /events took 8 at once without complaint. So reports go one at a time and
+    every request, reports included, counts against `inflight`. The gate wraps the client's single request method,
+    so it also covers whatever gfw.fetch_range calls.
+    """
+    if client is None or not hasattr(client, "_post") or getattr(client, "_shared", False):
+        return client
+    post, report, gate = client._post, threading.Lock(), threading.BoundedSemaphore(max(1, inflight))
+
+    def _post(path, params, body):
+        if str(path).startswith(REPORT_PATH):
+            with report, gate:
+                return post(path, params, body)
+        with gate:
+            return post(path, params, body)
+
+    client._post, client._shared = _post, True
+    return client
+
+
+def _use_threads(n: int) -> None:
+    """Concurrent windows each block a thread while fetching: make sure there are enough threads for all of them
+    (the default pool is sized from the CPU count, which on a small server is fewer than the windows)."""
+    asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max(4, n), thread_name_prefix="window"))
+
+
+async def _record_error(pool, src, region, day: date, now: int, e: Exception) -> dict:
+    # one bad window is recorded and retried later; it never stops the others
+    start = day_ms(day)
+    async with pool.acquire() as con:
+        await schema.record_window(con, src, SPEC[src]["stream"], region, start, start + DAY_MS, now, 0, "error",
+                                   f"{type(e).__name__}: {e}"[:500])
+    log.warning("%s %s %s failed: %s", src, region, day, e)
+    return {"src": src, "region": region, "day": day.isoformat(), "error": str(e)[:200]}
+
+
 async def run_window(pool, src: str, region: str, day: date, *, force=False, data_dir=None, client=None) -> dict:
     spec, bbox = SPEC[src], REGIONS[region]
     start = day_ms(day)
@@ -81,12 +142,13 @@ async def run_window(pool, src: str, region: str, day: date, *, force=False, dat
         return {"src": src, "region": region, "day": day.isoformat(), "skipped": True}
     try:
         obs, statics, info = await asyncio.to_thread(fetch, src, region, bbox, day, now, data_dir, client)
-    except Exception as e:   # one bad window is recorded and retried later; it never stops the others
-        async with pool.acquire() as con:
-            await schema.record_window(con, src, spec["stream"], region, start, start + DAY_MS, now, 0, "error",
-                                       f"{type(e).__name__}: {e}"[:500])
-        log.warning("%s %s %s failed: %s", src, region, day, e)
-        return {"src": src, "region": region, "day": day.isoformat(), "error": str(e)[:200]}
+    except Exception as e:
+        return await _record_error(pool, src, region, day, now, e)
+    return await _write_window(pool, src, region, day, now, obs, statics, info)
+
+
+async def _write_window(pool, src: str, region: str, day: date, now: int, obs, statics, info) -> dict:
+    spec, start = SPEC[src], day_ms(day)
     # GFW identity goes to statics only for recent days: statics has 15-minute chunks, and a year of daily rows would
     # make hundreds of tiny ones. Older identities stay in the region rows' attrs (name, flag, IMO, type).
     statics = [s for s in statics if s.ts >= now - RECENT_STATICS_DAYS * DAY_MS]
@@ -105,10 +167,63 @@ async def run_window(pool, src: str, region: str, day: date, *, force=False, dat
     return res
 
 
-async def connect(url: str):
+async def run_span(pool, src: str, region: str, span: list[date], *, force=False, data_dir=None, client=None
+                   ) -> list[dict]:
+    """The windows of one region over consecutive days (oldest first): one fetch for the days that need it when the
+    provider has a range fetch, else one window at a time. Each day is still its own transaction and ledger row."""
+    if len(span) == 1 or not has_range(src):
+        return [await run_window(pool, src, region, d, force=force, data_dir=data_dir, client=client) for d in span]
+    spec, now = SPEC[src], now_ms()
+    out: dict[date, dict] = {}
+    async with pool.acquire() as con:
+        for d in span:
+            row = await schema.get_window(con, src, spec["stream"], region, day_ms(d))
+            if not needs_fetch(row, day_ms(d) + DAY_MS, now, spec, force):
+                out[d] = {"src": src, "region": region, "day": d.isoformat(), "skipped": True}
+    todo = [d for d in span if d not in out]
+    if todo:
+        try:
+            got = await asyncio.to_thread(fetch_block, src, region, REGIONS[region], todo[0], todo[-1], now,
+                                          data_dir, client)
+        except Exception as e:
+            got, err = {}, e
+        else:
+            err = RuntimeError("range fetch returned no result for this day")
+        for d in todo:
+            if d in got:
+                out[d] = await _write_window(pool, src, region, d, now, *got[d])
+            else:
+                out[d] = await _record_error(pool, src, region, d, now, err)
+    return [out[d] for d in span]
+
+
+async def run_days(pool, src: str, regions: list[str], span: list[date], **kw) -> list[dict]:
+    """Every region over the same days, concurrently (the client's gate bounds the requests in flight)."""
+    per_region = await asyncio.gather(*(run_span(pool, src, r, span, **kw) for r in regions))
+    return [res for rs in per_region for res in rs]
+
+
+def blocks(span: list[date], size: int) -> list[list[date]]:
+    size = max(1, size)
+    return [span[i:i + size] for i in range(0, len(span), size)]
+
+
+def shards(span: list, n: int) -> list[list]:
+    """n contiguous, nearly equal pieces of span (fewer when span is shorter than n)."""
+    n = max(1, min(n, len(span)))
+    k, extra = divmod(len(span), n)
+    out, i = [], 0
+    for j in range(n):
+        step = k + (j < extra)
+        out.append(span[i:i + step])
+        i += step
+    return out
+
+
+async def connect(url: str, max_size: int = 4):
     """Pool plus the new tables. The backend's own tables are created only on a database that lacks them (a fresh
     local one): on Tiger the backend owns its start-up steps, and several jobs re-running them would contend."""
-    pool = await asyncpg.create_pool(url, min_size=1, max_size=4, command_timeout=300)
+    pool = await asyncpg.create_pool(url, min_size=1, max_size=max_size, command_timeout=300)
     async with pool.acquire() as con:
         if not await con.fetchval("SELECT to_regclass('public.positions') IS NOT NULL"):
             await dvm_store.setup(con)
@@ -116,38 +231,52 @@ async def connect(url: str):
     return pool
 
 
-def _client(src: str):
-    return gfw.Client() if src == "gfw" else None
+def _client(src: str, inflight: int = DEFAULT_INFLIGHT):
+    return share_client(gfw.Client(), inflight) if src == "gfw" else None
 
 
-async def backfill(url: str, src: str, regions: list[str], start: date, end: date, *, force=False, data_dir=None):
-    pool = await connect(url)
-    client = _client(src)
-    out = []
+def _pool_size(workers: int, regions: list[str]) -> int:
+    return max(4, min(16, workers * len(regions)))
+
+
+async def backfill(url: str, src: str, regions: list[str], start: date, end: date, *, force=False, data_dir=None,
+                   workers: int = 1, block_days: int = 1, inflight: int = DEFAULT_INFLIGHT, client=None):
+    """Every window from start to end. The days are split into `workers` contiguous shards walked at the same time,
+    oldest first within each; the regions of a day run concurrently. The ledger and the per-window transactions
+    keep shards from double-writing, and a re-run skips what is settled."""
+    _use_threads(workers * len(regions))
+    pool = await connect(url, _pool_size(workers, regions))
+    own = client is None
+    client = _client(src, inflight) if own else share_client(client, inflight)
+
+    async def walk(shard):
+        res = []
+        for b in blocks(shard, block_days):
+            res += await run_days(pool, src, regions, b, force=force, data_dir=data_dir, client=client)
+        return res
+
     try:
-        for region in regions:
-            for d in days(start, end):
-                out.append(await run_window(pool, src, region, d, force=force, data_dir=data_dir, client=client))
+        out = [r for rs in await asyncio.gather(*(walk(s) for s in shards(days(start, end), workers))) for r in rs]
     finally:
-        if client:
+        if client and own:
             client.close()
         await pool.close()
     return out
 
 
-async def poll(url: str, src: str, regions: list[str], *, once=False, data_dir=None):
+async def poll(url: str, src: str, regions: list[str], *, once=False, data_dir=None, inflight=DEFAULT_INFLIGHT):
     """Fetch the recent windows that may have changed, then sleep; forever unless once=True."""
     spec = SPEC[src]
-    pool = await connect(url)
-    client = _client(src)
+    _use_threads(len(regions))
+    pool = await connect(url, _pool_size(1, regions))
+    client = _client(src, inflight)
     out = []
     try:
         while True:
             today = utc_today()
             newest = today - timedelta(spec["newest"])
-            for region in regions:
-                for d in days(newest - timedelta(spec["lookback"] - 1), newest):
-                    out.append(await run_window(pool, src, region, d, data_dir=data_dir, client=client))
+            for d in days(newest - timedelta(spec["lookback"] - 1), newest):
+                out += await run_days(pool, src, regions, [d], data_dir=data_dir, client=client)
             if once:
                 return out
             await asyncio.sleep(min(spec["refetch_ms"] / 1000, 1800))
@@ -259,37 +388,53 @@ class BackState:
 
 
 async def backfill_back(url: str, src: str, regions: list[str], *, until: date, max_db_gb: float = DEFAULT_MAX_DB_GB,
-                        data_dir=None, newest: date | None = None) -> dict:
-    """From the newest available day backwards, one day across all regions at a time, until stopped.
+                        data_dir=None, newest: date | None = None, workers: int = 1, block_days: int = 1,
+                        inflight: int = DEFAULT_INFLIGHT, client=None) -> dict:
+    """From the newest available day backwards, all regions at a time, until stopped.
 
-    Windows already settled are skipped, so a restart resumes where it left off. Checks the database size before
-    every day and stops at max_db_gb. Interrupt with Ctrl+C at any point; nothing is half-written (one transaction
-    per window).
+    `workers` take the next days (`block_days` at a time) from one shared cursor, newest first, so recent history
+    always lands first; the regions of a day run concurrently. The stop rules are applied to the days in order as
+    they complete, so a worker may finish up to one block past the stopping day. Windows already settled are
+    skipped, so a restart resumes where it left off. Checks the database size before every block (every day with
+    the default block of 1) and stops at max_db_gb. Interrupt with Ctrl+C at any point; nothing is half-written
+    (one transaction per window).
     """
-    pool = await connect(url)
-    client = _client(src)
+    _use_threads(workers * len(regions))
+    pool = await connect(url, _pool_size(workers, regions))
+    own = client is None
+    client = _client(src, inflight) if own else share_client(client, inflight)
     st = BackState(newest or utc_today() - timedelta(SPEC[src]["newest"]), until)
     totals = {"days": 0, "observations": 0, "statics": 0, "errors": 0}
-    try:
-        while not st.stopped:
+    cursor, done = st.day, {}
+
+    async def worker():
+        nonlocal cursor
+        while not st.stopped and cursor >= until:
             async with pool.acquire() as con:
                 size_gb = await schema.db_size_bytes(con) / 1e9
             if size_gb >= max_db_gb:
-                st.stopped = f"database is {size_gb:.1f} GB, at the {max_db_gb:.0f} GB cap"
-                break
-            rows, skipped = 0, 0
-            for region in regions:
-                r = await run_window(pool, src, region, st.day, data_dir=data_dir, client=client)
-                skipped += bool(r.get("skipped"))
-                rows += r.get("observations", 0)
-                totals["observations"] += r.get("observations", 0)
-                totals["statics"] += r.get("statics", 0)
-                totals["errors"] += "error" in r
-            totals["days"] += 1
-            log.info("backfill %s %s: %d rows, db %.2f GB", src, st.day, rows, size_gb)
-            st.record(rows, skipped == len(regions))
+                st.stopped = st.stopped or f"database is {size_gb:.1f} GB, at the {max_db_gb:.0f} GB cap"
+                return
+            last = cursor
+            first = max(until, last - timedelta(max(1, block_days) - 1))
+            cursor = first - timedelta(1)
+            res = await run_days(pool, src, regions, days(first, last), data_dir=data_dir, client=client)
+            for d in days(first, last):
+                rs = [r for r in res if r["day"] == d.isoformat()]
+                rows = sum(r.get("observations", 0) for r in rs)
+                totals["observations"] += rows
+                totals["statics"] += sum(r.get("statics", 0) for r in rs)
+                totals["errors"] += sum("error" in r for r in rs)
+                totals["days"] += 1
+                log.info("backfill %s %s: %d rows, db %.2f GB", src, d, rows, size_gb)
+                done[d] = (rows, all(r.get("skipped") for r in rs))
+            while not st.stopped and st.day in done:   # apply the stop rules in day order
+                st.record(*done.pop(st.day))
+
+    try:
+        await asyncio.gather(*(worker() for _ in range(max(1, workers))))
     finally:
-        if client:
+        if client and own:
             client.close()
         await pool.close()
     return {"src": src, "oldest_day": (st.day + timedelta(1)).isoformat(), "stopped": st.stopped, **totals}
