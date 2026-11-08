@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import sys
 import time
+import os
 from pathlib import Path
 
 import numpy as np
@@ -29,7 +30,7 @@ from dvm import gaps as dvm_gaps  # noqa: E402
 
 TICK_MS = 15_000          # the backend ticks every 5 s; 15 s changes detection time by at most 10 s on a 30 min floor
 STALL_GAP_MS = 30_000     # at ~50 positions a second, 30 s of nothing at all is our outage, not the ships
-OUT = Path("/home/aiden/data/poseidon/godark/replay_gaps.parquet")
+OUT = (Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "godark/replay_gaps.parquet")
 META = OUT.with_name("replay_meta.json")
 
 

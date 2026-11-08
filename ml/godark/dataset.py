@@ -59,7 +59,7 @@ CONTEXT_FEATURES = [
     "type_group", "flag_iso2",
 ]
 CATEGORICAL = ["type_group", "flag_iso2"]
-OUT = Path("/home/aiden/data/poseidon/godark")
+OUT = (Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "godark")
 
 
 def h_label(h_s: int) -> str:

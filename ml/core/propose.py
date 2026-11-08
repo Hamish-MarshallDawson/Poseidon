@@ -47,7 +47,7 @@ def daily_cap() -> int:
 
 
 def counter_path() -> Path:
-    return Path(os.getenv("ML_GEMINI_COUNTER", "/home/aiden/data/poseidon/gemini_calls.json"))
+    return Path(os.getenv("ML_GEMINI_COUNTER") or Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "gemini_calls.json")
 
 
 def take_call() -> int:
