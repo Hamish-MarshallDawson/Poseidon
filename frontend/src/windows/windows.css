@@ -91,8 +91,12 @@
 .sw-btn:hover { color: var(--dvm-text-primary); }
 
 /* Ship card (R2/Forecast/Ship card 56:4598): 320 wide, bg/panel, no border of its own. */
-.sc { width: 320px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--dvm-bg-panel); }
+.sc { width: 320px; flex: 1 1 auto; min-height: 0; overscroll-behavior: contain; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--dvm-bg-panel); }
 .sc > * { flex-shrink: 0; }
+/* The card only becomes a scroller when the free area clips it (ShipWindow sets .sw-scroll): a scroller inside the
+   transformed window tore the text into offset tiles ("AI|S HEARD"). */
+.sw-scroll .sc { overflow-y: auto; }
+.sc-leg { min-width: 0; overflow-wrap: anywhere; }
 .sc-head { display: flex; align-items: center; gap: 8px; }
 .sc-name { flex: 1; margin: 0; min-width: 0; font-weight: 600; font-size: var(--dvm-size-title); line-height: var(--dvm-line-title); overflow-wrap: anywhere; }
 .sc-chip {
