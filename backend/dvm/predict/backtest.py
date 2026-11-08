@@ -205,6 +205,7 @@ class Backtest:
         self.dst, self.step_ms, self.sample_n = target, step_ms, sample_n
         self.k = H_MS // step_ms
         self.champions = artifact.Champions(model_dir)
+        self.champions.refresh()   # load champions.json now: Champions starts as the baselines until refreshed
         self.forecast = FC.Forecast()
         self.done_gaps: set[tuple[str, str]] = set()
         self._rate: dict[int, float] = {}
