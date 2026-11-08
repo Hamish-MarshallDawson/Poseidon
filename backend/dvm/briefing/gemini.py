@@ -83,18 +83,44 @@ def _post(payload: dict, key: str) -> dict:
         raise BriefingError("Gemini is unreachable or timed out") from None
 
 
-async def summarise(facts: dict, key: str | None = None) -> Summary:
+async def _ask(system: str, facts: dict, schema: dict, parse, key: str | None):
+    """One structured Gemini call; `parse(text)` raises ValidationError/ValueError on a bad answer (one retry)."""
     key = key or os.getenv("GEMINI_API_KEY", "")
     if not key:
         raise BriefingError("Gemini is not configured (GEMINI_API_KEY)", 503)
-    payload = {"model": MODEL, "system_instruction": SYSTEM, "input": json.dumps(facts, default=str),
-               "response_format": {"type": "text", "mime_type": "application/json", "schema": SCHEMA}}
-    for attempt in (1, 2):   # one retry on malformed output
+    payload = {"model": MODEL, "system_instruction": system, "input": json.dumps(facts, default=str),
+               "response_format": {"type": "text", "mime_type": "application/json", "schema": schema}}
+    for attempt in (1, 2):
         data = await asyncio.to_thread(_post, payload, key)
         try:
             out = [st for st in data["steps"] if st.get("type") == "model_output"][-1]
-            return Summary.model_validate_json("".join(c["text"] for c in out["content"] if c.get("type") == "text"))
-        except (KeyError, IndexError, TypeError, ValidationError):
+            return parse("".join(c["text"] for c in out["content"] if c.get("type") == "text"))
+        except (KeyError, IndexError, TypeError, ValueError):   # pydantic's ValidationError is a ValueError
             if attempt == 2:
                 raise BriefingError("Gemini returned an unusable answer") from None
     raise AssertionError
+
+
+async def summarise(facts: dict, key: str | None = None) -> Summary:
+    return await _ask(SYSTEM, facts, SCHEMA, Summary.model_validate_json, key)
+
+
+SESSION_SYSTEM = """You write the end-of-session summary of a shared maritime investigation, for the team that ran it.
+Rules:
+- Use ONLY the JSON facts supplied: the session notes, the saved briefings, and the tracked ships with their statuses. Never invent positions, behaviour, ownership or intent.
+- Neutral wording. A flag, a gap in AIS or a ranking is a prompt to review, never an accusation, and a silent ship is not proof of wrongdoing.
+- Cover: what the team looked at, what they noted (name the author), which ships are open, reviewed or no action, and what remains to check.
+- Plain text only, no markdown, at most 2500 characters. Say so plainly if there is little to summarise."""
+
+SESSION_SCHEMA = {"type": "object", "required": ["summary"], "properties": {"summary": {"type": "string"}}}
+
+
+def _session_text(text: str) -> str:
+    out = json.loads(text)["summary"].strip()
+    if not out:
+        raise ValueError("empty summary")
+    return out
+
+
+async def summarise_session(facts: dict, key: str | None = None) -> str:
+    return await _ask(SESSION_SYSTEM, facts, SESSION_SCHEMA, _session_text, key)

@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS collab_documents (
   mmsi integer, author_id uuid NOT NULL REFERENCES users(id),
   body text NOT NULL CHECK (length(body) BETWEEN 1 AND 4000), created_at timestamptz NOT NULL DEFAULT now()
 );
+-- kind: a note, a saved Brief me result (mmsis = the ships it covers) or the end-of-session summary.
+ALTER TABLE collab_documents ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'note';
+ALTER TABLE collab_documents ADD COLUMN IF NOT EXISTS mmsis integer[] NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS collab_documents_session ON collab_documents (session_id, created_at);
 
 CREATE TABLE IF NOT EXISTS collab_activity (
