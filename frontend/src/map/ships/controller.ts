@@ -17,6 +17,7 @@ import { CourseLine } from './course'
 import { shownNow } from '../../timeline/replay'
 import { ghostRadius } from '../../forecast/geo'
 import { clock, setShownClock, ShipState } from './state'
+import { yachts, yachtBadge } from '../../yachts/store'
 
 setShownClock(shownNow)
 
@@ -112,6 +113,7 @@ export class ShipController {
     this.unsubs.push(
       vessels.subscribe((changed, removed, frame) => this.onFrame(changed, removed, frame)),
       ui.subscribe((s, p) => this.onUi(s, p)),
+      yachts.subscribe(() => this.gpu.invalidate()),   // yacht badges (#101)
       themeStore.subscribe((s, p) => { this.state.reducedMotion = s.reducedMotion; if (s.classColour !== p.classColour) this.gpu.invalidate() }),
     )
   }
@@ -472,13 +474,15 @@ export class ShipController {
     // Upright overlays above every hull: brackets + letter for windows (and focus, hover), sanctioned badges.
     const box = OVERLAY_BOX[tier]
     for (const it of sorted) {
-      if (!it.top && !it.v.sanctioned) continue
+      const yacht = yachtBadge(it.mmsi)
+      if (!it.top && !it.v.sanctioned && !yacht) continue
       const { from, to, t, dur } = it.op
       const off = fanned?.has(it.mmsi) ? this.fan!.offsets.get(it.mmsi) : undefined
       const ox = off?.[0] ?? 0, oy = off?.[1] ?? 0
-      if (it.v.sanctioned) {
+      if (it.v.sanctioned || yacht) {   // a notable (not sanctioned) yacht gets the same badge in the muted colour
         const b = BADGE[tier], d = box / 2 - b / 2
-        buf.push(it.slot, `ovl:sanctioned:${tier}`, Colour.Sanctioned, false, ox + d, oy - d, 1, from, to, t, dur)
+        const c = it.v.sanctioned || yacht === 'sanctioned' ? Colour.Sanctioned : Colour.Keyline
+        buf.push(it.slot, `ovl:sanctioned:${tier}`, c, false, ox + d, oy - d, 1, from, to, t, dur)
       }
       const w = windows.get(it.mmsi)
       if (w || it.mmsi === s.focusMmsi || it.mmsi === s.hoverMmsi) {

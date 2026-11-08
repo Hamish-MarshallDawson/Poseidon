@@ -6,6 +6,7 @@ import { reducedMotion, usePresence } from '../motion'
 import { fmtInt } from '../windows/format'
 import { WatchlistChip } from './Watchlist'
 import { ReviewChip } from '../review/ReviewPanel'
+import { YachtsLayer } from '../yachts/Yachts'
 
 // Top-right buttons (watchlist chip, Layers, log out), zoom on the right edge and the scale bar bottom-right
 // (Figma 66:21908). The Layers pop-over follows the density report's layers panel (41:432).
@@ -37,6 +38,7 @@ function LayersPanel() {
         <Switch key={key} checked={layers[key]} label={label} hint={note}
           onChange={(on) => ui.set((s) => ({ layers: { ...s.layers, [key]: on } }))} />
       ))}
+      <YachtsLayer />
     </div>
   )
 }

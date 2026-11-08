@@ -12,6 +12,7 @@ import { WindowsRoot } from './windows/WindowsRoot'
 import { bindDetailSender, receiveDetail } from './windows/detail'
 import { BriefingPanel } from './briefing/BriefingPanel'
 import { bindBriefingAuth } from './briefing/store'
+import { bindYachtsAuth } from './yachts/store'
 import { Review } from './review/ReviewPanel'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
@@ -54,8 +55,9 @@ export function Monitor({ getToken, onLogout }: { getToken: () => Promise<string
   useEffect(() => {
     bindDetailSender((m) => adapter?.send(m))
     bindBriefingAuth(getToken)
+    bindYachtsAuth(getToken)
     const off = onDetail(receiveDetail)
-    return () => { off(); bindDetailSender(null); bindBriefingAuth(null) }
+    return () => { off(); bindDetailSender(null); bindBriefingAuth(null); bindYachtsAuth(null) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (

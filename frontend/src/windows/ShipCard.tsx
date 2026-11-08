@@ -9,6 +9,7 @@ import type { VesselView } from '../types'
 import { runBriefing } from '../briefing/store'
 import { fmtEta, matchDestination, usePortInfo } from '../ports'
 import type { Departure, PortIndex } from '../ports'
+import { YachtSection } from '../yachts/Yachts'
 import { toggleReview, useInReview } from '../review/store'
 
 // Body of a ship window: R2/Forecast/Ship card (Figma 56:4598), states No AIS and Active.
@@ -112,6 +113,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
         <Field label="Sanctions" value={v.sanctioned ? 'List match' : 'No match'} />
         <Field label="Past silent gaps" value={pastGaps === null ? '—' : `${pastGaps} in 7 days`} />
       </div>
+      <YachtSection mmsi={mmsi} />
       <div className="sc-forecast">
         {noAis ? (
           <>
