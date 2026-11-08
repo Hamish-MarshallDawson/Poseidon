@@ -5,6 +5,8 @@
   poll {gfw,sentinel1} [--once]           fetch the recent windows that may have changed, then sleep
   poll|backfill|backfill-back gfw-gaps [--areas A,B]
                                           GFW gap events worldwide by week, kept per area (gfw_gaps.py)
+  poll|backfill|backfill-back gfw-fishing [--regions A,B]
+                                          GFW fishing events per region and week (gfw_fishing.py)
   backfill {gfw,sentinel1} --start D --end D [--force] [--workers N]
   backfill digitraffic                    replay data/raw/digitraffic into the database
   backfill-back {gfw,sentinel1} [--until D] [--max-db-gb N] [--workers N]
@@ -27,7 +29,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from dvm.sources import gfw_gaps, jobs, query, schema
+from dvm.sources import gfw_fishing, gfw_gaps, jobs, query, schema
 from dvm.sources.common import REGIONS, now_ms
 
 
@@ -103,19 +105,19 @@ def main(argv=None) -> None:
     d = sub.add_parser("digitraffic")
     d.add_argument("--minutes", type=float)
     p = sub.add_parser("poll")
-    p.add_argument("src", choices=["gfw", "sentinel1", "gfw-gaps"])
+    p.add_argument("src", choices=["gfw", "sentinel1", "gfw-gaps", "gfw-fishing"])
     p.add_argument("--regions", default=",".join(REGIONS))
     p.add_argument("--once", action="store_true")
     _parallel(p, workers=False)
     b = sub.add_parser("backfill")
-    b.add_argument("src", choices=["gfw", "sentinel1", "digitraffic", "gfw-gaps"])
+    b.add_argument("src", choices=["gfw", "sentinel1", "digitraffic", "gfw-gaps", "gfw-fishing"])
     b.add_argument("--regions", default=",".join(REGIONS))
     b.add_argument("--start", type=date.fromisoformat)
     b.add_argument("--end", type=date.fromisoformat)
     b.add_argument("--force", action="store_true")
     _parallel(b)
     bb = sub.add_parser("backfill-back")
-    bb.add_argument("src", choices=["gfw", "sentinel1", "gfw-gaps"])
+    bb.add_argument("src", choices=["gfw", "sentinel1", "gfw-gaps", "gfw-fishing"])
     bb.add_argument("--regions", default=",".join(REGIONS))
     bb.add_argument("--until", type=date.fromisoformat, default=date(2017, 1, 1))
     bb.add_argument("--max-db-gb", type=float, default=jobs.DEFAULT_MAX_DB_GB)
@@ -157,6 +159,17 @@ def main(argv=None) -> None:
                 sys.exit("backfill needs --start and --end (YYYY-MM-DD, inclusive)")
             out = asyncio.run(gfw_gaps.backfill(url, areas(), args.start, args.end, force=args.force,
                                                 data_dir=args.data_dir))
+    elif getattr(args, "src", None) == "gfw-fishing":
+        if args.cmd == "poll":
+            out = asyncio.run(gfw_fishing.poll(url, regions(), once=args.once, data_dir=args.data_dir))
+        elif args.cmd == "backfill-back":
+            out = asyncio.run(gfw_fishing.backfill_back(url, regions(), until=args.until, max_db_gb=args.max_db_gb,
+                                                        data_dir=args.data_dir))
+        else:
+            if not args.start or not args.end:
+                sys.exit("backfill needs --start and --end (YYYY-MM-DD, inclusive)")
+            out = asyncio.run(gfw_fishing.backfill(url, regions(), args.start, args.end, force=args.force,
+                                                   data_dir=args.data_dir))
     elif args.cmd == "setup":
         async def _setup():
             pool = await jobs.connect(url)

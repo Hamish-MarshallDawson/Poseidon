@@ -173,11 +173,18 @@ class Client:
 
     def _post(self, path: str, params: dict, body: dict) -> dict:
         """POST with a polite pause, and backoff on 429 and 5xx. Errors carry GFW's text, never the request."""
+        return self._call("POST", path, params, body)
+
+    def _get(self, path: str, params) -> dict:
+        """GET, with the same pause and backoff as _post (params may be a list of pairs, for `ids[0]=...`)."""
+        return self._call("GET", path, params, None)
+
+    def _call(self, method: str, path: str, params, body) -> dict:
         for attempt in range(4):
             time.sleep(PAUSE_S)
             self.calls += 1
             try:
-                r = self.http.post(BASE + path, params=params, json=body)
+                r = self.http.request(method, BASE + path, params=params, json=body)
             except httpx.TransportError as e:
                 if attempt == 3:
                     raise RuntimeError(f"GFW {path}: {type(e).__name__}") from None

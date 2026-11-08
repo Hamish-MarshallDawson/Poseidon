@@ -110,6 +110,12 @@ Volume, from Oct 2026: about 400 vessel gaps a week worldwide (about 21,000 a ye
 
 It doesn't use `jobs.share_client`: it sends only `/events` calls (never the one-at-a-time 4Wings report lock), strictly one at a time, and the gate is per process, so it couldn't coordinate with the separate `gfw` backfill anyway. Run together, the two jobs' load adds up (gfw `--inflight` plus 1).
 
+### GFW fishing events (`gfw_fishing.py`, #157)
+
+Apparent fishing per vessel, for the protected-area and zone-incursion models. One window is one region and one Monday-to-Sunday week: `/events` with dataset `public-global-fishing-events:latest` and the region polygon (the filter tests the event's centre `position`, which works for fishing). Dates select by overlap, so an event is kept only in the week it **starts** in. Each row is `kind = 'fishing'`, id `gfw:fishing:<event id>`, `ts`/`end_ts` = start/end, `lat`/`lon` = GFW's position, `bbox` = its bounding box, `value` = hours. `attrs`: `event_id`, `vessel_id`, `name`, `flag`, `gear_type`, `region`, the region tags `eez`, `eez12nm`, `mpa`, `mpa_no_take`, `mpa_no_take_partial`, `protectedseas`, `rfmo`, `high_seas` (kept even when empty, so `[]` means outside every MPA), `potential_risk`, `authorization_status`, `avg_speed_kn`, `distance_km`, `shore_km`, `port_km`. Events carry no gear type, so it comes from one batched `/vessels` identity call per 50 vessels (best effort: if it fails, the events land without it). `available_ts` runs from the UTC day the event ended, as for gaps. Ledger rows are `src = 'gfw'`, `stream = 'fishing'`, `region` = region name.
+
+Volume, sampled live (weeks of 2 Feb, 4 May, 3 Aug, 26 Oct 2026): Danish straits 340 to 900 a week (about 40% inside an MPA), Gulf of Finland 0 to 95, Hormuz 4 to 44, Gulf of Oman 3 to 63; about 760 a week in all, so about 40,000 rows a year at about 1 KB a row (about 40 MB a year before indexes). A week of four regions takes about 11 s (4 to 8 calls).
+
 ### Sentinel-1 (`sentinel1.py`)
 
 - Element 84 Earth Search STAC, collection `sentinel-1-grd`, bbox and day, following `next` pages. No pixels are read and no ships are detected: a scene is **radar coverage**.
@@ -151,6 +157,8 @@ export SOURCES_DATABASE_URL=postgresql://postgres:local@127.0.0.1:55433/postgres
 .venv/bin/python -m dvm.sources backfill-back gfw            # today backwards until stopped (see below)
 .venv/bin/python -m dvm.sources backfill-back gfw-gaps       # weeks of gap events, back to 2017 (--areas A,B)
 .venv/bin/python -m dvm.sources poll gfw-gaps                # the last 3 weeks every 6 h
+.venv/bin/python -m dvm.sources backfill-back gfw-fishing    # fishing events by region and week, back to --until
+.venv/bin/python -m dvm.sources poll gfw-fishing             # the last 3 weeks every 6 h
 .venv/bin/python -m dvm.sources readonly-role                 # read-only login for training and teammates
 .venv/bin/python -m dvm.sources status
 ```

@@ -1,0 +1,861 @@
+{
+ "events": {
+  "entries": [
+   {
+    "start": "2026-10-18T14:17:37.000Z",
+    "end": "2026-10-19T06:33:06.000Z",
+    "id": "805142784d637600c67bcc3d11c8c6fd",
+    "type": "fishing",
+    "position": {
+     "lat": 56.6906,
+     "lon": 12.0761
+    },
+    "regions": {
+     "mpa": [],
+     "eez": [
+      "5694",
+      "5674"
+     ],
+     "rfmo": [
+      "NEAFC",
+      "NASCO",
+      "ACAP",
+      "IWC",
+      "ICCAT",
+      "ICES",
+      "NAMMCO"
+     ],
+     "fao": [
+      "27.3.a",
+      "27",
+      "27.3",
+      "27.3.a.21"
+     ],
+     "majorFao": [
+      "27"
+     ],
+     "eez12Nm": [
+      "5674"
+     ],
+     "highSeas": [],
+     "mpaNoTakePartial": [],
+     "mpaNoTake": [],
+     "ebsa": [
+      "NEA_2",
+      "BALT_9"
+     ],
+     "imma": [
+      "30NEATLO232424IMMA"
+     ],
+     "dukePaa": [],
+     "protectedseas": [
+      "AIHSTREATY28",
+      "AIHSEBSA70",
+      "AIDNK2",
+      "AIHSTREATY36",
+      "AIHSMA104",
+      "AIHSTREATY4",
+      "AIDNK1",
+      "AIHSTREATY38",
+      "AIHSTREATY3",
+      "AISWE1"
+     ],
+     "hsp": [],
+     "fraGfcmFao": []
+    },
+    "boundingBox": [
+     11.882403333333333,
+     56.57653166666667,
+     12.243961666666667,
+     56.74852166666667
+    ],
+    "distances": {
+     "startDistanceFromShoreKm": 22,
+     "endDistanceFromShoreKm": 20,
+     "startDistanceFromPortKm": 27.459884765625,
+     "endDistanceFromPortKm": 20.93537890625
+    },
+    "vessel": {
+     "id": "8f7921c1a-a19c-7dc3-c1bd-2cf5725e4cad",
+     "name": "O10 HYACINT",
+     "ssvid": "220076000",
+     "flag": "DNK",
+     "type": "fishing",
+     "publicAuthorizations": [
+      {
+       "hasPubliclyListedAuthorization": "pending",
+       "rfmo": "ICCAT"
+      }
+     ],
+     "nextPort": null
+    },
+    "fishing": {
+     "totalDistanceKm": 85.3902502783166,
+     "averageSpeedKnots": 2.6991243557890328,
+     "averageDurationHours": null,
+     "potentialRisk": false,
+     "vesselPublicAuthorizationStatus": "pending_info"
+    }
+   },
+   {
+    "start": "2026-10-19T00:18:04.000Z",
+    "end": "2026-10-19T05:24:44.000Z",
+    "id": "e185ef72e2c98ba218ad3f0a01ea1e49",
+    "type": "fishing",
+    "position": {
+     "lat": 57.8471,
+     "lon": 10.7063
+    },
+    "regions": {
+     "mpa": [
+      "555522470",
+      "555557161"
+     ],
+     "eez": [
+      "5674"
+     ],
+     "rfmo": [
+      "ICES",
+      "IWC",
+      "NAMMCO",
+      "ACAP",
+      "NEAFC",
+      "ICCAT",
+      "NASCO"
+     ],
+     "fao": [
+      "27.3.a",
+      "27.3.a.20",
+      "27.3",
+      "27"
+     ],
+     "majorFao": [
+      "27"
+     ],
+     "eez12Nm": [
+      "5674"
+     ],
+     "highSeas": [],
+     "mpaNoTakePartial": [],
+     "mpaNoTake": [],
+     "ebsa": [
+      "NEA_1"
+     ],
+     "imma": [
+      "29NEATLO232424IMMA"
+     ],
+     "dukePaa": [],
+     "protectedseas": [
+      "AIHSTREATY36",
+      "AIDNK1",
+      "AIDNK2",
+      "AIHSMA452",
+      "AIHSMA551",
+      "AIHSTREATY28",
+      "AIHSTREATY38",
+      "AIHSTREATY3",
+      "AIDNK189",
+      "AIHSTREATY4"
+     ],
+     "hsp": [],
+     "fraGfcmFao": []
+    },
+    "boundingBox": [
+     10.498151666666667,
+     57.823785,
+     10.891476666666666,
+     57.886001666666665
+    ],
+    "distances": {
+     "startDistanceFromShoreKm": 10,
+     "endDistanceFromShoreKm": 22,
+     "startDistanceFromPortKm": 13.345185546875,
+     "endDistanceFromPortKm": 23.568572265625
+    },
+    "vessel": {
+     "id": "3c0b0cfb5-5c01-5a65-2c5c-676846e1aa21",
+     "name": "KARLSO",
+     "ssvid": "266254000",
+     "flag": "SWE",
+     "type": "fishing",
+     "publicAuthorizations": [
+      {
+       "hasPubliclyListedAuthorization": "pending",
+       "rfmo": "ICCAT"
+      }
+     ],
+     "nextPort": null
+    },
+    "fishing": {
+     "totalDistanceKm": 28.53546743381408,
+     "averageSpeedKnots": 2.6719697208115556,
+     "averageDurationHours": null,
+     "potentialRisk": false,
+     "vesselPublicAuthorizationStatus": "pending_info"
+    }
+   },
+   {
+    "start": "2026-10-19T00:45:09.000Z",
+    "end": "2026-10-19T11:14:08.000Z",
+    "id": "54093136f7626c85ddb51836bd798950",
+    "type": "fishing",
+    "position": {
+     "lat": 57.9454,
+     "lon": 10.8714
+    },
+    "regions": {
+     "mpa": [
+      "555557161",
+      "555522470"
+     ],
+     "eez": [
+      "5674",
+      "5694"
+     ],
+     "rfmo": [
+      "NEAFC",
+      "ICES",
+      "IWC",
+      "NAMMCO",
+      "NASCO",
+      "ICCAT",
+      "ACAP"
+     ],
+     "fao": [
+      "27.3.a",
+      "27.3.a.20",
+      "27.3",
+      "27"
+     ],
+     "majorFao": [
+      "27"
+     ],
+     "eez12Nm": [
+      "5674",
+      "5694"
+     ],
+     "highSeas": [],
+     "mpaNoTakePartial": [],
+     "mpaNoTake": [],
+     "ebsa": [
+      "NEA_1"
+     ],
+     "imma": [
+      "29NEATLO232424IMMA"
+     ],
+     "dukePaa": [],
+     "protectedseas": [
+      "AIHSTREATY38",
+      "AIDNK1",
+      "AIHSTREATY4",
+      "AIDNK189",
+      "AISWE1",
+      "AIDNK2",
+      "AIHSTREATY3",
+      "AIHSMA551",
+      "AIHSTREATY28",
+      "AISWE2",
+      "AIHSMA452",
+      "AIHSTREATY36"
+     ],
+     "hsp": [],
+     "fraGfcmFao": []
+    },
+    "boundingBox": [
+     10.513445,
+     57.83694,
+     11.011615,
+     58.14114166666667
+    ],
+    "distances": {
+     "startDistanceFromShoreKm": 10,
+     "endDistanceFromShoreKm": 20,
+     "startDistanceFromPortKm": 13.97402734375,
+     "endDistanceFromPortKm": 9.4102216796875
+    },
+    "vessel": {
+     "id": "e200e62d0-0514-1c1f-8218-b10fb6f96159",
+     "name": "EMILIE",
+     "ssvid": "219023911",
+     "flag": "DNK",
+     "type": "fishing",
+     "publicAuthorizations": [
+      {
+       "hasPubliclyListedAuthorization": "pending",
+       "rfmo": "ICCAT"
+      }
+     ],
+     "nextPort": null
+    },
+    "fishing": {
+     "totalDistanceKm": 58.422533869843434,
+     "averageSpeedKnots": 2.9160828077869043,
+     "averageDurationHours": null,
+     "potentialRisk": false,
+     "vesselPublicAuthorizationStatus": "pending_info"
+    }
+   },
+   {
+    "start": "2026-10-19T00:04:50.000Z",
+    "end": "2026-10-19T05:14:00.000Z",
+    "id": "393b299cc548cf85aff891b58ade843f",
+    "type": "fishing",
+    "position": {
+     "lat": 56.3619,
+     "lon": 11.6554
+    },
+    "regions": {
+     "mpa": [],
+     "eez": [
+      "5674"
+     ],
+     "rfmo": [
+      "ACAP",
+      "NASCO",
+      "NAMMCO",
+      "ICES",
+      "NEAFC",
+      "ICCAT",
+      "IWC"
+     ],
+     "fao": [
+      "27.3.a",
+      "27",
+      "27.3.a.21",
+      "27.3"
+     ],
+     "majorFao": [
+      "27"
+     ],
+     "eez12Nm": [
+      "5674"
+     ],
+     "highSeas": [],
+     "mpaNoTakePartial": [],
+     "mpaNoTake": [],
+     "ebsa": [
+      "NEA_2"
+     ],
+     "imma": [
+      "30NEATLO232424IMMA"
+     ],
+     "dukePaa": [],
+     "protectedseas": [
+      "AIHSTREATY28",
+      "AIHSMA104",
+      "AIHSTREATY3",
+      "AIDNK1",
+      "AIHSTREATY4",
+      "AIHSTREATY36",
+      "AIDNK2",
+      "AIHSTREATY38"
+     ],
+     "hsp": [],
+     "fraGfcmFao": []
+    },
+    "boundingBox": [
+     11.69131999999999,
+     56.264988333333335,
+     11.600999999999999,
+     56.478521666666666
+    ],
+    "distances": {
+     "startDistanceFromShoreKm": 7,
+     "endDistanceFromShoreKm": 24,
+     "startDistanceFromPortKm": 34.63033984375,
+     "endDistanceFromPortKm": 27.249599609375
+    },
+    "vessel": {
+     "id": "4ae3b220c-caa9-4930-dba5-c004a9c3c0be",
+     "name": "HM 126 LILLEHOLM",
+     "ssvid": "220295000",
+     "flag": "DNK",
+     "type": "fishing",
+     "publicAuthorizations": [
+      {
+       "hasPubliclyListedAuthorization": "pending",
+       "rfmo": "ICCAT"
+      }
+     ],
+     "nextPort": null
+    },
+    "fishing": {
+     "totalDistanceKm": 25.273139794765804,
+     "averageSpeedKnots": 2.576954734668809,
+     "averageDurationHours": null,
+     "potentialRisk": false,
+     "vesselPublicAuthorizationStatus": "pending_info"
+    }
+   },
+   {
+    "start": "2026-10-19T00:05:27.000Z",
+    "end": "2026-10-19T06:17:08.000Z",
+    "id": "b363cbe959e5487b88064117984b49cd",
+    "type": "fishing",
+    "position": {
+     "lat": 56.5252,
+     "lon": 11.645
+    },
+    "regions": {
+     "mpa": [],
+     "eez": [
+      "5674"
+     ],
+     "rfmo": [
+      "ICES",
+      "NASCO",
+      "NEAFC",
+      "IWC",
+      "NAMMCO",
+      "ICCAT",
+      "ACAP"
+     ],
+     "fao": [
+      "27.3",
+      "27",
+      "27.3.a.21",
+      "27.3.a"
+     ],
+     "majorFao": [
+      "27"
+     ],
+     "eez12Nm": [
+      "5674"
+     ],
+     "highSeas": [],
+     "mpaNoTakePartial": [],
+     "mpaNoTake": [],
+     "ebsa": [
+      "NEA_2"
+     ],
+     "imma": [
+      "30NEATLO232424IMMA"
+     ],
+     "dukePaa": [],
+     "protectedseas": [
+      "AIHSTREATY36",
+      "AIHSTREATY3",
+      "AIDNK2",
+      "AIHSTREATY28",
+      "AIHSMA104",
+      "AIHSTREATY38",
+      "AIHSTREATY4",
+      "AIDNK1"
+     ],
+     "hsp": [],
+     "fraGfcmFao": []
+    },
+    "boundingBox": [
+     11.599248333333334,
+     56.39746,
+     11.676041666666666,
+     56.64039666666667
+    ],
+    "distances": {
+     "startDistanceFromShoreKm": 23,
+     "endDistanceFromShoreKm": 8,
+     "startDistanceFromPortKm": 35.9185390625,
+     "endDistanceFromPortKm": 12.4938271484375
+    },
+    "vessel": {
+     "id": "00554ffaf-f17b-9c68-5aa2-3553612c9b57",
+     "name": "AS410 SLETTERHAGE",
+     "ssvid": "219002661",
+     "flag": "DNK",
+     "type": "fishing",
+     "publicAuthorizations": [
+      {
+       "hasPubliclyListedAuthorization": "pending",
+       "rfmo": "ICCAT"
+      }
+     ],
+     "nextPort": null
+    },
+    "fishing": {
+     "totalDistanceKm": 28.58768005257659,
+     "averageSpeedKnots": 2.4834645751893056,
+     "averageDurationHours": null,
+     "potentialRisk": false,
+     "vesselPublicAuthorizationStatus": "pending_info"
+    }
+   },
+   {
+    "start": "2026-10-19T03:54:00.000Z",
+    "end": "2026-10-19T05:51:38.000Z",
+    "id": "9ddc5a1271ee1a3353fd43e7a223e290",
+    "type": "fishing",
+    "position": {
+     "lat": 25.3039,
+     "lon": 60.094
+    },
+    "regions": {
+     "mpa": [],
+     "eez": [
+      "8469"
+     ],
+     "rfmo": [
+      "ACAP",
+      "IWC",
+      "RECOFI",
+      "IOTC"
+     ],
+     "fao": [
+      "51",
+      "51.3"
+     ],
+     "majorFao": [
+      "51"
+     ],
+     "eez12Nm": [
+      "8469"
+     ],
+     "highSeas": [],
+     "mpaNoTakePartial": [],
+     "mpaNoTake": [],
+     "ebsa": [
+      "NWIO_31"
+     ],
+     "imma": [],
+     "dukePaa": [
+      "IRN"
+     ],
+     "protectedseas": [
+      "AIHSEBSA244",
+      "AIHSMA107",
+      "AIHSTREATY28",
+      "AIIRN1",
+      "AIIRN2a",
+      "AIHSTREATY12",
+      "AIHSTREATY36",
+      "AIHSMA105",
+      "AIIRN2"
+     ],
+     "hsp": [],
+     "fraGfcmFao": []
+    },
+    "boundingBox": [
+     60.088087,
+     25.298582,
+     60.095641666666666,
+     25.312108333333335
+    ],
+    "distances": {
+     "startDistanceFromShoreKm": 7,
+     "endDistanceFromShoreKm": 4,
+     "startDistanceFromPortKm": 52.27741015625,
+     "endDistanceFromPortKm": 51.27778515625
+    },
+    "vessel": {
+     "id": "120ace1ba-afec-101d-ef98-472118e690d2",
+     "name": "AL BENYAMIN",
+     "ssvid": "422341758",
+     "flag": "IRN",
+     "type": "fishing",
+     "publicAuthorizations": [
+      {
+       "hasPubliclyListedAuthorization": "pending",
+       "rfmo": "IOTC"
+      }
+     ],
+     "nextPort": null
+    },
+    "fishing": {
+     "totalDistanceKm": 2.906086598335651,
+     "averageSpeedKnots": 1.5400000024835265,
+     "averageDurationHours": null,
+     "potentialRisk": false,
+     "vesselPublicAuthorizationStatus": "pending_info"
+    }
+   },
+   {
+    "start": "2026-10-19T09:44:19.000Z",
+    "end": "2026-10-19T10:32:31.000Z",
+    "id": "733a190e53ec19e24837ffa0606094bd",
+    "type": "fishing",
+    "position": {
+     "lat": 24.7558,
+     "lon": 58.9583
+    },
+    "regions": {
+     "mpa": [],
+     "eez": [
+      "8469"
+     ],
+     "rfmo": [
+      "ACAP",
+      "IWC",
+      "IOTC",
+      "RECOFI"
+     ],
+     "fao": [
+      "51.3",
+      "51"
+     ],
+     "majorFao": [
+      "51"
+     ],
+     "eez12Nm": [],
+     "highSeas": [],
+     "mpaNoTakePartial": [],
+     "mpaNoTake": [],
+     "ebsa": [
+      "NWIO_14"
+     ],
+     "imma": [],
+     "dukePaa": [],
+     "protectedseas": [
+      "AIHSTREATY12",
+      "AIHSTREATY28",
+      "AIHSTREATY36",
+      "AIHSEBSA228",
+      "AIHSMA105",
+      "AIIRN1",
+      "AIHSMA107"
+     ],
+     "hsp": [],
+     "fraGfcmFao": []
+    },
+    "boundingBox": [
+     58.952362,
+     24.752498,
+     58.963808,
+     24.759198
+    ],
+    "distances": {
+     "startDistanceFromShoreKm": 73,
+     "endDistanceFromShoreKm": 73,
+     "startDistanceFromPortKm": 127.4924140625,
+     "endDistanceFromPortKm": 127.81065625
+    },
+    "vessel": {
+     "id": "e47f8c5e1-14c9-126f-0292-4e0b2bfff7d0",
+     "name": "ATLASJNOB2-7434",
+     "ssvid": "422046900",
+     "flag": "IRN",
+     "type": "fishing",
+     "publicAuthorizations": [
+      {
+       "hasPubliclyListedAuthorization": "pending",
+       "rfmo": "IOTC"
+      }
+     ],
+     "nextPort": null
+    },
+    "fishing": {
+     "totalDistanceKm": 1.3761736335291361,
+     "averageSpeedKnots": 1.0111111111111113,
+     "averageDurationHours": null,
+     "potentialRisk": false,
+     "vesselPublicAuthorizationStatus": "pending_info"
+    }
+   }
+  ],
+  "total": 7
+ },
+ "vessels": {
+  "entries": [
+   {
+    "combinedSourcesInfo": [
+     {
+      "vesselId": "120ace1ba-afec-101d-ef98-472118e690d2",
+      "geartypes": [
+       {
+        "name": "DRIFTING_LONGLINES",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2024,
+        "yearTo": 2026
+       }
+      ]
+     }
+    ],
+    "selfReportedInfo": [
+     {
+      "id": "120ace1ba-afec-101d-ef98-472118e690d2",
+      "ssvid": "422341758"
+     }
+    ]
+   },
+   {
+    "combinedSourcesInfo": [
+     {
+      "vesselId": "e47f8c5e1-14c9-126f-0292-4e0b2bfff7d0",
+      "geartypes": [
+       {
+        "name": "FISHING",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2022,
+        "yearTo": 2026
+       }
+      ]
+     }
+    ],
+    "selfReportedInfo": [
+     {
+      "id": "e47f8c5e1-14c9-126f-0292-4e0b2bfff7d0",
+      "ssvid": "422046900"
+     }
+    ]
+   },
+   {
+    "combinedSourcesInfo": [
+     {
+      "vesselId": "3d93a8a5f-fbee-56c8-d8f3-2463dbd53e6b",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2013,
+        "yearTo": 2022
+       }
+      ]
+     },
+     {
+      "vesselId": "322ba17fe-e2cd-4c62-4444-8bf35be26509",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2016,
+        "yearTo": 2016
+       }
+      ]
+     },
+     {
+      "vesselId": "00554ffaf-f17b-9c68-5aa2-3553612c9b57",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2012,
+        "yearTo": 2026
+       }
+      ]
+     }
+    ],
+    "selfReportedInfo": [
+     {
+      "id": "00554ffaf-f17b-9c68-5aa2-3553612c9b57",
+      "ssvid": "219002661"
+     }
+    ]
+   },
+   {
+    "combinedSourcesInfo": [
+     {
+      "vesselId": "8f7921c1a-a19c-7dc3-c1bd-2cf5725e4cad",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2012,
+        "yearTo": 2026
+       }
+      ]
+     }
+    ],
+    "selfReportedInfo": [
+     {
+      "id": "8f7921c1a-a19c-7dc3-c1bd-2cf5725e4cad",
+      "ssvid": "220076000"
+     }
+    ]
+   },
+   {
+    "combinedSourcesInfo": [
+     {
+      "vesselId": "858521e8c-cc5b-f2f4-53cf-383d1639d1a9",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2021,
+        "yearTo": 2023
+       }
+      ]
+     },
+     {
+      "vesselId": "4ae3b220c-caa9-4930-dba5-c004a9c3c0be",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2023,
+        "yearTo": 2026
+       }
+      ]
+     },
+     {
+      "vesselId": "11068fe15-5f0d-f7a8-525c-b5962e699385",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2017,
+        "yearTo": 2021
+       }
+      ]
+     }
+    ],
+    "selfReportedInfo": [
+     {
+      "id": "4ae3b220c-caa9-4930-dba5-c004a9c3c0be",
+      "ssvid": "220295000"
+     }
+    ]
+   },
+   {
+    "combinedSourcesInfo": [
+     {
+      "vesselId": "e200e62d0-0514-1c1f-8218-b10fb6f96159",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2018,
+        "yearTo": 2026
+       }
+      ]
+     }
+    ],
+    "selfReportedInfo": [
+     {
+      "id": "e200e62d0-0514-1c1f-8218-b10fb6f96159",
+      "ssvid": "219023911"
+     }
+    ]
+   },
+   {
+    "combinedSourcesInfo": [
+     {
+      "vesselId": "6ba7189f4-4637-4e3d-9514-1ba31e3e9324",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2012,
+        "yearTo": 2015
+       }
+      ]
+     },
+     {
+      "vesselId": "3c0b0cfb5-5c01-5a65-2c5c-676846e1aa21",
+      "geartypes": [
+       {
+        "name": "TRAWLERS",
+        "source": "SECONDARY_CLASSIFIER_MODEL",
+        "yearFrom": 2015,
+        "yearTo": 2026
+       }
+      ]
+     }
+    ],
+    "selfReportedInfo": [
+     {
+      "id": "3c0b0cfb5-5c01-5a65-2c5c-676846e1aa21",
+      "ssvid": "266254000"
+     }
+    ]
+   }
+  ]
+ }
+}
