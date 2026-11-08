@@ -52,7 +52,7 @@ export function livePlain(metrics: Metrics, model: ModelRef): LivePlain {
   if (t === 'godark') return darkPlain(metrics, championOf(model))
   return {
     mode: null, version: null, n: 0,
-    tiles: [NONE('Accuracy', 'Not graded live yet'), NONE('Says vs actual', 'Not graded live yet')],
+    tiles: [NONE('Protected-area fishing spotted', 'No graded live weeks yet'), NONE('Says vs actual', 'Graded once a scored week has passed')],
     trend: { kind: 'share', label: '', refLabel: '', points: [] },
   }
 }
