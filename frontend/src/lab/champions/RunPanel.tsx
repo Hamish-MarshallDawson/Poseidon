@@ -8,6 +8,15 @@ import { decisionSentence } from './shape'
 
 const show = (v: unknown) => (v == null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v))
 const plain = (s: string) => s.replace(/dead reckoning/gi, 'a straight-line guess')
+/** A rule check in plain words for the checklist (the stored wording stays under "Technical numbers"). */
+export function plainCheck(check: string): string {
+  const c = plain(check)
+  if (/calibration|\bece\b|coverage|cover\d/i.test(c)) return /coverage|cover|circle/i.test(c) ? 'Its circles hold the ship as often as they claim' : 'Its stated chances match what really happened'
+  const beat = c.match(/^beats? (the champion|the baseline|a straight-line guess)[^,]*?at (.+)$/i)
+  if (beat) return `Better than ${beat[1].toLowerCase()} at ${beat[2]}`
+  if (/second seed|confirm/i.test(c)) return 'A second training with another seed agrees'
+  return c.charAt(0).toUpperCase() + c.slice(1)
+}
 
 /** A run's story over the page: what changed, why (Gemini's reasoning), the rule as ✓/✗, then the technical numbers.
  *  Escape or the close button shuts it (Escape is consumed so the page behind stays open). */
@@ -80,7 +89,7 @@ export function RunPanel({ run, byId, proposals, loadDetail, onClose }: {
             {detail.rule.map((c, i) => (
               <li key={i} data-pass={c.passed == null ? 'na' : c.passed ? 'yes' : 'no'}>
                 <b aria-label={c.passed == null ? 'not checked' : c.passed ? 'passed' : 'failed'}>{c.passed == null ? '–' : c.passed ? '✓' : '✗'}</b>
-                <span>{plain(c.check)}</span>
+                <span>{plainCheck(c.check)}</span>
               </li>
             ))}
             {detail.confirm && (
@@ -94,9 +103,9 @@ export function RunPanel({ run, byId, proposals, loadDetail, onClose }: {
         <details className="lc-tech">
           <summary>Technical numbers</summary>
           <p className="lc-muted">{plain(headline.main)}{headline.sub ? ` · ${plain(headline.sub)}` : ''}</p>
-          {detail?.rule?.some((c) => c.detail) && (
-            <ul className="lc-plainlist">{detail.rule.filter((c) => c.detail).map((c, i) => <li key={i}><b>{plain(c.check)}</b>: {plain(c.detail!)}</li>)}</ul>
-          )}
+          {detail?.rule?.length ? (
+            <ul className="lc-plainlist">{detail.rule.map((c, i) => <li key={i}><b>{plain(c.check)}</b>{c.detail ? `: ${plain(c.detail)}` : ''}</li>)}</ul>
+          ) : null}
           {rows.length > 0 && (
             <div className="lc-scroll"><table className="lc-mini">
               <thead><tr><th>Horizon</th><th>Skill vs baseline [95% CI]</th><th>{lossLabel(m)}</th><th>vs reference</th></tr></thead>

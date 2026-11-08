@@ -105,7 +105,8 @@ export function changePhrase(run: RunRecord, byId: Map<string, RunRecord>): stri
     p = `${dir} ${words(d.key).replace(/^(n|num) /, '')} (${val(d.parent)} → ${val(d.value)})`
   } else if (d.parent == null) p = `${words(d.key)} set to ${val(d.value)}`
   else p = `${words(d.key)} ${val(d.parent)} → ${val(d.value)}`
-  return diff.length > 1 ? `${p} and ${diff.length - 1} more change${diff.length > 2 ? 's' : ''}` : p
+  // A new model brings its own settings: the model is the change worth saying.
+  return diff.length > 1 && d.key !== 'model' ? `${p} and ${diff.length - 1} more change${diff.length > 2 ? 's' : ''}` : p
 }
 
 /** The outcome half of the sentence: "rejected, not better than the champion at 3 h". */
