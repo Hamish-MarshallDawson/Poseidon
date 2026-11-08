@@ -1,11 +1,11 @@
 /* Sanctioned and notable yachts (#101): the Layers list and the ship window section. Tokens only. */
 .yl { padding: 0 16px 8px 36px; }
-.yl-list { list-style: none; margin: 0; padding: 0; max-height: 180px; overflow: auto; }
+.yl { max-height: 320px; overflow: auto; }
+.yl-list { list-style: none; margin: 0; padding: 0; }
 .yl-row {
   display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 3px 0; border: 0; background: none;
   font: inherit; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); color: inherit; text-align: left;
 }
-button.yl-row { cursor: pointer; }
 button.yl-row:hover .yl-name { text-decoration: underline; }
 .yl-row.is-off { color: var(--dvm-text-secondary); }
 .yl-mark { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dvm-text-muted); align-self: center; }
@@ -16,3 +16,11 @@ button.yl-row:hover .yl-name { text-decoration: underline; }
 .yl-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .yl-note { margin: 4px 0 0; color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
 .yc a { color: inherit; }
+.yl-row, .yl-disc { cursor: pointer; }
+.yl-row:focus-visible, .yl-disc:focus-visible { outline: 2px solid var(--dvm-text-primary); outline-offset: 1px; }
+.yl-head { margin: 8px 0 2px; font-size: var(--dvm-size-caption); font-weight: 600; color: var(--dvm-text-secondary); }
+.yl-disc { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; }
+.yl-disc::before { content: "\25B8 "; }
+.yl-disc[aria-expanded="true"]::before { content: "\25BE "; }
+.yl-badge { flex: none; padding: 0 4px; border: 1px solid var(--dvm-ship-sanctioned); border-radius: 3px; font-size: var(--dvm-size-caption); }
+.yl-card { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 6px; padding: 4px 8px; border-left: 2px solid var(--dvm-text-muted); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
