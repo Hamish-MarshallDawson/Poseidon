@@ -1,0 +1,25 @@
+/* Review list and Compare. Reuses the Watchlist panel, row and bar classes (panels.css, briefing.css); only the additions are here. */
+.rv-list { margin: 0; padding: 0; list-style: none; }
+.rv-item { padding: 12px; border-bottom: 1px solid var(--dvm-border-subtle); }
+.rv-item.is-noais .rv-timer { color: var(--dvm-ship-dark); }
+.rv-timer { font-variant-numeric: tabular-nums; }
+.rv-actions { display: flex; gap: 8px; }
+.rv-empty { margin: 0; padding: 16px 12px; color: var(--dvm-text-secondary); }
+
+.rv-compare {
+  position: fixed; top: 56px; left: 50%; transform: translateX(-50%); z-index: 30;
+  width: min(960px, calc(100vw - 32px)); max-height: calc(100vh - 160px);
+  display: flex; flex-direction: column; border-color: var(--dvm-text-muted); box-shadow: 0 6px 20px var(--dvm-shadow-lift);
+}
+.rv-cmp-head { padding: 14px 12px 10px; }
+.rv-cmp-head h2 { flex: 1; margin: 0; font-weight: 600; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); }
+.rv-cmp-scroll { overflow: auto; overscroll-behavior: contain; }
+.rv-table { border-collapse: collapse; width: max-content; min-width: 100%; }
+.rv-table th, .rv-table td { padding: 8px 12px; border-top: 1px solid var(--dvm-border-subtle); text-align: left; vertical-align: top; min-width: 150px; font: var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); }
+.rv-table thead td, .rv-table thead th { border-top: 0; }
+.rv-table thead td { width: 120px; min-width: 120px; }
+.rv-table tbody th { position: sticky; left: 0; background: var(--dvm-bg-panel); color: var(--dvm-text-secondary); font-weight: 500; min-width: 120px; }
+.rv-colhead { display: flex; flex-direction: column; gap: 2px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.rv-colhead b { font-weight: 600; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); }
+.rv-colhead span { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); }
+.rv-colhead:hover b, .rv-colhead:focus-visible b { text-decoration: underline; }

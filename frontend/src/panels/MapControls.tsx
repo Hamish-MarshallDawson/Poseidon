@@ -5,6 +5,7 @@ import { useMapInstance } from '../map/context'
 import { reducedMotion, usePresence } from '../motion'
 import { fmtInt } from '../windows/format'
 import { WatchlistChip } from './Watchlist'
+import { ReviewChip } from '../review/ReviewPanel'
 
 // Top-right buttons (watchlist chip, Layers, log out), zoom on the right edge and the scale bar bottom-right
 // (Figma 66:21908). The Layers pop-over follows the density report's layers panel (41:432).
@@ -79,8 +80,9 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
     <>
       <div className="top-right">
         <WatchlistChip />
+        <ReviewChip />
         <button type="button" className={`chip ${layersOpen ? 'on' : ''}`} aria-expanded={layersOpen} aria-controls="layers-panel"
-          onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, watchlistOpen: false }))}>
+          onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, watchlistOpen: false, reviewOpen: false }))}>
           <span className="chip-square" aria-hidden />Layers
         </button>
         {onLogout && <button type="button" className="chip chip-quiet" onClick={onLogout}>Log out</button>}

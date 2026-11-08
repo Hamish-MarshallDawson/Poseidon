@@ -1,11 +1,13 @@
-import { memo, useState } from 'react'
+import { memo } from 'react'
 import { ui } from '../store/ui'
+import { vessels } from '../store/vessels'
 import { Button } from '../ui'
 import { details } from './detail'
 import { useGap, useNow, useVessel, useWatchlist } from './hooks'
 import { DECISION_LABEL, TYPE_LABEL, fmtMmsi, hms, utcTime } from './format'
 import type { VesselView } from '../types'
 import { runBriefing } from '../briefing/store'
+import { toggleReview, useInReview } from '../review/store'
 
 // Body of a ship window: R2/Forecast/Ship card (Figma 56:4598), states No AIS and Active.
 // Fields come from the live VesselView, its open GapEvent, the risk fields, and the `detail` reply.
@@ -53,7 +55,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
   const replay = ui.use((s) => s.feed.mode === 'replay')
   const detail = details.use((s) => s.byMmsi[mmsi])
   const entry = useWatchlist()?.entries.find((e) => e.mmsi === mmsi)
-  const [inReview, setInReview] = useState(false)
+  const inReview = useInReview(mmsi)
   if (!v) return <div className="sc"><p className="sc-sub">This ship is no longer in the feed.</p></div>
 
   const noAis = v.status === 'gap_open' || v.status === 'silent'
@@ -103,10 +105,18 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
       <div className="sc-actions">
         <Button onClick={onFocus}>Track history</Button>
         <Button onClick={() => runBriefing([mmsi])}>Brief me</Button>
-        <Button variant={inReview ? 'outline' : 'filled'} aria-pressed={inReview} onClick={() => setInReview((x) => !x)}>
-          {inReview ? 'Added to review' : 'Add to review'}
+        <Button variant={inReview ? 'outline' : 'filled'} aria-pressed={inReview} onClick={() => toggleReview(mmsi)}>
+          {inReview ? 'In review' : 'Add to review'}
         </Button>
       </div>
+      <span className="sc-caption sc-track">{trackCaption(vessels.trails.get(mmsi))}</span>
     </div>
   )
 })
+
+// What the Track history path shows: how far back the oldest point is.
+function trackCaption(trail: [number, number, number][] | undefined): string {
+  if (!trail || trail.length < 2) return 'No track yet'
+  const min = Math.round((trail[trail.length - 1][0] - trail[0][0]) / 60000)
+  return `Track: last ${min < 60 ? `${Math.max(1, min)} min` : min >= 23 * 60 ? '24 h' : `${Math.round(min / 60)} h`}`
+}

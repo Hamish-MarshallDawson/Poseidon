@@ -7,11 +7,12 @@ import { adapter, onDetail, useFeed } from './data/index'
 import { ScrubBar } from './timeline/ScrubBar'
 import { ReplayChrome } from './timeline/ReplayChrome'
 import { ForecastOverlay } from './forecast/ForecastOverlay'
-import { FollowTracks } from './map/follow'
+import { useFollowState } from './map/follow'
 import { WindowsRoot } from './windows/WindowsRoot'
 import { bindDetailSender, receiveDetail } from './windows/detail'
 import { BriefingPanel } from './briefing/BriefingPanel'
 import { bindBriefingAuth } from './briefing/store'
+import { Review } from './review/ReviewPanel'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
 const WindowsDemo = lazy(() => import('./windows/demo/WindowsDemo'))
@@ -49,6 +50,7 @@ export default function App() {
 // The map-first screen: the map is everything; windows, panels, the scrub bar and the forecast drop in over it.
 function Monitor({ getToken, onLogout }: { getToken: () => Promise<string | undefined>; onLogout: () => void }) {
   useFeed(getToken)
+  useFollowState()
   useEffect(() => {
     bindDetailSender((m) => adapter?.send(m))
     bindBriefingAuth(getToken)
@@ -60,9 +62,9 @@ function Monitor({ getToken, onLogout }: { getToken: () => Promise<string | unde
     <>
       <MapView />
       <ForecastOverlay />
-      <FollowTracks />
       <WindowsRoot onLogout={onLogout} />
       <BriefingPanel />
+      <Review />
       <ReplayChrome />
       <ScrubBar />
       <ThemeMenu />
