@@ -17,7 +17,9 @@ held exits at once, so two trainings never overlap):
    copied into PREDICT_MODEL_DIR and named in champions.json, when its artifact is deployable. The first champion of
    a fresh registry is recorded but not deployed: it has not beaten anything the live system runs.
 Writes <ML_ARTIFACTS>/reports/auto-status.json (last cycle) and appends to auto-history.jsonl, and appends the cycle's
-runs, proposals and events to the Model Lab bundle at $POSEIDON_DATA/lab-history/ (ML_LAB_HISTORY).
+runs, proposals and events to the Model Lab bundle at $POSEIDON_DATA/lab-history/ (ML_LAB_HISTORY), then imports
+that bundle into the Lab tables (dvm.lab.importer) only when ML_LAB_IMPORT_URL is set, or ML_LAB_IMPORT=1 with
+TIGER_DATABASE_URL; never by default. The result is in auto-status.json under lab_import.
 CPU: training threads are capped by ML_THREADS (default 3 of the server's 6); the unit also sets Nice and MemoryMax.
 """
 from __future__ import annotations
@@ -97,6 +99,50 @@ def deploy(target: str, run: dict, models_dir: Path, log) -> str | None:
     os.replace(tmp, models_dir / "champions.json")
     log(f"deploy {target}: champions.json -> {dst.name}")
     return dst.name
+
+
+def lab_import_url() -> str | None:
+    """The database the cycle's Lab history goes into: ML_LAB_IMPORT_URL, or TIGER_DATABASE_URL with an explicit
+    ML_LAB_IMPORT=1. Never by default."""
+    if os.getenv("ML_LAB_IMPORT_URL"):
+        return os.environ["ML_LAB_IMPORT_URL"]
+    if os.getenv("ML_LAB_IMPORT", "0") == "1" and os.getenv("TIGER_DATABASE_URL"):
+        return os.environ["TIGER_DATABASE_URL"]
+    return None
+
+
+def lab_python() -> str:
+    """The backend's interpreter (asyncpg and dvm live there): ML_LAB_PYTHON, else <repo>/backend/.venv, else ours."""
+    if os.getenv("ML_LAB_PYTHON"):
+        return os.environ["ML_LAB_PYTHON"]
+    venv = ROOT / "backend" / ".venv" / "bin" / "python"
+    return str(venv) if venv.exists() else sys.executable
+
+
+def lab_import(bundle: Path, log=print) -> dict:
+    """Import the Lab history bundle (idempotent, additive: dvm.lab.importer) when an import database is set.
+    The URL goes in the child's environment, never on its command line. A failure never fails the cycle."""
+    url = lab_import_url()
+    if not url:
+        return {"skipped": "set ML_LAB_IMPORT_URL, or ML_LAB_IMPORT=1 with TIGER_DATABASE_URL"}
+    t0 = time.time()
+    env = os.environ | {"SOURCES_DATABASE_URL": url}
+    cmd = [lab_python(), "-m", "dvm.lab.importer", "--bundle", str(bundle), "--allow-tiger"]
+    try:   # explicit opt-in above is the Tiger permission
+        p = subprocess.run(cmd, cwd=ROOT / "backend", env=env, capture_output=True, text=True, timeout=600)
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"lab import failed: {e!r}")
+        return {"error": repr(e)[:300], "s": round(time.time() - t0, 1)}
+    out: dict = {"rc": p.returncode, "s": round(time.time() - t0, 1)}
+    if p.returncode:
+        out["tail"] = (p.stderr or p.stdout)[-300:].replace(url, "<db>")
+    else:
+        try:
+            out["counts"] = json.loads(p.stdout[p.stdout.index("{"):])
+        except ValueError:
+            pass
+    log(f"lab import {bundle}: rc={p.returncode} in {out['s']} s")
+    return out
 
 
 def cycle(targets: list[str], rounds: int, proposals: int, retrain: bool, do_deploy: bool, models_dir: Path,
@@ -200,6 +246,15 @@ def main(argv=None) -> None:
             return
         status = cycle([t for t in a.targets.split(",") if t], a.rounds, a.proposals, not a.no_retrain,
                        not a.no_deploy, a.models_dir, log=lambda m: print(f"[{now()}] {m}", flush=True))
+    bundle = None
+    try:   # the Lab's history bundle; a failure here never fails the cycle
+        from ml.core.history import DATA as HIST_DATA, append_cycle
+        bundle = Path(os.getenv("ML_LAB_HISTORY", str(HIST_DATA / "lab-history")))
+        status["lab_history"] = append_cycle(status, open_registry(None), HIST_DATA, bundle)
+    except Exception as e:
+        status["lab_history"] = {"error": repr(e)[:300]}
+    if bundle is not None:
+        status["lab_import"] = lab_import(bundle, log=lambda m: print(f"[{now()}] {m}", flush=True))
     reports = DEFAULT_ARTIFACTS / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     (reports / "auto-status.json").write_text(json.dumps(status, indent=1, default=str))
@@ -207,12 +262,6 @@ def main(argv=None) -> None:
         f.write(json.dumps({k: v for k, v in status.items() if k != "targets"} |
                            {"targets": {t: {k: v for k, v in s.items() if k != "trace"}
                                         for t, s in status["targets"].items()}}, default=str) + "\n")
-    try:   # the Lab's history bundle; a failure here never fails the cycle
-        from ml.core.history import DATA as HIST_DATA, append_cycle
-        status["lab_history"] = append_cycle(status, open_registry(None), HIST_DATA,
-                                             Path(os.getenv("ML_LAB_HISTORY", str(HIST_DATA / "lab-history"))))
-    except Exception as e:
-        status["lab_history"] = {"error": repr(e)[:300]}
     print(json.dumps(status, indent=1, default=str))
 
 

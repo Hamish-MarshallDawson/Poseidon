@@ -170,7 +170,7 @@ class Lgbm(Model):
                 vc = train_df[f].astype(str).value_counts()
                 self.vocab[f] = sorted(vc[vc >= cfg.get("min_category_rows", 200)].index.tolist())
         cal_frac = float(cfg.get("cal_frac", 0.25))
-        params = {"objective": "binary", "verbosity": -1, "seed": 7, "deterministic": True,
+        params = {"objective": "binary", "verbosity": -1, "seed": int(cfg.get("seed", 7)), "deterministic": True,
                   "num_leaves": int(cfg.get("num_leaves", 31)), "learning_rate": float(cfg.get("learning_rate", 0.05)),
                   "min_child_samples": int(cfg.get("min_child_samples", 200)),
                   "feature_fraction": float(cfg.get("feature_fraction", 0.8)),
@@ -263,6 +263,7 @@ CONFIG_SCHEMA = {
     "required": ["model"],
     "properties": {
         "model": {"type": "string", "enum": ["lgbm", "baseline", "global_rate"]},
+        "seed": {"type": "integer", "minimum": 0},
         "features": {"type": "string", "enum": ["track", "track+context"]},
         "drop_features": {"type": "array", "maxItems": 40,
                           "items": {"type": "string", "enum": list(F.FEATURE_NAMES) + D.CONTEXT_FEATURES}},
@@ -294,7 +295,7 @@ class GodarkTarget(TargetSpec):
     loss_unit = ""
     strata = ["type_group", "src", "speed_band"]
     baseline = "baseline"
-    default_config = {"model": "lgbm", "features": "track", "num_leaves": 31, "learning_rate": 0.05,
+    default_config = {"model": "lgbm", "seed": 7, "features": "track", "num_leaves": 31, "learning_rate": 0.05,
                       "n_estimators": 300, "min_child_samples": 200, "pos_weight": "balanced", "cal_frac": 0.25}
     config_schema = CONFIG_SCHEMA
     group_by_ship = False
