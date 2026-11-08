@@ -34,3 +34,24 @@ export const HORIZON_MS = 6 * 3_600_000
 export const RESOLVE_LAG_MS = 30 * 60_000          // outcomes exist only after made_at + 6 h 30 min
 
 export const pct = (p: number) => `${Math.round(p * 100)} %`
+
+// Go-dark model features (backend/dvm/predict/features.py) in plain words, for the reasons behind a score.
+const FEATURE_LABEL: Record<string, string> = {
+  sog_kn: 'speed', sog_mean: 'average speed', sog_std: 'speed changes', sog_trend: 'slowing or speeding up',
+  turn_abs_deg_per_h: 'turning', heading_cog_diff_deg: 'heading off course', straightness: 'straight course',
+  hour_sin: 'time of day', hour_cos: 'time of day', age_s: 'time since last report', rate_per_min: 'report rate',
+  nav_status: 'navigation status', anchored: 'at anchor', draught_m: 'draught', length_m: 'size', ship_type: 'ship type',
+  is_class_a: 'AIS class', lat: 'area', lon: 'area', disp_kn: 'distance made good',
+}
+const featureLabel = (k: string) => FEATURE_LABEL[k] ?? k.replace(/_/g, ' ')
+
+/** The features that raised this ship's score most (top SHAP contributions above zero), as up to `n` plain words. */
+export function raisedBy(contrib: Record<string, number> | undefined, n = 3): string[] {
+  const out: string[] = []
+  for (const [k] of Object.entries(contrib ?? {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])) {
+    const l = featureLabel(k)
+    if (!out.includes(l)) out.push(l)
+    if (out.length === n) break
+  }
+  return out
+}
