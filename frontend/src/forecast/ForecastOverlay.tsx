@@ -141,7 +141,7 @@ function setup(map: MapLibreMap): () => void {
       const chance = tier > 0 ? pct(r.p) : ''
       const reason = tier > 1 ? REASON_LABEL[r.codes.find((c) => c !== 'OPEN_GAP') ?? ''] ?? '' : ''
       const img = `fc-tag-${band(r.p)}-${rank}-${chance}-${reason}`
-      return [{ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [v.lon, v.lat] }, properties: { img, band: band(r.p), rank: r.rank, chance, reason, label: rank } }]
+      return [{ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [v.lon, v.lat] }, properties: { img, band: band(r.p), rank: r.rank, p: pct(r.p), chance, reason, label: rank } }]
     }).slice(0, CAP[tier])
     for (const { properties: f } of features) {
       if (map.hasImage(f.img)) continue

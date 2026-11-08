@@ -159,11 +159,11 @@ export class ShipController {
       id: L.chips, type: 'symbol', source: S.chips,
       layout: {
         'icon-image': 'dvm-chip', 'icon-allow-overlap': true, 'icon-ignore-placement': true,
-        'icon-text-fit': 'both', 'icon-text-fit-padding': [3, 5, 3, 17],
-        'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-allow-overlap': true, 'text-ignore-placement': true,
-        'text-offset': [0.55, 0],
+        'icon-size': ['step', ['length', ['get', 'label']], 0.8, 2, 1, 3, 1.25],   // the disc grows with the digits
+        'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 10, 'text-allow-overlap': true, 'text-ignore-placement': true,
+        'text-offset': [0, 1.05],   // this font's glyphs sit above the anchor; centres the count on the disc
       },
-      paint: { 'text-color': ink, 'icon-opacity': 0.92 },
+      paint: { 'text-color': ink, 'icon-opacity': 0.85 },
     })
     map.addLayer({ id: L.fan, type: 'line', source: S.fan, paint: { 'line-color': ink, 'line-width': 1, 'line-opacity': 0.5 } })
     this.gpu = createShipLayer(L.ships, this.atlas, this.buf, { rebuild: (b) => this.rebuild(b), patch: (b) => this.patch(b), colours: () => this.colourCache })
@@ -549,8 +549,8 @@ export class ShipController {
     this.closeFan()                                // a click on water closes a fan or list
   }
 
-  private hoverChip: number | null = null
-  /** Chip hover callback for the tooltip (MapView renders it). */
+  private hoverTip: string | null = null
+  /** Chip and forecast-tag hover callback for the tooltip (MapView renders it). */
   onChipHover: ((info: { x: number; y: number; text: string } | null) => void) | null = null
 
   private onMouseMove = (e: MapMouseEvent): void => {
@@ -565,16 +565,21 @@ export class ShipController {
       if (f) chipIdx = Number(f.properties?.i)
     }
     map.getCanvas().style.cursor = hit || chipIdx != null ? 'pointer' : ''
-    if (chipIdx !== this.hoverChip) {
-      this.hoverChip = chipIdx
-      const c = chipIdx != null ? this.chips[chipIdx] : undefined
-      this.onChipHover?.(c ? { x: e.point.x, y: e.point.y, text: this.chipText(c) } : null)
+    const c = chipIdx != null ? this.chips[chipIdx] : undefined
+    let text = c ? this.chipText(c) : null
+    if (!hit && !c && map.getLayer('fc-tags')) {
+      const tag = map.queryRenderedFeatures(e.point, { layers: ['fc-tags'] })[0]?.properties
+      if (tag) text = `Rank ${tag.rank} on the watchlist · ${tag.p} model estimate of going dark in 6 h, for ranking only`
+    }
+    if (text !== this.hoverTip) {
+      this.hoverTip = text
+      this.onChipHover?.(text ? { x: e.point.x, y: e.point.y, text } : null)
     }
   }
 
   private onMouseOut = (): void => {
     if (ui.get().hoverMmsi != null) ui.set({ hoverMmsi: null })
-    if (this.hoverChip != null) { this.hoverChip = null; this.onChipHover?.(null) }
+    if (this.hoverTip != null) { this.hoverTip = null; this.onChipHover?.(null) }
   }
 
   private chipText(c: Chip): string {
@@ -689,16 +694,14 @@ export class ShipController {
       g.strokeStyle = dead; g.lineWidth = 1.5
       g.beginPath(); g.moveTo(-2, 10); g.lineTo(10, -2); g.moveTo(-2, 2); g.lineTo(2, -2); g.moveTo(6, 10); g.lineTo(10, 6); g.stroke()
     }))
-    const panel = readToken('bg-panel') || '#1c2d38', edge = readToken('border-default') || '#4a6474', ink = readToken('text-primary') || '#eee9dc'
+    const panel = readToken('bg-panel') || '#1c2d38', edge = readToken('border-default') || '#4a6474'
     const keyline = readToken('ship-keyline') || readToken('bg-app') || '#15232d'
-    // Stack chip: square-cornered panel, keyline, edge, stack glyph at the left; the count sits in the stretch area.
-    put('dvm-chip', make(40, 20, (g) => {
-      g.fillStyle = keyline; g.fillRect(0, 0, 40, 20)
-      g.fillStyle = panel; g.fillRect(1, 1, 38, 18)
-      g.strokeStyle = edge; g.lineWidth = 1; g.strokeRect(1.5, 1.5, 37, 17)
-      g.fillStyle = ink
-      for (let i = 0; i < 3; i++) g.fillRect(5 + i * 1.5, 6 + i * 3, 7, 1.5)
-    }), { stretchX: [[17 * ratio, 36 * ratio]], stretchY: [[5 * ratio, 15 * ratio]], content: [17 * ratio, 3 * ratio, 36 * ratio, 17 * ratio] })
+    // Stack marker: a quiet round disc behind the count (the map scales it with the digits).
+    put('dvm-chip', make(26, 26, (g) => {
+      g.beginPath(); g.arc(13, 13, 12.5, 0, Math.PI * 2); g.fillStyle = keyline; g.fill()
+      g.beginPath(); g.arc(13, 13, 11.5, 0, Math.PI * 2); g.fillStyle = panel; g.fill()
+      g.strokeStyle = edge; g.lineWidth = 1; g.stroke()
+    }))
   }
 
   /** Ships in the store (for status and tests). */
