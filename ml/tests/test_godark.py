@@ -190,6 +190,8 @@ def test_artifact_round_trip_and_backend_format(tmp_path):
     meta = json.loads((tmp_path / "a" / "model.json").read_text())
     assert meta["target"] == "godark" and meta["kind"] == "lightgbm" and meta["deployable"] is True
     assert meta["horizons_s"] == [3600, 21600] and set(meta["heads"]) == {"3600", "21600"}
+    assert meta["primary_target"] == "dark_6h" and meta["targets"] == {"3600": "dark_1h", "21600": "dark_6h"}
+    assert meta["heads"]["21600"]["target_name"] == "dark_6h"
     assert all(i["calibration_slice"] in ("time", "ships") for i in meta["fit_info"].values() if "n_fit" in i)
     for spec in meta["heads"].values():
         xs = spec["calibration"]["x"]
@@ -219,6 +221,13 @@ def test_context_model_is_marked_not_deployable(tmp_path):
     save_artifact(m, tmp_path / "c", {"version": "godark-ctx"})
     meta = json.loads((tmp_path / "c" / "model.json").read_text())
     assert meta["deployable"] is False and "type_group" in meta["vocab"]
+
+
+def test_threads_are_capped():
+    import os
+    from ml.godark import MAX_THREADS
+    assert MAX_THREADS == 6 and int(os.environ["OMP_NUM_THREADS"]) <= 6
+    assert SPEC.primary_horizons_s[0] == 21600
 
 
 def test_config_schema_rejects_unknown_keys():

@@ -28,6 +28,7 @@ import ml  # noqa: F401  (backend/ on sys.path)
 from dvm.predict import features as F
 from ml.core.registry import Model
 from ml.core.target import TargetSpec
+from ml.godark import MAX_THREADS, PRIMARY_HORIZON_S, TARGET_NAMES
 from ml.godark import dataset as D
 
 HORIZONS = D.HORIZONS_S
@@ -174,7 +175,8 @@ class Lgbm(Model):
                   "min_child_samples": int(cfg.get("min_child_samples", 200)),
                   "feature_fraction": float(cfg.get("feature_fraction", 0.8)),
                   "bagging_fraction": float(cfg.get("bagging_fraction", 0.8)), "bagging_freq": 1,
-                  "lambda_l2": float(cfg.get("lambda_l2", 1.0)), "num_threads": int(cfg.get("num_threads", 4)), "force_col_wise": True}
+                  "lambda_l2": float(cfg.get("lambda_l2", 1.0)), "num_threads": min(int(cfg.get("num_threads", MAX_THREADS)), MAX_THREADS),
+                  "force_col_wise": True}
         cats = [f for f in self.features if f in D.CATEGORICAL]
         self.boosters, self.cal, self.info = {}, {}, {}
         for h in HORIZONS:
@@ -232,11 +234,13 @@ class Lgbm(Model):
         heads = {}
         for h, b in self.boosters.items():
             b.save_model(str(dir / f"h{h}.txt"))
-            heads[str(h)] = {"model": f"h{h}.txt", **({"calibration": self.cal[h]} if h in self.cal else {})}
+            heads[str(h)] = {"model": f"h{h}.txt", "target_name": TARGET_NAMES[h], **({"calibration": self.cal[h]} if h in self.cal else {})}
         deployable = all(f in F.FEATURE_NAMES for f in self.features)
         return {"features": self.features, "horizons_s": sorted(self.boosters), "heads": heads, "kind": "lightgbm",
                 "feature_version": F.FEATURE_VERSION, "deployable": deployable, "vocab": self.vocab,
-                "fit_info": self.info, "label": PRIMARY_FLAG}
+                "fit_info": self.info, "label": PRIMARY_FLAG,
+                "targets": {str(h): TARGET_NAMES[h] for h in sorted(self.boosters)},
+                "primary_target": TARGET_NAMES[PRIMARY_HORIZON_S]}
 
     @classmethod
     def load(cls, dir):
@@ -282,7 +286,9 @@ CONFIG_SCHEMA = {
 class GodarkTarget(TargetSpec):
     name = "godark"
     horizons_s = HORIZONS
-    primary_horizons_s = [3600, 6 * 3600]   # 24 h has no labels on the 12 h of live data yet
+    # dark_6h is the product's primary target (frontend RiskScore). dark_1h is also checked; dark_24h has no labels
+    # on the live data yet.
+    primary_horizons_s = [PRIMARY_HORIZON_S, 3600]
     statistic = "mean"
     loss_name = "log_loss"
     loss_unit = ""
@@ -322,7 +328,7 @@ class GodarkTarget(TargetSpec):
         out = {}
         for h, g in scored.groupby("horizon_s"):
             y, p = g["y"].to_numpy(), g["p"].to_numpy()
-            out[str(h)] = {"n": int(len(g)), "positives": int(y.sum()), "base_rate": float(y.mean()),
+            out[str(h)] = {"target_name": TARGET_NAMES[int(h)], "n": int(len(g)), "positives": int(y.sum()), "base_rate": float(y.mean()),
                            "log_loss": float(g["loss"].mean()), "brier": float(g["brier"].mean()),
                            "auc_pr": auc_pr(y, p), "ece": ece(y, p)}
         return out

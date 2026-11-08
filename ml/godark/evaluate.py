@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from ml.core.registry import save_artifact
+from ml.godark import PRIMARY_HORIZON_S, TARGET_NAMES
 from ml.godark import dataset as D
 from ml.godark.target import SPEC, Baseline, GlobalRate, Lgbm, auc_pr, calibration_curve, ece, label_col, log_loss
 
@@ -95,7 +96,7 @@ def paired_skill(y, p_m, p_r, ships, B: int = B) -> dict:
 def evaluate(ex: pd.DataFrame, flag: str = "deliberate_candidate", artifacts: Path | None = None,
              label_source: str = "replay") -> dict:
     res = {"label": flag, "label_source": label_source, "horizons": {}}
-    for h in SPEC.horizons_s:
+    for h in sorted(SPEC.horizons_s, key=lambda x: (x != PRIMARY_HORIZON_S, x)):   # dark_6h first
         col = label_col(h, flag)
         if ex[col].notna().sum() == 0:
             res["horizons"][str(h)] = {"skipped": "no labelled rows yet (needs that long after made_at)"}
@@ -196,7 +197,8 @@ def markdown(all_res: dict) -> str:
     for r in all_res["runs"]:
         L += [f"## Label `{r['label']}` (label source: {r['label_source']})", ""]
         for h, hr in r["horizons"].items():
-            L.append(f"### {int(h) // 3600} h")
+            name = TARGET_NAMES[int(h)]
+            L.append(f"### {name} ({int(h)} s){' (primary)' if int(h) == PRIMARY_HORIZON_S else ''}")
             if "skipped" in hr:
                 L += ["", f"Skipped: {hr['skipped']}.", ""]
                 continue
@@ -253,7 +255,7 @@ def html_report(md: str, all_res: dict) -> str:
             for name in ("baseline", "lgbm_track", "lgbm_context"):
                 cc = hr.get("models", {}).get(name, {}).get("calibration_curve")
                 if cc:
-                    figs.append(curve_svg(cc, f"{int(h) // 3600} h {name} ({r['label_source']} labels)"))
+                    figs.append(curve_svg(cc, f"{TARGET_NAMES[int(h)]} {name} ({r['label_source']} labels)"))
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport"
 content="width=device-width,initial-scale=1"><title>Go-dark risk report</title><style>
 :root{{--bg:#fff;--fg:#1a1a1a;--mut:#666;--acc:#1f6feb}}

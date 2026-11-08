@@ -3,7 +3,9 @@
 The chance that a moving Class A ship goes silent in the next 1, 6 or 24 h, where "goes silent" means **a gap of
 ours**: the backend's own detector (`backend/dvm/gaps.py`) opens a gap. The primary label is a
 `deliberate_candidate` gap (the area still heard other ships); `unknown` (open sea, no neighbours) is reported
-separately. **Our own detector made every label.** GFW gap events (issue #112) are the independent check offshore
+separately. The targets are named as the frontend's `RiskScore` (`frontend/src/types.ts`) and the backend's `scores`
+rows: **`dark_6h` (horizon 21600 s) is primary**, with `dark_1h` and `dark_24h`. Each artifact head carries its
+`target_name`. **Our own detector made every label.** GFW gap events (issue #112) are the independent check offshore
 and are not used yet.
 
 ## Pipeline
@@ -16,7 +18,8 @@ ml/.venv/bin/python -m ml.godark.evaluate   # train, evaluate, report (report/),
 ml/.venv/bin/pytest -q ml/tests/test_godark.py
 ```
 
-Run from the repo root. About 1 min export, 4 min replay, 20 s examples on 12 h of data. `ml.godark.target.SPEC` is
+Run from the repo root. Every run caps its threads at 6 (`ml.godark.MAX_THREADS`: LightGBM `num_threads`,
+`OMP_NUM_THREADS`, BLAS, and at most 6 feature workers), because the training desktop is shared. About 1 min export, 4 min replay, 20 s examples on 12 h of data. `ml.godark.target.SPEC` is
 the target for ml-loop's runner (`--target godark`).
 
 ## Why replay the detector instead of reading the `gaps` table

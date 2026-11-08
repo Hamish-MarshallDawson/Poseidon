@@ -276,7 +276,8 @@ def add_track_features(rows: pd.DataFrame, p: pd.DataFrame, workers: int | None 
         static = [{"ship_type": a, "length_m": b, "draught_m": c}
                   for a, b, c in zip(g["ship_type"], g["length_m"], g["draught_m"])]
         groups.append((m, lo, hi, g["made_at"].to_numpy(), static))
-    workers = workers or max(1, (os.cpu_count() or 2) - 2)
+    from ml.godark import MAX_THREADS
+    workers = min(workers or MAX_THREADS, MAX_THREADS)
     n = max(1, len(groups) // (workers * 4))
     chunks = [groups[i:i + n] for i in range(0, len(groups), n)]
     # Each chunk carries only its own slices of the columns.
