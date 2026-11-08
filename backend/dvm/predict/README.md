@@ -12,6 +12,7 @@ and two read-only routes. Training lives in `ml/` and reaches the backend only t
 | `schema.py` | `route_predictions`, `model_runs`, extra nullable `outcomes` columns. Additive, append-only. |
 | `routes.py` | `GET /predictions`, `/model/leaderboard`, `/scores`, `/outcomes`, `/timeline`, `/model/report`. |
 | `forecast.py` | The newest forecasts in memory for the WebSocket frames: risk, watchlist, gap ghost circles, detail. |
+| `backtest.py` | Fills the ledger for stored history with the live code (`mode = 'backtest'`) and grades it. |
 
 ## Run
 
@@ -123,6 +124,32 @@ east, north = enu_offset(blat, blon, true_lat, true_lon)   # the route target: o
 Our own detector makes the go-dark labels; GFW gap events (#112) are the independent check later. A delayed grader
 (Danish archive, GFW) should write its own rows with a suffixed `score_id` (e.g. `<id>@dma`).
 
+## Backtest (`python -m dvm.predict.backtest`)
+
+```
+python -m dvm.predict.backtest --from 2026-11-07T20:00Z --to 2026-11-08T05:50Z --step-min 10 [--db URL] [--json out.json]
+```
+
+Walks stored history and, at each step t, runs the live predictor's code (`route_rows`, `godark_rows`, the champions or
+baselines, `Forecast.frozen_set`) on what was known at t, then grades with the graders' functions. Reads `positions`,
+`statics`, `gaps` from `--source` (default `TIGER_DATABASE_URL`, read-only session); writes `route_predictions`,
+`scores` and `outcomes` to `--db` (default `BACKTEST_DATABASE_URL`, else the local database on port 55542). Tiger as
+`--db` is refused without `--allow-tiger` (the Vultr server only). Prints a JSON summary: rows written, rows per hour of
+history, seconds per hour, and skill over the baseline from the graded backtest rows.
+
+- **Known at t:** positions and statics with `recv_ts <= t`; a gap from when the detector opened it, start +
+  max(30 min, 20 x report interval) (dvm/gaps.py's rule) or the stored `detected_at` if earlier, until its `end_ts`.
+  The rule is used because a warm start re-detects older gaps with `detected_at` = the restart time.
+- **Same as live:** gap ships once per gap and model version (`as_of` = last fix); `--sample` moving Class A ships per
+  step (seeded by t); every moving Class A ship scored once an hour (at a step fixed by its mmsi) and an hourly
+  frozen set in `scores`. Hours that already hold a live set are skipped. Ids are the live ids.
+- **Grading:** everything the history can decide by `--data-end` (default: the newest position), `resolved_at` =
+  when the live grader would have decided. Go-dark windows that start before the first gap in `gaps` are not graded
+  (no gap there means no detector, not no gap), and the baseline rate counts only that covered time.
+- **Idempotent:** ON CONFLICT DO NOTHING on stable ids and time-seeded sampling: a re-run writes nothing new.
+- A champion trained on part of the range is graded on its own training data: pass `--model-dir` with an artifact
+  trained before `--from`, or read its skill as in-sample.
+
 ## Routes (same login as `/coverage`)
 
 - `GET /predictions?mmsi=<n>&hours=24` → `{mmsi, route: [{as_of, made_at, model_version, gap_id, points: [{horizon_s,
@@ -164,6 +191,6 @@ information until a LightGBM champion is promoted (decisions are then all `none`
 
 ## Tests
 
-`pytest tests/test_predict_features.py tests/test_predict.py tests/test_predict_frames.py`. The frame and route
+`pytest tests/test_predict_features.py tests/test_predict.py tests/test_predict_frames.py tests/test_predict_backtest.py`. The frame and route
 shapes are checked against the interfaces parsed from `frontend/src/types.ts`. The database test needs a local TimescaleDB in
 `SOURCES_TEST_DATABASE_URL` (it truncates the ledger tables, so never point it at a database you care about).
