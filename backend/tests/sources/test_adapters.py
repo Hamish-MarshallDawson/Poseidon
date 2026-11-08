@@ -160,7 +160,7 @@ def test_gfw_fetch_day_with_fake_client():
 
     saved = {}
     obs, statics, info = gfw.fetch_day(Fake(), "danish_straits", BOX, DAY, RECV, lambda n, b: saved.setdefault(n, b))
-    assert len(saved) == 9 and len({o.id for o in obs}) == len(obs)
+    assert len(saved) == 8 and len({o.id for o in obs}) == len(obs)   # gaps come from gfw_gaps.py (#112)
     assert len({s.mmsi for s in statics}) == len(statics)
     assert {o.kind for o in obs} >= {"ais_presence", "sar_detection", "loitering", "port_visit"}
 

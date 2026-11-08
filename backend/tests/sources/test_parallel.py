@@ -69,7 +69,7 @@ def test_share_client_covers_gfw_client_methods():
         c._post = lambda path, params, body: seen.append(path) or {"entries": []}
         jobs.share_client(c, inflight=2)
         c.report(gfw.PRESENCE, (0, 0, 1, 1), D0, vessels=False)
-        c.events(gfw.EVENT_DATASETS["gap"], (0, 0, 1, 1), D0)
+        c.events(gfw.EVENT_DATASETS["encounter"], (0, 0, 1, 1), D0)
         assert seen == ["/4wings/report", "/events"] and c._shared
     finally:
         c.close()
@@ -189,9 +189,19 @@ def test_backfill_back_workers_match_one_worker(monkeypatch):
     async def body(con):
         results = []
         for workers, block in ((1, 1), (3, 1), (2, 5)):
-            monkeypatch.setattr(jobs, "fetch", FakeFetch())
+            fake, ranges = FakeFetch(), []
+            monkeypatch.setattr(jobs, "fetch", fake)
+
+            def fetch_range(client, region, bbox, first, last, recv_ts, raw_sink=None):
+                # The real gfw.fetch_range exists since PR 124: stand in for it with the same per-day rows.
+                ranges.append((region, first, last))
+                return {d.isoformat(): fake(None, region, bbox, d, recv_ts, None) for d in days(first, last)}
+
+            monkeypatch.setattr(gfw, "fetch_range", fetch_range)
             res = await jobs.backfill_back(URL, "gfw", REGIONS, until=D0, newest=D1, workers=workers,
                                            block_days=block, client=object())
+            if block > 1:   # the block path really ran, in blocks of at most `block` days
+                assert ranges and all(1 <= (last - first).days + 1 <= block for _, first, last in ranges)
             results.append((res["oldest_day"], res["stopped"], res["observations"], await _snapshot(con)))
             await _clean(con)
         assert results[0] == results[1] == results[2]
