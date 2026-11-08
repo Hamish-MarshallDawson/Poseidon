@@ -16,6 +16,7 @@ import { Colour, createShipLayer, InstanceBuffer, N_COLOURS, writeMotion, type S
 import { buildAtlas, hullKey, TIERS, TYPES, type HullType, type Sprite } from './sprites'
 import { CourseLine } from './course'
 import { shownNow } from '../../timeline/replay'
+import { DelayedMap } from '../delayed'
 import { ghostOf } from '../../forecast/geo'
 import { clock, setShownClock, ShipState } from './state'
 import { yachts, yachtBadge } from '../../yachts/store'
@@ -81,6 +82,7 @@ export class ShipController {
   private unsubs: (() => void)[] = []
   private tmp = new Float64Array(2)
   private course = new CourseLine(this.state)
+  private delayed = new DelayedMap()
   private instHead = new Int32Array(0)               // slot → first instance (linked through instNext), -1 = none
   private instNext = new Int32Array(0)
   private pending = new Set<number>()
@@ -164,6 +166,7 @@ export class ShipController {
     this.gpu = createShipLayer(L.ships, this.atlas, this.buf, { rebuild: (b) => this.rebuild(b), patch: (b) => this.patch(b), colours: () => this.colourCache })
     map.addLayer(this.gpu.layer)
     this.course.attach(map)
+    this.delayed.attach(map)
     this.applyLayerVisibility(ui.get().layers)
     if (first) {
       map.on('moveend', this.onMoveEnd)
@@ -184,6 +187,7 @@ export class ShipController {
       map.off('mousemove', this.onMouseMove); map.off('mouseout', this.onMouseOut)
     }
     this.course.detach()
+    this.delayed.detach()
     this.map = null
     for (const u of this.unsubs) u()
     this.unsubs = []

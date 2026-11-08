@@ -1,4 +1,4 @@
-import type { ClientMsg, HistoryRange, ObservationQuery, ObservationReply, Outcome, RiskScore, ServerMsg, SourceStatus, Stats, TimelineEvent } from '../types'
+import type { ClientMsg, HistoryRange, ObservationQuery, ObservationReply, Outcome, SourcesReply, RiskScore, ServerMsg, SourceStatus, Stats, TimelineEvent } from '../types'
 import type { Frame } from '../store/vessels'
 
 // The one data interface the UI talks to. Two implementations:
@@ -39,6 +39,7 @@ export interface DataAdapter {
   modelReport?(): Promise<string | null>
   // GET /observations. Rejects with an Error whose `status` is the HTTP code (422 = the route needs a bbox).
   observations?(q: ObservationQuery): Promise<ObservationReply>
+  sources?(): Promise<SourcesReply>
 }
 
 export interface AdapterOptions {
