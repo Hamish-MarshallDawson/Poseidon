@@ -33,6 +33,8 @@ export interface DataAdapter {
   timeline(from_ts: number, to_ts: number): Promise<TimelineEvent[]>
   scores(as_of?: number): Promise<RiskScore[]>
   outcomes(from_ts: number, to_ts: number): Promise<Outcome[]>
+  // GET /track: one ship's past positions [ts, lon, lat], oldest first, at most one per minute, hours 1..24.
+  track(mmsi: number, hours: number): Promise<[number, number, number][]>
 }
 
 export interface AdapterOptions {

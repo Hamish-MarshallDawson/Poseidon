@@ -1,4 +1,5 @@
 import type { GeoJSONSource, Map as MapLibreMap, MapMouseEvent } from 'maplibre-gl'
+import { TrackRenderer } from '../track'
 import type { VesselView } from '../../types'
 import { ui, type UIState } from '../../store/ui'
 import { vessels, type Frame } from '../../store/vessels'
@@ -34,7 +35,7 @@ const PAD = 0.15                        // fraction of the viewport added on eac
 
 const L = {
   cells: 'dvm-cells', cellLabels: 'dvm-cell-labels', dead: 'dvm-dead', deadEdge: 'dvm-dead-edge',
-  ghost: 'dvm-focus-ghost', ghostEdge: 'dvm-focus-ghost-edge', trail: 'dvm-focus-trail', inferred: 'dvm-focus-inferred',
+  ghost: 'dvm-focus-ghost', ghostEdge: 'dvm-focus-ghost-edge', inferred: 'dvm-focus-inferred',
   leader: 'dvm-focus-leader', cross: 'dvm-focus-cross', chips: 'dvm-chips', fan: 'dvm-fan', ships: 'dvm-ships',
 }
 const S = { cells: 'dvm-cells', dead: 'dvm-dead', focus: 'dvm-focus', chips: 'dvm-chips', fan: 'dvm-fan' }
@@ -86,6 +87,7 @@ export class ShipController {
   /** performance.now() of the first frame that drew ships (for the first-ship-frame measurement). */
   firstShipFrame = 0
   private opts: ControllerOptions
+  private track = new TrackRenderer()
 
   // Hull sprites by (type, tier, hollow, heading), so the rebuild never builds a string per ship.
   private hullSprites: (Sprite | undefined)[] = []
@@ -139,7 +141,7 @@ export class ShipController {
     const kind = (k: string) => ['==', ['get', 'kind'], k] as ['==', ['get', string], string]
     map.addLayer({ id: L.ghost, type: 'fill', source: S.focus, filter: kind('ghost'), paint: { 'fill-color': readToken('ship-ghost-fill') || '#f26aa033' } })
     map.addLayer({ id: L.ghostEdge, type: 'line', source: S.focus, filter: kind('ghost'), paint: { 'line-color': readToken('ship-ghost-edge') || '#f26aa0', 'line-width': 1, 'line-dasharray': [4, 3], 'line-opacity': 0.5 } })
-    map.addLayer({ id: L.trail, type: 'line', source: S.focus, filter: kind('trail'), paint: { 'line-color': ink, 'line-width': 1.5 } })
+    this.track.attach(map)
     map.addLayer({ id: L.inferred, type: 'line', source: S.focus, filter: kind('inferred'), paint: { 'line-color': readToken('accent-default') || '#86c9e8', 'line-width': 1.5, 'line-dasharray': [3, 3] } })
     map.addLayer({ id: L.leader, type: 'line', source: S.focus, filter: kind('leader'), paint: { 'line-color': ink, 'line-width': 1, 'line-opacity': 0.18 } })
     map.addLayer({ id: L.cross, type: 'symbol', source: S.focus, filter: kind('cross'), layout: { 'icon-image': 'dvm-cross', 'icon-allow-overlap': true, 'icon-ignore-placement': true } })
@@ -179,6 +181,7 @@ export class ShipController {
     this.map = null
     for (const u of this.unsubs) u()
     this.unsubs = []
+    this.track.dispose()
     window.clearTimeout(this.passTimer); window.clearTimeout(this.focusTimer); window.clearTimeout(this.fadeTimer)
   }
 
@@ -186,6 +189,7 @@ export class ShipController {
   repaint(): void {
     const map = this.map
     if (!map) return
+    this.track.remove(map)
     for (const id of Object.values(L).reverse()) if (map.getLayer(id)) map.removeLayer(id)
     for (const id of Object.values(S)) if (map.getSource(id)) map.removeSource(id)
     this.attach(map)
@@ -218,6 +222,7 @@ export class ShipController {
     else if (moved) this.gpu.patch()
     this.schedulePass()
     if (ui.get().focusMmsi != null) this.scheduleFocusPass()
+    this.track.touch()
   }
 
   private updateRanks(): void {
@@ -246,6 +251,7 @@ export class ShipController {
       if (s.focusMmsi == null) this.clearFocusGeometry()
       this.focusPass(true)
     }
+    if (s.windows !== p.windows || s.focusMmsi !== p.focusMmsi) this.track.touch(true)
     if (s.windows !== p.windows || s.focusRelated !== p.focusRelated || s.focusMmsi !== p.focusMmsi) { this.selectionChanged = true; this.slotPass() }
     else if (s.hoverMmsi !== p.hoverMmsi) this.gpu.invalidate()
     if (s.layers !== p.layers) this.applyLayerVisibility(s.layers)
@@ -623,7 +629,7 @@ export class ShipController {
     if (!sameRelations(rel, s.focusRelated)) ui.set({ focusRelated: rel })
     const relViews = rel.map((r) => vessels.vessels.get(r.mmsi)).filter((v): v is VesselView => !!v)
     const gap = f.status === 'gap_open' ? openGap(vessels.gaps.values(), f.mmsi) : undefined
-    const geo = focusGeometry(f, relViews, vessels.trails.get(f.mmsi) ?? [], gap, vessels.now_ts || Date.now())
+    const geo = focusGeometry(f, relViews, gap, vessels.now_ts || Date.now())
     ;(map.getSource(S.focus) as GeoJSONSource | undefined)?.setData(geo)
   }
 
