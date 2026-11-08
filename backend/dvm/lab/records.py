@@ -140,9 +140,13 @@ def rule(rec: dict, confirm: Optional[dict]) -> list[dict]:
     out, vs = [], _against(d)
     for h, x in sorted((d.get("horizons") or {}).items(), key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 0):
         detail = None
-        if x.get("diff") is not None:
-            detail = f"diff {x['diff']:+.4g} [{x.get('lo', float('nan')):+.4g}, {x.get('hi', float('nan')):+.4g}]"
-        out.append({"check": f"beats {vs} at {horizon_label(h)}", "passed": bool(x.get("win")), "detail": detail})
+        if isinstance(x.get("diff"), (int, float)):
+            detail = f"diff {x['diff']:+.4g}"
+            if isinstance(x.get("lo"), (int, float)) and isinstance(x.get("hi"), (int, float)):
+                detail += f" [{x['lo']:+.4g}, {x['hi']:+.4g}]"
+        win = x.get("win")
+        out.append({"check": f"beats {vs} at {horizon_label(h)}", "passed": bool(win) if win is not None else None,
+                    "detail": detail})
     for c in d.get("calibration") or []:
         ok = c.get("ok")
         if ok is None and c.get("value") is not None:

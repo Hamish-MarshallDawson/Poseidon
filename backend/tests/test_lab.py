@@ -78,6 +78,16 @@ def test_rule_checklist_from_decision():
     assert R.rule({"metrics": {}}, None) == []                              # pre-registry runs: no decision
 
 
+def test_rule_horizon_without_interval():
+    """Pre-registry runs converted by lab-history: a diff with null lo/hi, and win missing on one horizon."""
+    rec = {"metrics": {"decision": {"against": "baseline", "horizons": {
+        "3600": {"diff": -0.12, "lo": None, "hi": None, "win": True},
+        "10800": {"diff": 0.05, "lo": None, "hi": None}}}}}
+    checks = R.rule(rec, None)
+    assert checks == [{"check": "beats the baseline at 1 h", "passed": True, "detail": "diff -0.12"},
+                      {"check": "beats the baseline at 3 h", "passed": None, "detail": "diff +0.05"}]
+
+
 def test_run_detail_confirm_rationale_parent():
     runs = _bundle_runs()
     props = [R.proposal_record({**p, "created_at": R.to_ms(p["created_at"])}, None)
