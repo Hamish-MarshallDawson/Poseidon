@@ -28,3 +28,55 @@ def test_recalibration_is_recorded_not_installed_by_default(tmp_path, monkeypatc
 def test_recalibration_installs_only_with_ml_deploy_recal(tmp_path, monkeypatch):
     applied, rc = _cycle(tmp_path, monkeypatch, {"ML_DEPLOY_RECAL": "1"})
     assert applied is True and rc["applied"] is True and "note" not in rc
+
+
+def test_lab_import_is_off_by_default(tmp_path, monkeypatch):
+    for k in ("ML_LAB_IMPORT_URL", "ML_LAB_IMPORT"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("TIGER_DATABASE_URL", "postgresql://tiger")   # Tiger alone is not an opt-in
+    assert auto.lab_import_url() is None
+    assert "skipped" in auto.lab_import(tmp_path, log=lambda m: None)
+
+
+def test_lab_import_url_needs_an_explicit_opt_in(monkeypatch):
+    monkeypatch.delenv("ML_LAB_IMPORT_URL", raising=False)
+    monkeypatch.setenv("TIGER_DATABASE_URL", "postgresql://tiger")
+    monkeypatch.setenv("ML_LAB_IMPORT", "1")
+    assert auto.lab_import_url() == "postgresql://tiger"
+    monkeypatch.setenv("ML_LAB_IMPORT_URL", "postgresql://local")
+    assert auto.lab_import_url() == "postgresql://local"
+
+
+def test_lab_import_runs_the_importer_without_the_url_on_the_command_line(tmp_path, monkeypatch):
+    seen = {}
+
+    class P:
+        returncode, stdout, stderr = 0, 'INFO x\n{"runs": 2}', ""
+
+    def fake(cmd, cwd, env, **kw):
+        seen.update(cmd=cmd, cwd=cwd, url=env["SOURCES_DATABASE_URL"])
+        return P()
+    monkeypatch.setattr(auto.subprocess, "run", fake)
+    monkeypatch.setenv("ML_LAB_IMPORT_URL", "postgresql://secret@local/db")
+    out = auto.lab_import(tmp_path, log=lambda m: None)
+    assert out["rc"] == 0 and out["counts"] == {"runs": 2}
+    assert seen["url"] == "postgresql://secret@local/db" and not any("secret" in c for c in seen["cmd"])
+    assert seen["cmd"][1:4] == ["-m", "dvm.lab.importer", "--bundle"] and str(seen["cwd"]).endswith("backend")
+
+
+def test_lab_import_into_a_real_database(tmp_path, monkeypatch):
+    """End to end against a local TimescaleDB (ML_LAB_TEST_DATABASE_URL, a scratch database with the backend's
+    store schema, as on the server), with the backend's importer."""
+    import os
+    import pytest
+    url = os.getenv("ML_LAB_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("set ML_LAB_TEST_DATABASE_URL to a local scratch database")
+    run = {"run_id": "t-auto-1", "target": "godark", "model": "lgbm", "status": "candidate",
+           "created_at": 1762588800000, "source": "test"}
+    (tmp_path / "runs.jsonl").write_text(json.dumps(run) + "\n")
+    monkeypatch.setenv("ML_LAB_IMPORT_URL", url)
+    out = auto.lab_import(tmp_path, log=lambda m: None)
+    assert out["rc"] == 0, out
+    again = auto.lab_import(tmp_path, log=lambda m: None)   # idempotent
+    assert again["rc"] == 0, again
