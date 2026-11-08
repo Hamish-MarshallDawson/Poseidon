@@ -134,3 +134,7 @@
 .lab-ov__chart .lab-spark { width: 100%; }
 @media (max-width: 960px) { .lab-home-cards { grid-template-columns: 1fr; } .lab-pipe { grid-template-columns: repeat(3, minmax(0, 1fr)); } .lab-pipe li { border-left: 1px solid var(--dvm-border-default); border-radius: 0 !important; } .lab-pipe li::before { display: none; } }
 @media (max-width: 520px) { .lab-pipe { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lab-ov__nums { grid-template-columns: 1fr; } }
+.lab-ov { grid-template-columns: minmax(0, 1fr); }
+.lab-ov > *, .lab-model, .lab-tabpanel { min-width: 0; }
+.lab-ov code { overflow-wrap: anywhere; }
+.lab-home-card__q { overflow-wrap: anywhere; }

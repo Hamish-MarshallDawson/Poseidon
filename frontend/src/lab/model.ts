@@ -94,11 +94,10 @@ export interface ModelView { headline: Headline; sub: string | null; status: Sta
 
 export function modelView(t: LabModel, m: RichSummary | null, runs: Run[], metrics: Metrics | null): ModelView {
   const derived = derive(t, m, runs, metrics)
-  return {
-    headline: m?.headline?.text ? m.headline : derived.headline,
-    sub: derived.sub,
-    status: m?.status?.text ? m.status : derived.status,
-  }
+  const status = m?.status?.text ? m.status : derived.status
+  // The server's status line often says what our sub line says ("Circle held the ship 44%…"): show it once.
+  const sub = derived.sub && !similar(derived.sub, status.text) ? derived.sub : null
+  return { headline: m?.headline?.text ? m.headline : derived.headline, sub, status }
 }
 
 function derive(t: LabModel, m: ModelSummary | null, runs: Run[], metrics: Metrics | null): ModelView {
@@ -184,4 +183,9 @@ export function pipeline(m: RichSummary | null, runs: Run[], proposals: Proposal
     const last = raw && typeof raw === 'object' ? raw.last_ts ?? null : lastTs[key] ?? undefined
     return { key, label, n: n === undefined ? derived[key].n : n, last: last === undefined ? derived[key].last : last }
   })
+}
+
+const similar = (a: string, b: string) => {
+  const k = (x: string) => x.toLowerCase().replace(/[^a-z0-9%]+/g, ' ').trim().slice(0, 16)
+  return k(a) === k(b)
 }
