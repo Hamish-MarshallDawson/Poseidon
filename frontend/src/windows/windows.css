@@ -99,6 +99,11 @@
 .sc-chip.noais { border-color: var(--dvm-ship-dark); color: var(--dvm-ship-dark); }
 .sc-sub { margin: 0; color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
 .sc-route { margin: 0; display: flex; flex-wrap: wrap; gap: 2px 8px; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.sc-hist { display: flex; flex-direction: column; gap: 2px; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.sc-hist-line { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.sc-hist-line:hover { text-decoration: underline; }
+.sc-hist-list { margin: 0; padding: 0 0 0 14px; list-style: none; color: var(--dvm-text-secondary); }
+.sc-hist-src { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); }
 .sc-route b { font-weight: 600; margin-right: 2px; }
 .sc-route small { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); }
 .sc-arrow { color: var(--dvm-text-muted); }

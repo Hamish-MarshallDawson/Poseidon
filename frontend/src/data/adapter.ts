@@ -1,4 +1,4 @@
-import type { ClientMsg, HistoryRange, Outcome, RiskScore, ServerMsg, SourceStatus, Stats, TimelineEvent } from '../types'
+import type { ClientMsg, HistoryRange, ObservationQuery, ObservationReply, Outcome, RiskScore, ServerMsg, SourceStatus, Stats, TimelineEvent } from '../types'
 import type { Frame } from '../store/vessels'
 
 // The one data interface the UI talks to. Two implementations:
@@ -37,6 +37,8 @@ export interface DataAdapter {
   track(mmsi: number, hours: number): Promise<[number, number, number][]>
   // URL of the backend's model report page when it answers (checked once); null otherwise. Absent on the mock.
   modelReport?(): Promise<string | null>
+  // GET /observations. Rejects with an Error whose `status` is the HTTP code (422 = the route needs a bbox).
+  observations?(q: ObservationQuery): Promise<ObservationReply>
 }
 
 export interface AdapterOptions {
