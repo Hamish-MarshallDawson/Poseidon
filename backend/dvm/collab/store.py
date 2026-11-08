@@ -27,7 +27,7 @@ def _entry(r) -> dict:
 
 def _doc(r) -> dict:
     return {"id": r["id"], "mmsi": r["mmsi"], "author_id": str(r["author_id"]), "body": r["body"],
-            "created_at": _ms(r["created_at"])}
+            "created_at": _ms(r["created_at"]), "kind": r["kind"], "mmsis": list(r["mmsis"])}
 
 
 class PgStore:
@@ -147,10 +147,11 @@ class PgStore:
         return await self.pool.fetchval("DELETE FROM collab_list WHERE session_id = $1 AND mmsi = $2 RETURNING true",
                                         uuid.UUID(session_id), mmsi) is not None
 
-    async def add_document(self, session_id: str, user_id: str, mmsi: int | None, body: str) -> dict:
-        r = await self.pool.fetchrow("INSERT INTO collab_documents (session_id, mmsi, author_id, body) "
-                                     "VALUES ($1, $2, $3, $4) RETURNING *",
-                                     uuid.UUID(session_id), mmsi, uuid.UUID(user_id), body)
+    async def add_document(self, session_id: str, user_id: str, mmsi: int | None, body: str,
+                           kind: str = "note", mmsis: list[int] = ()) -> dict:
+        r = await self.pool.fetchrow("INSERT INTO collab_documents (session_id, mmsi, author_id, body, kind, mmsis) "
+                                     "VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+                                     uuid.UUID(session_id), mmsi, uuid.UUID(user_id), body, kind, list(mmsis))
         return _doc(r)
 
     async def add_activity(self, session_id: str, user_id: str, kind: str, mmsi: int | None = None) -> None:
@@ -268,9 +269,10 @@ class MemoryStore:
     async def list_remove(self, session_id: str, mmsi: int) -> bool:
         return self.lists.pop((session_id, mmsi), None) is not None
 
-    async def add_document(self, session_id: str, user_id: str, mmsi, body: str) -> dict:
+    async def add_document(self, session_id: str, user_id: str, mmsi, body: str, kind: str = "note",
+                           mmsis: list[int] = ()) -> dict:
         d = {"id": next(self._ids), "session_id": session_id, "mmsi": mmsi, "author_id": user_id, "body": body,
-             "created_at": self._now()}
+             "created_at": self._now(), "kind": kind, "mmsis": list(mmsis)}
         self.docs.append(d)
         return {k: v for k, v in d.items() if k != "session_id"}
 

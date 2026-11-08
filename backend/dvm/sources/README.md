@@ -69,7 +69,7 @@ Each window is one region and one UTC day. `fetch_day` takes 9 calls or more: ab
   - `ais_presence` region rows: one per vessel and day, with `mmsi`, the region box and `value` = hours. Identity goes to `statics`.
   - `sar_detection` cells: `matched = true` and `false` (anonymous), `value` = detections.
   - `sar_detection` region rows: matched vessels with `mmsi`. The detection times are in `attrs.entryTimestamp`.
-  - Events, from `/v3/events`, **one dataset per request** (with two, GFW ignored the geometry and returned 30,000 worldwide rows): `gap`, `encounter`, `loitering` and `port_visit`, keyed by the GFW event id, with `value` = duration in hours. Events outside the region box, or from non-vessel MMSIs (buoys, gear), are dropped and counted.
+  - Events, from `/v3/events`, **one dataset per request** (with two, GFW ignored the geometry and returned 30,000 worldwide rows): `encounter`, `loitering` and `port_visit` (gaps have their own stream, below), keyed by the GFW event id, with `value` = duration in hours. Events outside the region box, or from non-vessel MMSIs (buoys, gear), are dropped and counted.
 - `available_ts`: our first fetch when the day is fetched within 8 days of its end (live polling). For backfilled days it is estimated as the day's end + 4 days, with `q = available_est`.
 - `User-Agent: hacktheburgh-poseidon/1.0`, because Cloudflare blocks Python's default. The token comes from `GFW_API_TOKEN` or `~/.config/hedged-bets/wave.env`, and is never logged.
 - **Licence**: CC BY-NC 4.0, non-commercial. The attribution travels with every query answer (`query.observations`).
@@ -95,6 +95,20 @@ Measured live on 8 Nov (one request in flight, sharing the token with the Vultr 
 | 30 days | 16.8 s, **2.2 GB** | 5.6 s, 283 MB |
 
 In the Danish straits the block's port visits dominate: 23,600 for 7 days, 34,600 for 14 and 51,500 for 30, about 5 s per 1,000-event page. Elsewhere the per-day vessel calls dominate (about 2.5 s a day). Memory grows with the block, because every day holds its own copy of the long port visits until the block returns. **Recommended block: 7 days** (2 to 3 times faster, under 0.6 GB even in the Danish straits, so regions can run side by side). Use 14 days only with memory to spare. Responses stay small for the 170 s timeout: the largest single one was 20 MB in 5 s (Danish presence cells, 30 days).
+
+### GFW gap events (`gfw_gaps.py`, #112)
+
+The go-dark labels: where a ship's AIS went off and came back on. Per-region geometry queries return nothing, for three reasons (checked 8 Nov 2026):
+
+- The public dataset holds only likely intentional disabling: every event is at least 12 h long and **starts at least 50 nm (93 km) from shore**. Our four regions are straits, almost all within 50 nm of land.
+- The geometry filter tests `position`, which for a gap is the **midpoint** of the off and on fixes, not where AIS went off.
+- Dates select by **overlap**: a one-day query returns every gap open that day, some opened years earlier.
+
+So the stream fetches **one Monday-to-Sunday week worldwide** (about 10 calls of 1000, about 15 s, one request at a time in its own process) and keeps an event when its off fix, its on fix or the straight segment between them falls in a requested area: `europe_north` (Baltic, North Sea, Norwegian Sea), `arabian_sea` (Persian Gulf to Gulf of Aden and the Red Sea) or `world`. Fishing-gear buoys (`vessel.type = gear`, about 88% of events) and non-vessel MMSIs are dropped. Each row is `kind = 'gap'`, id `gfw:gap:<event id>`, `ts`/`end_ts` = AIS off/on, `lat`/`lon` = the off fix, `bbox` = off to on, `value` = hours; `attrs` holds the on fix, distance, implied speed, satellite reception, shore and port distances, EEZ and `areas` (`{"arabian_sea": "off" | "on" | "segment"}`). `available_ts` runs from the UTC day AIS came back on (GFW publishes a gap once it closes): our fetch time if within 8 days, else that day plus 4 days, flagged `available_est`. Ledger rows are `src = 'gfw'`, `stream = 'gaps'`, `region` = area, one per week.
+
+Volume, from Oct 2026: about 400 vessel gaps a week worldwide (about 21,000 a year, about 800 B a row before indexes, so tens of MB a year), of which about 25 a week touch `arabian_sea` and about 1 `europe_north`. `fetch_day` no longer asks for gaps per region.
+
+It doesn't use `jobs.share_client`: it sends only `/events` calls (never the one-at-a-time 4Wings report lock), strictly one at a time, and the gate is per process, so it couldn't coordinate with the separate `gfw` backfill anyway. Run together, the two jobs' load adds up (gfw `--inflight` plus 1).
 
 ### Sentinel-1 (`sentinel1.py`)
 
@@ -135,6 +149,8 @@ export SOURCES_DATABASE_URL=postgresql://postgres:local@127.0.0.1:55433/postgres
 .venv/bin/python -m dvm.sources backfill sentinel1 --start 2026-10-25 --end 2026-11-07
 .venv/bin/python -m dvm.sources backfill digitraffic
 .venv/bin/python -m dvm.sources backfill-back gfw            # today backwards until stopped (see below)
+.venv/bin/python -m dvm.sources backfill-back gfw-gaps       # weeks of gap events, back to 2017 (--areas A,B)
+.venv/bin/python -m dvm.sources poll gfw-gaps                # the last 3 weeks every 6 h
 .venv/bin/python -m dvm.sources readonly-role                 # read-only login for training and teammates
 .venv/bin/python -m dvm.sources status
 ```

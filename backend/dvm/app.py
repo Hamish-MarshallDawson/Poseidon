@@ -14,8 +14,9 @@ import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import auth, collab, config, coverage, gaps, limits, replay, store as store_sql
+from dvm import auth, collab, config, coverage, gaps, limits, predict, replay, store as store_sql
 from dvm.briefing.routes import make_router as briefing_router
+from dvm.predict.routes import make_router as predict_router
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import GAP_KEEP_MS as LIVE_GAP_KEEP_MS, Live
 from dvm.merge import FeedMerger
@@ -356,6 +357,8 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(hub.store.run()))
         tasks.append(asyncio.create_task(hub.setup_sources_schema()))
         tasks.append(asyncio.create_task(hub.warm_gaps()))
+        if config.PREDICT:   # route and go-dark predictor plus graders (dvm/predict, #121)
+            tasks.append(asyncio.create_task(predict.start(hub.store)))
     else:
         log.warning("TIGER_DATABASE_URL is not set: positions go to the JSONL log only")
     tasks.append(asyncio.create_task(collab.hub.run(hub.store)))   # sessions and presence fan-out (dvm/collab)
@@ -384,6 +387,7 @@ def health() -> dict:
                              "positions": dt.positions, "statics": dt.statics, "last_error": dt.last_error}
                             if (dt := hub.digitraffic) else {"enabled": False}),
             "merger": hub.merger.stats, "sources_schema": hub.sources_schema,
+            "predict": predict.health() if config.PREDICT else {"enabled": False},
             "gaps": {**hub.gaps.stats, "open": len(hub.gaps.open), "warm": hub.gaps_warm,
                      "written": store.gaps_written if store else 0},
             "stats": hub.stats(), "clients": len(hub.clients),
@@ -478,6 +482,7 @@ app.include_router(briefing_router(_CurrentHub(), require_login))   # POST /brie
 # GET /observations, /sources, /model/observations, /model/positions, /model/statics (dvm/sources/routes.py)
 app.include_router(sources_router(lambda: hub.store.pool if hub.store else None, require_login))
 app.include_router(yachts_router(lambda: hub.store.pool if hub.store else None, lambda: hub.live, require_login))   # GET /yachts (#101)
+app.include_router(predict_router(lambda: hub.store.pool if hub.store else None, predict.health, require_login))   # GET /predictions, /model/leaderboard (#121)
 app.include_router(collab.make_router())   # /me, /sessions, /invites (dvm/collab/README.md)
 
 

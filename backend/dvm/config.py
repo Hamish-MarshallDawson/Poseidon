@@ -26,3 +26,10 @@ DIGITRAFFIC = os.getenv("DIGITRAFFIC", "1").strip().lower() not in ("0", "false"
 AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN", "")
 AUTH0_AUDIENCE = os.getenv("AUTH0_AUDIENCE", "")
 AUTH0_ISSUER = os.getenv("AUTH0_ISSUER", "")   # default https://<AUTH0_DOMAIN>/
+
+# Live predictor and graders (dvm/predict, #121). Off unless PREDICT=1. Without a champion in PREDICT_MODEL_DIR it
+# runs the baselines, so the ledger and the graders work from the start.
+PREDICT = os.getenv("PREDICT", "0").strip().lower() in ("1", "true", "yes", "on")
+PREDICT_MODEL_DIR = Path(os.getenv("PREDICT_MODEL_DIR") or ROOT / "data" / "models")
+PREDICT_INTERVAL_S = float(os.getenv("PREDICT_INTERVAL_S", "300"))
+PREDICT_SAMPLE = int(os.getenv("PREDICT_SAMPLE", "150"))   # active ships per cycle (route + go-dark)

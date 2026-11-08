@@ -14,6 +14,7 @@ import { BriefingPanel } from './briefing/BriefingPanel'
 import { bindBriefingAuth } from './briefing/store'
 import { bindYachtsAuth } from './yachts/store'
 import { Review } from './review/ReviewPanel'
+import { Channel } from './collab/docs/Channel'
 import { AUTH_OFF, bindCollabAuth, devUser } from './collab/client'
 import { loadMe } from './collab/store'
 import { bindSocket } from './collab/socket'
@@ -78,6 +79,7 @@ export function Monitor({ getToken, onLogout, profile }: { getToken: () => Promi
       <WindowsRoot onLogout={onLogout} />
       <BriefingPanel />
       <Review />
+      <Channel />
       <Presence />
       <ReplayChrome />
       <ScrubBar />
