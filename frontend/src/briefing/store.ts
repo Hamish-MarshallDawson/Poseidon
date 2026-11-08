@@ -1,12 +1,26 @@
 import { createStore } from '../store/store'
 import { ui } from '../store/ui'
 import { vessels } from '../store/vessels'
+import { collab } from '../collab/store'
+import { review } from '../review/store'
 import { mockBriefing } from './mock'
 
 // AI briefing: POST /briefing (Gemini summary of 1 to 10 live ships) and POST /briefing/speech (ElevenLabs MP3).
 // Contract: backend/dvm/briefing/routes.py. Keys live on the server only; the browser sends the Auth0 Bearer token.
 
 export const MAX_SHIPS = 10
+
+/** Why a ship is in the briefing, so the summary can say who suggested it: the prediction model, a user, or just opened. */
+export type Origin = { kind: 'system'; reasons: string[]; risk_p: number | null } | { kind: 'user'; added_by: string } | { kind: 'selected' }
+
+export function originOf(mmsi: number): Origin {
+  const c = collab.get()
+  const shared = c.session ? c.list.find((e) => e.mmsi === mmsi) : undefined
+  if (shared) return { kind: 'user', added_by: shared.added_by === c.me?.id ? 'you' : c.session?.members.find((m) => m.id === shared.added_by)?.name ?? 'a teammate' }
+  if (!c.session && review.get().list.includes(mmsi)) return { kind: 'user', added_by: 'you' }
+  const row = vessels.watchlist?.entries.find((e) => e.mmsi === mmsi && e.decision !== 'none')
+  return row ? { kind: 'system', reasons: row.reason_codes, risk_p: row.p } : { kind: 'selected' }
+}
 
 export interface VesselBrief { mmsi: number; name: string | null; risk: string; findings: string[]; caveats: string[] }
 export interface Correlation { found: boolean; strength: 'none' | 'weak' | 'moderate' | 'strong'; links: string[]; explanation: string }
@@ -72,7 +86,7 @@ export async function runBriefing(mmsis: number[]): Promise<void> {
   briefing.set({ open: true, status: 'loading', requested: ids, result: null, error: null, voice: 'idle', voiceError: null })
   const run = ++inFlight
   try {
-    const res = await post('/briefing', { mmsis: ids })
+    const res = await post('/briefing', { mmsis: ids, origins: Object.fromEntries(ids.map((m) => [m, originOf(m)])) })
     if (run !== inFlight) return
     if (!res.ok) throw Object.assign(new Error(explain(res.status)), { status: res.status })
     briefing.set({ status: 'done', result: (await res.json()) as Briefing })
