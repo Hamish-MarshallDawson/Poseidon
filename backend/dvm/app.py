@@ -14,7 +14,7 @@ import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import auth, config, coverage, gaps, limits, replay, store as store_sql
+from dvm import auth, collab, config, coverage, gaps, limits, replay, store as store_sql
 from dvm.briefing.routes import make_router as briefing_router
 from dvm.ingest import Feed, now_ms, run_aisstream
 from dvm.live import GAP_KEEP_MS as LIVE_GAP_KEEP_MS, Live
@@ -357,6 +357,7 @@ async def lifespan(app: FastAPI):
         tasks.append(asyncio.create_task(hub.warm_gaps()))
     else:
         log.warning("TIGER_DATABASE_URL is not set: positions go to the JSONL log only")
+    tasks.append(asyncio.create_task(collab.hub.run(hub.store)))   # sessions and presence fan-out (dvm/collab)
     if not auth.ENABLED:
         log.warning("AUTH0_DOMAIN / AUTH0_AUDIENCE not set: /ws is open to anyone (local dev only)")
     yield
@@ -475,24 +476,26 @@ class _CurrentHub:
 app.include_router(briefing_router(_CurrentHub(), require_login))   # POST /briefing, POST /briefing/speech
 # GET /observations, /sources, /model/observations, /model/positions, /model/statics (dvm/sources/routes.py)
 app.include_router(sources_router(lambda: hub.store.pool if hub.store else None, require_login))
+app.include_router(collab.make_router())   # /me, /sessions, /invites (dvm/collab/README.md)
 
 
 @app.websocket("/ws")
 async def ws(websocket: WebSocket) -> None:
     # Browsers can't set headers on a WebSocket, and a token in the URL lands in access logs, so the client's
     # first message is {"type": "auth", "token": "<Auth0 access token>"}; nothing is sent until it checks out.
-    # shortcut: the token is checked once at connect, not again when it expires; recheck if sessions get long.
+    # The socket closes when the token expires, unless the client sends a fresher {"type": "auth"} (dvm/collab).
     await websocket.accept()
     c = Client(websocket)
     try:
         if auth.ENABLED:
             try:
                 first = json.loads(await asyncio.wait_for(websocket.receive_text(), 10))
-                await auth.verify_async(first["token"] if first.get("type") == "auth" else "")
+                c.claims = await auth.verify_async(first["token"] if first.get("type") == "auth" else "")
             except (ValueError, KeyError, TypeError, AttributeError, asyncio.TimeoutError, jwt.PyJWTError) as e:
                 log.info("WebSocket refused: %s", type(e).__name__)
                 await websocket.close(code=1008, reason="login required")
                 return
+        collab.hub.attach(c)
         async with c.lock:
             hub.clients.add(c)
             now = now_ms()
@@ -513,6 +516,8 @@ async def ws(websocket: WebSocket) -> None:
                     raise
                 except Exception:  # a database hiccup must not drop the connection
                     log.exception("Replay request failed: %s", msg.get("action"))
+            elif kind in collab.WS_TYPES:
+                await collab.hub.on_ws(c, msg)
             elif kind == "detail":
                 state = c.replay.live if c.replay else hub.live   # in replay, details are as of the replay time
                 mmsi = msg.get("mmsi")
@@ -526,5 +531,6 @@ async def ws(websocket: WebSocket) -> None:
         pass
     finally:
         hub.clients.discard(c)
+        collab.hub.detach(c)
         if c.replay:
             c.replay.close()
