@@ -18,7 +18,8 @@ export type CollabMsg =
   | { type: 'list_delta'; session_id: string; op: 'remove'; entry: { mmsi: number; updated_by: string; updated_at: number } }
   | { type: 'document'; session_id: string; document: Doc }
   | { type: 'member_joined'; session_id: string; member: Member }
-  | { type: 'invite'; invite: unknown }                       // pushed when someone invites you (entry agent, PR 2)
+  | { type: 'invite'; invite_id: string; session_id: string }   // someone invited you: re-read GET /invites
+  | { type: 'invites_changed' }                                  // one of your invites changed: re-read GET /invites
   | { type: 'error'; code: 'forbidden' | 'bad_request' | 'unavailable'; for?: string; session_id?: string }
 
 export interface PresenceOut {
@@ -29,6 +30,9 @@ let joined: string | null = null
 
 function send(msg: object) { adapter?.send(msg as never) }
 
+/** Local dev only: tell the server who this socket is, so invite pushes reach it before any session is joined. */
+export function identifyDev() { if (devUser) send({ type: 'auth', dev_user: devUser }) }
+
 export function joinSocket(sessionId: string) {
   joined = sessionId
   send({ type: 'session_join', session_id: sessionId, ...(devUser ? { dev_user: devUser } : {}) })
@@ -38,7 +42,7 @@ export function leaveSocket() { joined = null; send({ type: 'session_leave' }) }
 export function sendPresence(p: PresenceOut) { if (joined) send({ type: 'presence', ...p }) }
 
 export function bindSocket(): () => void {
-  collabLink.onOpen = () => { if (joined) joinSocket(joined) }    // after a reconnect, re-join (the server forgot us)
+  collabLink.onOpen = () => { identifyDev(); void collab.refreshInvites(); if (joined) joinSocket(joined) }    // after a reconnect, re-join (the server forgot us)
   collabLink.onMessage = (m) => collab.applyMessage(m as CollabMsg)
   return () => { collabLink.onOpen = null; collabLink.onMessage = null; joined = null }
 }
