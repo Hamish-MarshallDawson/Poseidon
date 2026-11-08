@@ -12,7 +12,7 @@ export interface Popular { cells: Cell[]; label: string; attribution: string | n
 export const ATTRIBUTION = 'Global Fishing Watch, CC BY-NC 4.0'
 const DAY = 86_400_000
 const ROW_CAP = 50_000            // stop fetching after this many raw rows
-const SUMMARY_DAYS = 180          // how far back the summary is asked for
+const SUMMARY_DAYS = 90           // how far back the summary is asked for (the route's maximum)
 const base = () => import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 /** What the map shows now (the controller writes it, the Display panel reads it). */
@@ -59,12 +59,15 @@ async function get(path: string, signal?: AbortSignal): Promise<Response> {
 async function summary(bbox: Bbox, res: number, signal?: AbortSignal): Promise<Popular | null> {
   if (Date.now() - summaryMissing < 600_000) return null
   const start = Date.now() - SUMMARY_DAYS * DAY
-  const r = await get(`/observations/heat?kind=ais_presence&bbox=${bbox.join(',')}&start=${start}&end=${Date.now()}&res=${res}`, signal)
+  const cellDeg = Math.min(1, Math.max(0.05, res))   // the route takes cell_deg 0.05 to 1
+  const r = await get(`/observations/heat?kinds=ais_presence&bbox=${bbox.join(',')}&start=${start}&end=${Date.now()}&cell_deg=${cellDeg}`, signal)
   if (r.status === 404) { summaryMissing = Date.now(); return null }
   if (!r.ok) throw new Error(`GET /observations/heat: ${r.status}`)
-  const j = (await r.json()) as { cells: Cell[]; attribution?: string }
+  // Aiden's #143 shape: { cells: [{ lat, lon, value, n }], cell_deg, kinds, attribution }
+  const j = (await r.json()) as { cells: { lat: number; lon: number; value: number }[]; attribution?: unknown }
+  const cells: Cell[] = j.cells.map((c) => [c.lon, c.lat, c.value])
   const since = new Date(start).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
-  return { cells: j.cells, label: `Popular places · since ${since}`, attribution: j.attribution ?? ATTRIBUTION, source: 'summary', rows: j.cells.length, ms: 0 }
+  return { cells, label: `Popular places · since ${since}`, attribution: typeof j.attribution === 'string' ? j.attribution : ATTRIBUTION, source: 'summary', rows: cells.length, ms: 0 }
 }
 
 // Raw rows: the route returns at most 5,000 per call, newest first, so ask one day at a time to cover the week.
