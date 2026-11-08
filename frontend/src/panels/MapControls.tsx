@@ -6,7 +6,6 @@ import { Switch } from '../ui'
 import { useMapInstance } from '../map/context'
 import { reducedMotion, usePresence } from '../motion'
 import { fmtInt } from '../windows/format'
-import { WatchlistChip } from './Watchlist'
 import { ReviewChip } from '../review/ReviewPanel'
 import { ChannelChip } from '../collab/docs/Channel'
 import { SHOW_FILTERS, showFilter } from '../show/registry'
@@ -109,11 +108,10 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
     <>
       <div className="top-right" data-zone>
         <SessionBar onLogout={onLogout} />
-        <WatchlistChip />
         <ReviewChip />
         <ChannelChip />
         <button type="button" className={`chip ${layersOpen ? 'on' : ''}`} aria-expanded={layersOpen} aria-controls="layers-panel"
-          onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, watchlistOpen: false, reviewOpen: false }))}>
+          onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, reviewOpen: false }))}>
           <span className="chip-square" aria-hidden />Layers
         </button>
         {onLogout && !me && <button type="button" className="chip chip-quiet" onClick={onLogout}>Log out</button>}

@@ -6,29 +6,31 @@ import { mapStore } from '../map/context'
 import { reducedMotion, usePresence } from '../motion'
 import { openShipWindow } from '../windows/open'
 import { useNow, useVessel } from '../windows/hooks'
-import { TYPE_LABEL, fmtMmsi, hms } from '../windows/format'
-import { review, removeReview, clearReview } from './store'
-import { collab, useInSession } from '../collab/presence/core'
-import { SharedPanel } from '../collab/presence/SharedList'
+import { TYPE_LABEL, hms } from '../windows/format'
+import { MAX_SHIPS, briefing, clearSelected, runBriefing, toggleSelected } from '../briefing/store'
+import { forecastUi } from '../forecast/state'
+import { collab, listAdd, listRemove, useInSession } from '../collab/presence/core'
+import { AddedBy, ReportTag, SessionActivity, SessionOnline, StatusSelect, Viewing } from '../collab/presence/SharedList'
+import { review, removeReview, clearReview, dismissSystem, restoreSystem, toggleReview } from './store'
+import { systemReason, useReviewItems, type Item } from './items'
 import { Compare } from './Compare'
 import './review.css'
 
-// The review list: a summon chip beside "Ranked for review" and a panel in the Watchlist's style.
-// Rows subscribe to their own ship (and the 1 Hz clock), so nothing renders while the panel is closed.
+// The one Review list (a chip and a panel in the Watchlist panel style): the viewer's own ships, or the session's shared
+// list, then the System entries from the forecast. Rows subscribe to their own ship and the 1 Hz clock, so nothing
+// renders while the panel is closed. Tick boxes pick ships for Compare and Brief (the briefing store's selection).
 
 const PANEL_W = 360
 
 export function ReviewChip() {
   const open = ui.use((s) => s.reviewOpen)
-  const inSession = useInSession()
-  const n = review.use((s) => s.list.length)
-  const shared = collab.use((s) => s.list.length)
+  const { items } = useReviewItems()
   return (
     <button type="button" className={`chip ${open ? 'on' : ''}`} aria-expanded={open} aria-controls="review-panel"
-      onClick={() => ui.set((s) => ({ reviewOpen: !s.reviewOpen, watchlistOpen: false, layersOpen: false }))}>
+      onClick={() => ui.set((s) => ({ reviewOpen: !s.reviewOpen, layersOpen: false }))}>
       <span className="lamp" aria-hidden />
-      {inSession ? 'Shared list' : 'Review list'}
-      <span className="chip-count">{inSession ? shared : n}</span>
+      Review
+      <span className="chip-count">{items.length}</span>
     </button>
   )
 }
@@ -44,23 +46,42 @@ function focusOnMap(mmsi: number) {
   } else openShipWindow(mmsi)
 }
 
-function Row({ mmsi }: { mmsi: number }) {
+const hover = (mmsi: number | null) => ui.set({ hoverMmsi: mmsi })
+
+function Row({ item, picked, full }: { item: Item; picked: boolean; full: boolean }) {
+  const { mmsi } = item
   const v = useVessel(mmsi)
   const now = useNow()
   const noAis = !!v && (v.status === 'gap_open' || v.status === 'silent')
-  const name = v?.name ?? `MMSI ${fmtMmsi(mmsi)}`
+  const name = v?.name ?? `MMSI ${mmsi}`
+  const drop = () => { if (picked) toggleSelected(mmsi) }
+  // A System entry the viewer adds becomes theirs: in a session it joins the shared list, otherwise their own.
+  const add = () => (collab.get().session ? void listAdd(mmsi) : toggleReview(mmsi))
   return (
-    <li className={`rv-item ${noAis ? 'is-noais' : ''}`}>
+    <li className={`wl-item rv-item ${noAis ? 'is-noais' : ''}`} data-mmsi={mmsi} data-kind={item.kind}
+      onPointerEnter={() => hover(mmsi)} onPointerLeave={() => hover(null)}>
+      <input type="checkbox" className="wl-pick" aria-label={`Select ${name} to compare or brief`}
+        checked={picked} disabled={!picked && full} onChange={() => toggleSelected(mmsi)} />
       <div className="wl-body">
         <span className="wl-head">
           <span className="wl-name"><b>{name}</b>{v && <span>{TYPE_LABEL[v.type_group]}</span>}</span>
+          {v && <span className="rv-timer" title="Since last AIS">{noAis ? 'No AIS' : 'AIS'} {hms(now - v.last_ts)}</span>}
+          {item.kind === 'shared' && <ReportTag mmsi={mmsi} />}
         </span>
         <span className="wl-note">
-          MMSI {fmtMmsi(mmsi)} · {v ? <>{noAis ? 'No AIS' : 'AIS heard'} · <span className="rv-timer">{hms(now - v.last_ts)}</span> since last AIS</> : 'not in view / no data'}
+          {item.kind === 'system' && systemReason(item.row)}
+          {item.kind === 'you' && 'You'}
+          {item.kind === 'shared' && <AddedBy e={item.entry} />}
         </span>
+        {item.kind === 'shared' && <Viewing mmsi={mmsi} />}
         <span className="rv-actions">
+          {item.kind === 'shared' && <StatusSelect e={item.entry} name={name} />}
+          {item.kind === 'system' && <Button className="btn-small" aria-label={`Add ${name} to the list`} onClick={add}>Add</Button>}
           <Button className="btn-small" onClick={() => focusOnMap(mmsi)}>Focus on map</Button>
-          <Button className="btn-small" aria-label={`Remove ${name} from review`} onClick={() => removeReview(mmsi)}>Remove</Button>
+          {item.kind === 'system'
+            ? <Button className="btn-small" aria-label={`Dismiss ${name}`} onClick={() => { drop(); dismissSystem(mmsi) }}>Dismiss</Button>
+            : <Button className="btn-small" aria-label={`Remove ${name} from the list`}
+                onClick={() => { drop(); void (item.kind === 'shared' ? listRemove(mmsi) : removeReview(mmsi)) }}>Remove</Button>}
         </span>
       </div>
     </li>
@@ -68,48 +89,58 @@ function Row({ mmsi }: { mmsi: number }) {
 }
 
 function ReviewPanel({ onCompare }: { onCompare: () => void }) {
-  const list = review.use((s) => s.list)
-  if (useInSession()) return <SharedPanel onCompare={onCompare} onFocus={focusOnMap} />
+  const { items, dismissed } = useReviewItems()
+  const inSession = useInSession()
+  const picked = briefing.use((b) => b.selected)
+  const mine = review.use((s) => s.list.length)
   return (
-      <div className="panel watchlist" id="review-panel" role="region" aria-labelledby="rv-title">
-        <div className="wl-header">
-          <div className="wl-titlerow">
-            <h2 id="rv-title">Review list</h2>
-            <Button className="btn-small" onClick={() => ui.set({ reviewOpen: false })}>Close <Kbd>Esc</Kbd></Button>
-          </div>
-          <p className="wl-explain">Ships you added from their windows. Kept in this browser only.</p>
-          <p className="wl-meta">{list.length} {list.length === 1 ? 'ship' : 'ships'} in review</p>
+    <div className="panel watchlist" id="review-panel" role="region" aria-labelledby="rv-title">
+      <div className="wl-header">
+        <div className="wl-titlerow">
+          <h2 id="rv-title">Review</h2>
+          <Button className="btn-small" onClick={() => ui.set({ reviewOpen: false })}>Close <Kbd>Esc</Kbd></Button>
         </div>
-        {list.length === 0 ? (
-          <p className="rv-empty">Nothing yet. Open a ship and choose Add to review.</p>
-        ) : (
-          <ul className="wl-list rv-list">{list.map((m) => <Row key={m} mmsi={m} />)}</ul>
-        )}
-        {list.length > 0 && (
-          <div className="wl-brief">
-            <span>{list.length} in review</span>
-            <span className="wl-brief-actions">
-              <Button className="btn-small" onClick={clearReview}>Clear</Button>
-              <Button className="btn-small" variant="filled" disabled={list.length < 2} onClick={onCompare}>Compare {list.length} ships</Button>
-            </span>
-          </div>
-        )}
       </div>
+      {inSession && <SessionOnline />}
+      {items.length === 0 ? (
+        <p className="rv-empty">Nothing yet. Open a ship and choose Add to review{inSession ? ': everyone in the session sees it' : ''}.</p>
+      ) : (
+        <ul className="wl-list rv-list">
+          {items.map((i) => <Row key={i.mmsi} item={i} picked={picked.includes(i.mmsi)} full={picked.length >= MAX_SHIPS} />)}
+        </ul>
+      )}
+      {inSession && <SessionActivity />}
+      {items.length > 0 && (
+        <div className="wl-brief">
+          <span>{picked.length > 0 ? `${picked.length} selected${picked.length >= MAX_SHIPS ? ' (most)' : ''}` : 'Tick ships to compare or brief'}</span>
+          <span className="wl-brief-actions">
+            {picked.length > 0 && <Button className="btn-small" onClick={clearSelected}>Clear</Button>}
+            <Button className="btn-small" disabled={picked.length < 2} onClick={onCompare}>Compare</Button>
+            <Button className="btn-small" variant="filled" disabled={picked.length === 0} onClick={() => runBriefing(picked)}>
+              Brief {picked.length || ''} {picked.length === 1 ? 'ship' : 'ships'}
+            </Button>
+          </span>
+        </div>
+      )}
+      <div className="rv-foot">
+        <button type="button" className="rv-link" onClick={() => forecastUi.set({ checkOpen: true })}>Prospective test running…</button>
+        {mine > 0 && !inSession && <button type="button" className="rv-link" onClick={clearReview}>Clear mine</button>}
+        {dismissed > 0 && <button type="button" className="rv-link" onClick={restoreSystem}>Restore {dismissed} dismissed</button>}
+      </div>
+    </div>
   )
 }
 
 export function Review() {
   const open = ui.use((s) => s.reviewOpen)
-  const mine = review.use((s) => s.list)
-  const shared = collab.use((s) => s.list)
-  const list = useInSession() ? shared.map((e) => e.mmsi) : mine
+  const picked = briefing.use((b) => b.selected)
   const [comparing, setComparing] = useState(false)
   const { mounted, attach } = usePresence(open, { y: -12, opacity: 0 })
   return (
     <>
       {mounted && <div className="watchlist-wrap" data-zone ref={attach}><ReviewPanel onCompare={() => setComparing(true)} /></div>}
       {/* Outside the wrap: its presence transform would make a fixed child position against the wrap. */}
-      {comparing && list.length >= 2 && <Compare mmsis={list} onClose={() => setComparing(false)} onOpenShip={openShipWindow} />}
+      {comparing && picked.length >= 2 && <Compare mmsis={picked} onClose={() => setComparing(false)} onOpenShip={openShipWindow} />}
     </>
   )
 }
