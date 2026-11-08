@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react'
 import type { VesselView } from '../types'
 import { setYachtsLayer, yachts } from '../yachts/store'
-import { YachtsLayer } from '../yachts/Yachts'
+import { YachtsList } from '../yachts/Yachts'
 
 // The "Show" choice in the Layers panel: one set of ships at a time. One entry per filter.
 //
@@ -26,7 +26,7 @@ export const SHOW_FILTERS: ShowFilter[] = [
     id: 'yachts', label: 'Sanctioned and notable yachts',
     match: (v) => yachts.get().byMmsi.has(v.mmsi),
     chip: (n) => `Showing ${n} sanctioned and notable ${n === 1 ? 'yacht' : 'yachts'}`,
-    List: YachtsLayer,
+    List: YachtsList,
     enter: () => setYachtsLayer(true),
     leave: () => setYachtsLayer(false),
   },

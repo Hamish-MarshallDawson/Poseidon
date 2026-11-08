@@ -119,11 +119,12 @@ function setup(map: MapLibreMap): () => void {
   const tagImages = new Set<string>()      // shortcut: tag images are never evicted while the layer lives; fine for ~40 ranked ships
   const drawTags = () => {
     const open = new Set(ui.get().windows.map((w) => w.mmsi))
+    const match = showFilter(ui.get().show).match       // a Show filter hides the tags of other ships too
     const rows = vessels.watchlist?.entries.filter((e) => e.decision !== 'none' && e.p >= 0.1).map((e) => ({ mmsi: e.mmsi, p: e.p, rank: e.rank, codes: e.reason_codes }))
       ?? [...vessels.vessels.values()].filter((v) => v.risk_rank != null && (v.risk_p ?? 0) >= 0.1).map((v) => ({ mmsi: v.mmsi, p: v.risk_p!, rank: v.risk_rank!, codes: [] as string[] }))
     const features = rows.sort((a, b) => a.rank - b.rank).flatMap((r) => {
       const v = vessels.vessels.get(r.mmsi)
-      if (!v || v.status === 'gap_open' || open.has(r.mmsi)) return []
+      if (!v || v.status === 'gap_open' || open.has(r.mmsi) || (match && !match(v))) return []
       const rank = String(r.rank).padStart(2, '0')
       const chance = tier > 0 ? pct(r.p) : ''
       const reason = tier > 1 ? REASON_LABEL[r.codes.find((c) => c !== 'OPEN_GAP') ?? ''] ?? '' : ''
@@ -242,7 +243,7 @@ function setup(map: MapLibreMap): () => void {
   all()
   const offV = vessels.subscribe(all)
   const offUi = ui.subscribe((s, p) => {
-    if (s.windows !== p.windows) drawTags()
+    if (s.windows !== p.windows || s.show !== p.show) drawTags()
     if (s.windows !== p.windows || s.focusMmsi !== p.focusMmsi || s.focusRelated !== p.focusRelated || s.show !== p.show) syncGaps()
   })
   const onZoom = () => { const z = zoomTier(map.getZoom()); if (z !== tier) { tier = z; drawTags() } syncLabels(shownNow()) }

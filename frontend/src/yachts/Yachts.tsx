@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Switch } from '../ui'
+import { ui } from '../store/ui'
 import { vessels } from '../store/vessels'
 import { mapStore } from '../map/context'
 import { reducedMotion } from '../motion'
 import { adapter } from '../data'
 import { openShipWindow } from '../windows/open'
 import { useNow } from '../windows/hooks'
-import { ago, loadYachts, setYachtsLayer, yachts, type Yacht } from './store'
+import { ago, loadYachts, yachts, type Yacht } from './store'
 import './yachts.css'
 
 const OS = 'OpenSanctions (CC BY-NC 4.0)'
@@ -30,8 +31,13 @@ function focusYacht(mmsi: number) {
   const v = vessels.vessels.get(mmsi)
   if (map && v) {
     const r = map.getContainer().getBoundingClientRect()
-    map.flyTo({ center: [v.lon, v.lat], zoom: Math.max(map.getZoom(), 7), duration: reducedMotion() ? 0 : 900, essential: true })
-    openShipWindow(mmsi, { x: r.left + r.width / 2, y: r.top + r.height / 2 })
+    // The list lives in the Layers panel (340 px, right column): centre the yacht in the map area left of it. On a
+    // phone the panel spans the width, so close it instead.
+    const narrow = r.width <= 720
+    if (narrow) ui.set({ layersOpen: false })
+    const right = narrow ? 0 : 340 + 32
+    map.flyTo({ center: [v.lon, v.lat], zoom: Math.max(map.getZoom(), 7), padding: { top: 0, bottom: 0, left: 0, right }, duration: reducedMotion() ? 0 : 900, essential: true })
+    openShipWindow(mmsi, { x: r.left + (r.width - right) / 2, y: r.top + r.height / 2 })
   } else openShipWindow(mmsi)
 }
 
@@ -117,18 +123,6 @@ export function YachtsList() {
         </>
       )}
     </div>
-  )
-}
-
-// The Layers panel part: the toggle and, when on, the list. The lead switches the import to YachtsList.
-export function YachtsLayer() {
-  const on = yachts.use((s) => s.on)
-  return (
-    <>
-      <Switch checked={on} label="Sanctioned and notable yachts" hint="matched by IMO · OpenSanctions, Wikipedia"
-        onChange={setYachtsLayer} />
-      {on && <YachtsList />}
-    </>
   )
 }
 
