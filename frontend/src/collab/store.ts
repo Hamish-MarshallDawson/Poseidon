@@ -1,6 +1,6 @@
 import { createStore } from '../store/store'
 import { api } from './client'
-import type { ActivityRow, Doc, Entry, LastSession, Member, Session, SessionRow, User } from './client'
+import type { ActivityRow, Doc, Entry, IncomingInvite, LastSession, Member, OutgoingInvite, Session, SessionRow, User } from './client'
 import { joinSocket, leaveSocket } from './socket'
 import type { CollabMsg, PresenceUser } from './socket'
 
@@ -17,6 +17,7 @@ export interface CollabState {
   documents: Doc[]
   presence: PresenceUser[]
   activity: ActivityRow[]
+  invites: { incoming: IncomingInvite[]; outgoing: OutgoingInvite[] }
   private: boolean                                      // hide me from the others (the profile menu)
   error: string | null
 }
@@ -24,9 +25,10 @@ export interface CollabState {
 export const collab = {
   ...createStore<CollabState>({
     me: null, lastSession: null, sessions: [], session: null, role: null, list: [], documents: [], presence: [],
-    activity: [], private: false, error: null,
+    activity: [], invites: { incoming: [], outgoing: [] }, private: false, error: null,
   }),
   applyMessage,
+  refreshInvites,
 }
 
 const s = () => collab.get()
@@ -39,14 +41,14 @@ function adopt(sess: Session, role: 'owner' | 'member' | null = null) {
 }
 
 /** After login: send the Auth0 profile, then read me and the last session. */
-export async function loadMe(profile?: { name?: string | null; picture?: string | null }): Promise<void> {
+export async function loadMe(profile?: { name?: string | null; picture?: string | null; email?: string | null }): Promise<void> {
   try {
     if (profile && (profile.name || profile.picture)) {
-      await api.setMe({ name: profile.name?.slice(0, 80) ?? undefined, picture: profile.picture?.startsWith('https://') ? profile.picture : undefined })
+      await api.setMe({ name: profile.name?.slice(0, 80) ?? undefined, picture: profile.picture?.startsWith('https://') ? profile.picture : undefined, email: profile.email ?? undefined })
     }
     const { user, last_session } = await api.me()
     collab.set({ me: user, lastSession: last_session, error: null })
-    await refreshSessions()
+    await Promise.all([refreshSessions(), refreshInvites()])
   } catch (e) { fail(e) }
 }
 
@@ -86,6 +88,23 @@ export async function acceptInviteToken(token: string): Promise<Session | null> 
   } catch (e) { fail(e); return null }
 }
 
+export async function refreshInvites(): Promise<void> {
+  try { collab.set({ invites: await api.invites() }) } catch { /* keep the last list; the badge just stays as it was */ }
+}
+
+/** Accept an invite addressed to me and enter the session. */
+export async function acceptInviteId(id: string): Promise<Session | null> {
+  try {
+    const sess = await api.acceptInviteId(id)
+    adopt(sess)
+    joinSocket(sess.id)
+    void refreshSessions(); void refreshInvites()
+    return sess
+  } catch (e) { fail(e); void refreshInvites(); return null }
+}
+export async function declineInvite(id: string) { try { await api.declineInvite(id) } catch (e) { fail(e) } await refreshInvites() }
+export async function revokeInvite(id: string) { try { await api.revokeInvite(id) } catch (e) { fail(e) } await refreshInvites() }
+
 export function leaveSession() {
   leaveSocket()
   collab.set({ session: null, role: null, list: [], documents: [], presence: [], activity: [] })
@@ -110,7 +129,7 @@ const known = (id: string) => s().session?.members.some((m) => m.id === id)
 function applyMessage(m: CollabMsg) {
   if (m.type === 'error') { if (m.for === 'session_join') collab.set({ error: 'Could not join the session', session: null }); return }
   if (m.type === 'session_joined') { adopt(m.session, m.role); return }
-  if (m.type === 'invite') return
+  if (m.type === 'invite' || m.type === 'invites_changed') { void refreshInvites(); return }
   if (m.session_id !== s().session?.id) return           // late message from a session we left
   switch (m.type) {
     case 'presence': collab.set({ presence: m.users }); break

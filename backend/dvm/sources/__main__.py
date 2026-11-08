@@ -3,10 +3,11 @@
   setup                                   create the tables (idempotent)
   digitraffic [--minutes N]               stream live Digitraffic (forever without --minutes)
   poll {gfw,sentinel1} [--once]           fetch the recent windows that may have changed, then sleep
-  backfill {gfw,sentinel1} --start D --end D [--force]
+  backfill {gfw,sentinel1} --start D --end D [--force] [--workers N]
   backfill digitraffic                    replay data/raw/digitraffic into the database
-  backfill-back {gfw,sentinel1} [--until D] [--max-db-gb N]
+  backfill-back {gfw,sentinel1} [--until D] [--max-db-gb N] [--workers N]
                                           from today backwards until stopped, history ends, or the size cap
+  (poll, backfill and backfill-back also take --inflight N and, for gfw, --block-days N; see README)
   readonly-role [--role R]                create a read-only login; its URL goes to ~/.config/hedged-bets/readonly.env
   status                                  freshness per source and row counts
 
@@ -72,6 +73,23 @@ def readonly_role(url: str, role: str) -> dict:
     return {"role": role, "url_written_to": str(path)}
 
 
+def _positive(v: str) -> int:
+    n = int(v)
+    if n < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return n
+
+
+def _parallel(p, workers: bool = True) -> None:
+    if workers:
+        p.add_argument("--workers", type=_positive, default=1,
+                       help="days fetched at the same time (each with every region at once)")
+        p.add_argument("--block-days", type=_positive, default=1,
+                       help="gfw: days per fetch when gfw.fetch_range exists (else one day per fetch)")
+    p.add_argument("--inflight", type=_positive, default=jobs.DEFAULT_INFLIGHT,
+                   help="gfw: most requests in flight at once (4Wings reports always go one at a time)")
+
+
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(prog="python -m dvm.sources")
     ap.add_argument("--db")
@@ -86,17 +104,20 @@ def main(argv=None) -> None:
     p.add_argument("src", choices=["gfw", "sentinel1"])
     p.add_argument("--regions", default=",".join(REGIONS))
     p.add_argument("--once", action="store_true")
+    _parallel(p, workers=False)
     b = sub.add_parser("backfill")
     b.add_argument("src", choices=["gfw", "sentinel1", "digitraffic"])
     b.add_argument("--regions", default=",".join(REGIONS))
     b.add_argument("--start", type=date.fromisoformat)
     b.add_argument("--end", type=date.fromisoformat)
     b.add_argument("--force", action="store_true")
+    _parallel(b)
     bb = sub.add_parser("backfill-back")
     bb.add_argument("src", choices=["gfw", "sentinel1"])
     bb.add_argument("--regions", default=",".join(REGIONS))
     bb.add_argument("--until", type=date.fromisoformat, default=date(2017, 1, 1))
     bb.add_argument("--max-db-gb", type=float, default=jobs.DEFAULT_MAX_DB_GB)
+    _parallel(bb)
     ro = sub.add_parser("readonly-role")
     ro.add_argument("--role", default="poseidon_ro")
     args = ap.parse_args(argv)
@@ -125,10 +146,12 @@ def main(argv=None) -> None:
     elif args.cmd == "digitraffic":
         out = asyncio.run(jobs.stream_digitraffic(url, args.minutes * 60 if args.minutes else None, args.data_dir))
     elif args.cmd == "poll":
-        out = asyncio.run(jobs.poll(url, args.src, regions(), once=args.once, data_dir=args.data_dir))
+        out = asyncio.run(jobs.poll(url, args.src, regions(), once=args.once, data_dir=args.data_dir,
+                                    inflight=args.inflight))
     elif args.cmd == "backfill-back":
         out = asyncio.run(jobs.backfill_back(url, args.src, regions(), until=args.until, max_db_gb=args.max_db_gb,
-                                             data_dir=args.data_dir))
+                                             data_dir=args.data_dir, workers=args.workers,
+                                             block_days=args.block_days, inflight=args.inflight))
     elif args.cmd == "readonly-role":
         out = readonly_role(url, args.role)
     elif args.src == "digitraffic":
@@ -137,7 +160,8 @@ def main(argv=None) -> None:
         if not args.start or not args.end:
             sys.exit("backfill needs --start and --end (YYYY-MM-DD, inclusive)")
         out = asyncio.run(jobs.backfill(url, args.src, regions(), args.start, args.end, force=args.force,
-                                        data_dir=args.data_dir))
+                                        data_dir=args.data_dir, workers=args.workers, block_days=args.block_days,
+                                        inflight=args.inflight))
     print(json.dumps(out, indent=1, default=str))
 
 
