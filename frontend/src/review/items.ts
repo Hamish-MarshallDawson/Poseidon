@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { collab, useInSession, type Entry } from '../collab/presence/core'
-import { REASON_LABEL, pct } from '../forecast/labels'
+import { REASON_LABEL } from '../forecast/labels'
 import { useWatchlist } from '../windows/hooks'
 import type { WatchlistRow } from '../types'
 import { review } from './store'
@@ -15,7 +15,7 @@ export type Item =
 
 // The leading reason only, with a count of the rest, so the line stays one line.
 export const systemReason = (r: WatchlistRow) =>
-  `System · est. ${pct(r.p)} · ${REASON_LABEL[r.reason_codes[0]] ?? r.reason_codes[0] ?? 'Forecast'}${r.reason_codes.length > 1 ? ` +${r.reason_codes.length - 1}` : ''}`
+  `System · ${REASON_LABEL[r.reason_codes[0]] ?? r.reason_codes[0] ?? 'Forecast'}${r.reason_codes.length > 1 ? ` +${r.reason_codes.length - 1}` : ''}`
 
 export function useReviewItems(): { items: Item[]; dismissed: number } {
   const wl = useWatchlist()

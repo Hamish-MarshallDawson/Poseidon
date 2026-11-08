@@ -20,10 +20,15 @@ review.subscribe((s) => {
 
 // In a session the review list is the session's shared list (collab/presence); otherwise it is this browser's own.
 export const toggleReview = (mmsi: number) => inSession()
-  ? void (collab.get().list.some((e) => e.mmsi === mmsi) ? listRemove(mmsi) : listAdd(mmsi))
-  : review.set((s) => ({ list: s.list.includes(mmsi) ? s.list.filter((m) => m !== mmsi) : [...s.list, mmsi] }))
-export const removeReview = (mmsi: number) => review.set((s) => ({ list: s.list.filter((m) => m !== mmsi) }))
-export const clearReview = () => review.set({ list: [] })
+  ? void (collab.get().list.some((e) => e.mmsi === mmsi) ? removeReview(mmsi) : listAdd(mmsi))
+  : review.get().list.includes(mmsi) ? removeReview(mmsi) : review.set((s) => ({ list: [...s.list, mmsi] }))
+// Also dismissed: a removed ship the forecast flags would otherwise come straight back as a System entry.
+export function removeReview(mmsi: number) {
+  dismissSystem(mmsi)
+  if (inSession()) void listRemove(mmsi)
+  else review.set((s) => ({ list: s.list.filter((m) => m !== mmsi) }))
+}
+export const clearReview = () => review.set((s) => ({ list: [], dismissed: [...new Set([...s.dismissed, ...s.list])] }))
 export const useInReview = (mmsi: number) => {
   const mine = review.use((s) => s.list.includes(mmsi))
   const shared = collab.use((s) => s.session != null && s.list.some((e) => e.mmsi === mmsi))

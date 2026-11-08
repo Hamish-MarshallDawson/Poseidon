@@ -6,10 +6,10 @@ import { mapStore } from '../map/context'
 import { reducedMotion, usePresence } from '../motion'
 import { openShipWindow } from '../windows/open'
 import { useNow, useVessel } from '../windows/hooks'
-import { TYPE_LABEL, hms } from '../windows/format'
+import { TYPE_LABEL, hms, pct } from '../windows/format'
 import { MAX_SHIPS, briefing, clearSelected, runBriefing, toggleSelected } from '../briefing/store'
 import { forecastUi } from '../forecast/state'
-import { collab, listAdd, listRemove, useInSession } from '../collab/presence/core'
+import { collab, listAdd, useInSession } from '../collab/presence/core'
 import { AddedBy, ReportTag, SessionActivity, SessionOnline, StatusSelect, Viewing } from '../collab/presence/SharedList'
 import { review, removeReview, clearReview, dismissSystem, restoreSystem, toggleReview } from './store'
 import { systemReason, useReviewItems, type Item } from './items'
@@ -54,6 +54,8 @@ function Row({ item, picked, full }: { item: Item; picked: boolean; full: boolea
   const now = useNow()
   const noAis = !!v && (v.status === 'gap_open' || v.status === 'silent')
   const name = v?.name ?? `MMSI ${mmsi}`
+  const p = item.kind === 'system' ? item.row.p : v?.risk_p ?? null
+  const rank = item.kind === 'system' ? item.row.rank : v?.risk_rank ?? null
   const drop = () => { if (picked) toggleSelected(mmsi) }
   // A System entry the viewer adds becomes theirs: in a session it joins the shared list, otherwise their own.
   const add = () => (collab.get().session ? void listAdd(mmsi) : toggleReview(mmsi))
@@ -68,6 +70,12 @@ function Row({ item, picked, full }: { item: Item; picked: boolean; full: boolea
           {v && <span className="rv-timer" title="Since last AIS">{noAis ? 'No AIS' : 'AIS'} {hms(now - v.last_ts)}</span>}
           {item.kind === 'shared' && <ReportTag mmsi={mmsi} />}
         </span>
+        {p !== null && (
+          <span className="rv-risk" title="Our backtest shows this score runs about 2x high and does not beat the base rate yet. Use it to rank ships.">
+            <b>{pct(p)}</b>
+            <span>{noAis ? 'Chance of going dark, forecast before this silence' : 'Chance of going dark in the next 6 h'}{rank ? ` · rank ${rank}` : ''}<small>Model estimate for ranking, not a guarantee</small></span>
+          </span>
+        )}
         <span className="wl-note">
           {item.kind === 'system' && systemReason(item.row)}
           {item.kind === 'you' && 'You'}
@@ -81,7 +89,7 @@ function Row({ item, picked, full }: { item: Item; picked: boolean; full: boolea
           {item.kind === 'system'
             ? <Button className="btn-small" aria-label={`Dismiss ${name}`} onClick={() => { drop(); dismissSystem(mmsi) }}>Dismiss</Button>
             : <Button className="btn-small" aria-label={`Remove ${name} from the list`}
-                onClick={() => { drop(); void (item.kind === 'shared' ? listRemove(mmsi) : removeReview(mmsi)) }}>Remove</Button>}
+                onClick={() => { drop(); removeReview(mmsi) }}>Remove</Button>}
         </span>
       </div>
     </li>
@@ -112,7 +120,7 @@ function ReviewPanel({ onCompare }: { onCompare: () => void }) {
       {inSession && <SessionActivity />}
       {items.length > 0 && (
         <div className="wl-brief">
-          <span>{picked.length > 0 ? `${picked.length} selected${picked.length >= MAX_SHIPS ? ' (most)' : ''}` : 'Tick ships to compare or brief · System % is the chance of a silence in 6 h'}</span>
+          <span>{picked.length > 0 ? `${picked.length} selected${picked.length >= MAX_SHIPS ? ' (most)' : ''}` : 'Tick ships to compare or brief'}</span>
           <span className="wl-brief-actions">
             {picked.length > 0 && <Button className="btn-small" onClick={clearSelected}>Clear</Button>}
             <Button className="btn-small" disabled={picked.length < 2} onClick={onCompare}>Compare</Button>

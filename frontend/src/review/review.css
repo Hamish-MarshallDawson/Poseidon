@@ -31,3 +31,7 @@
 .rv-item .wl-note { display: block; min-height: 0; }
 .rv-item .rv-timer { flex: none; font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
 .rv-item .wl-pick { right: 12px; top: 12px; }
+.rv-risk { display: flex; align-items: center; gap: 10px; }
+.rv-risk b { flex: none; font: 600 var(--dvm-size-title) / var(--dvm-line-title) var(--dvm-font-data); font-variant-numeric: tabular-nums; color: var(--dvm-text-primary); }
+.rv-risk span { font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); color: var(--dvm-text-primary); }
+.rv-risk small { display: block; font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); color: var(--dvm-text-secondary); }
