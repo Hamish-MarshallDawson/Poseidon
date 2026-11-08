@@ -1,15 +1,17 @@
 // "Data collected": graded outcomes building up, history depth per source, training size per run, frozen held-out sets (/lab/data).
 import { fmtDay, fmtHM } from '../../timeline/format'
-import { Plot } from './Plot'
-import { count, path, outcomeSeries, sourceSpans, uniqueHoldouts } from './shape'
-import type { LabData } from './types'
+import { Chart, Legend, Line, Ranges, extent, type Tone } from '../charts'
+import type { LabData } from '../types'
+import { count, outcomeSeries, sourceSpans, uniqueHoldouts } from './shape'
 import './live.css'
 
 export interface DataCollectedProps { data: LabData | null }
 
-const MODE_COLOR: Record<string, string> = { live: 'var(--dvm-accent-default)', backtest: 'var(--dvm-ship-class-b)', all: 'var(--dvm-accent-default)' }
+const MODE_TONE: Record<string, Tone> = { live: 'accent', backtest: 'warn', all: 'accent' }
 const MODE_NAME: Record<string, string> = { live: 'live feed', backtest: 'backtest replay', all: 'live and backtest' }
-const date = (t: number) => new Date(t).toISOString().slice(0, 10)
+const date = (t: number | null) => (t == null ? '–' : new Date(t).toISOString().slice(0, 10))
+const year = (t: number) => String(new Date(t).getUTCFullYear())
+const short = (s: string) => (s.length > 20 ? `${s.slice(0, 19)}…` : s)
 
 export function DataCollected({ data }: DataCollectedProps) {
   if (!data) return <section className="ll-sec"><h3>Data collected</h3><p className="ll-muted">Loading…</p></section>
@@ -18,9 +20,9 @@ export function DataCollected({ data }: DataCollectedProps) {
   const total = outs.reduce((a, s) => a + (s.points.at(-1)?.cumulative ?? 0), 0)
   const spans = sourceSpans(data.sources)
   const holdouts = uniqueHoldouts(data.holdouts)
-  const training = [...data.training].sort((a, b) => a.created_at - b.created_at)
-  const nMax = Math.max(1, ...training.map((t) => t.n_train ?? 0))
-  const s0 = Math.min(...spans.map((s) => s.oldest)), s1 = Math.max(...spans.map((s) => s.newest))
+  const training = data.training.filter((t) => t.n_train != null).sort((a, b) => a.created_at - b.created_at)
+  const runLabel = (id: string) => { const t = training.find((r) => r.run_id === id); return t ? `${t.target} · ${fmtHM(t.created_at)}` : id }
+  const [s0, s1] = extent(spans.flatMap((s) => [s.oldest, s.newest]))
 
   return (
     <section className="ll-sec" aria-labelledby="ll-data">
@@ -31,15 +33,13 @@ export function DataCollected({ data }: DataCollectedProps) {
           {!opts.length ? <p className="ll-muted">No graded predictions yet.</p> : (
             <>
               <p className="ll-say"><b>{total.toLocaleString('en-GB')}</b> predictions graded against what happened since {fmtDay(opts[0].t)} {fmtHM(opts[0].t)}: the evidence every promotion and recalibration is judged on.</p>
-              <Plot label="Cumulative graded predictions" x={[Math.min(...opts.map((p) => p.t)), Math.max(...opts.map((p) => p.t))]} y={[0, Math.max(...opts.map((p) => p.cumulative))]} time yTick={count}>
-                {(c) => outs.map((s) => (
-                  <g key={s.mode} style={{ color: MODE_COLOR[s.mode] ?? 'var(--dvm-text-secondary)' }}>
-                    <path className="ll-line" d={path(s.points.map((p) => [c.x(p.t), c.y(p.cumulative)]))} />
-                    {s.points.map((p) => <circle key={p.t} className="ll-dot" cx={c.x(p.t)} cy={c.y(p.cumulative)} r={2.5}><title>{`${fmtDay(p.t)} ${fmtHM(p.t)}: +${p.n.toLocaleString('en-GB')} graded (${MODE_NAME[s.mode] ?? s.mode}), ${p.cumulative.toLocaleString('en-GB')} in total`}</title></circle>)}
-                  </g>
+              <Chart label="Cumulative graded predictions" x={{ type: 'time', domain: extent(opts.map((p) => p.t)) }} y={{ domain: [0, Math.max(1, ...opts.map((p) => p.cumulative)) * 1.05], format: count, ticks: 4 }} height={180}>
+                {outs.map((s) => (
+                  <Line key={s.mode} label={MODE_NAME[s.mode] ?? s.mode} tone={MODE_TONE[s.mode] ?? 'ink'} dots data={s.points.map((p) => ({ ...p, x: p.t, y: p.cumulative }))}
+                    tip={(p) => <>{fmtDay(p.t)} {fmtHM(p.t)}<br />+{p.n.toLocaleString('en-GB')} graded, <b>{p.cumulative.toLocaleString('en-GB')}</b> in total</>} />
                 ))}
-              </Plot>
-              <ul className="ll-keys">{outs.map((s) => <li key={s.mode}><i style={{ color: MODE_COLOR[s.mode] ?? 'var(--dvm-text-secondary)' }} />{MODE_NAME[s.mode] ?? s.mode}</li>)}</ul>
+              </Chart>
+              <Legend items={outs.map((s) => ({ label: MODE_NAME[s.mode] ?? s.mode, tone: MODE_TONE[s.mode] ?? 'ink' }))} />
             </>
           )}
           <h4>Frozen held-out sets</h4>
@@ -47,34 +47,27 @@ export function DataCollected({ data }: DataCollectedProps) {
           {!holdouts.length ? <p className="ll-muted">None recorded.</p> : (
             <table className="ll-table">
               <thead><tr><th>Model</th><th>Set</th><th>Period</th><th className="num">Rows</th></tr></thead>
-              <tbody>{holdouts.map((h) => <tr key={`${h.target}${h.hash}`}><td>{h.target}</td><td title={`hash ${h.hash}`}>{h.name}</td><td>{date(h.start)} to {date(h.end)}</td><td className="num">{h.n.toLocaleString('en-GB')}</td></tr>)}</tbody>
+              <tbody>{holdouts.map((h) => <tr key={`${h.target}|${h.name}|${h.hash}`}><td>{h.target}</td><td title={h.hash ? `hash ${h.hash}` : undefined}>{h.name}</td><td>{date(h.start)} to {date(h.end)}</td><td className="num">{h.n == null ? '–' : h.n.toLocaleString('en-GB')}</td></tr>)}</tbody>
             </table>
           )}
         </div>
         <div className="ll-card">
           <h4>History behind each source</h4>
           {!spans.length ? <p className="ll-muted">No source history recorded.</p> : (
-            <ul className="ll-spans">
-              {spans.map((s) => (
-                <li key={`${s.src}/${s.stream}`}>
-                  <span className="ll-span-label">{s.label}<small>{count(s.rows)} rows · {date(s.oldest)} to {date(s.newest)}</small></span>
-                  <span className="ll-track"><span className="ll-bar" style={{ left: `${((s.oldest - s0) / (s1 - s0 || 1)) * 100}%`, right: `${100 - ((s.newest - s0) / (s1 - s0 || 1)) * 100}%` }} /></span>
-                </li>
-              ))}
-              <li className="ll-span-axis"><span /><span className="ll-track"><span>{new Date(s0).getUTCFullYear()}</span><span>{new Date(s1).getUTCFullYear()}</span></span></li>
-            </ul>
+            <>
+              <Chart label="History depth per source, oldest to newest" x={{ type: 'time', domain: [s0, s1], format: year }} y={{ type: 'band', domain: spans.map((s) => s.label), format: short }} height={40 + 34 * spans.length}>
+                <Ranges data={spans.map((s) => ({ ...s, y: s.label, x0: s.oldest, x1: s.newest }))} label="source history"
+                  tip={(s) => <><b>{s.label}</b><br />{date(s.oldest)} to {date(s.newest)}<br />{s.rows.toLocaleString('en-GB')} rows in {s.windows.toLocaleString('en-GB')} windows</>} />
+              </Chart>
+              <p className="ll-muted">{spans.map((s) => `${s.label}: ${count(s.rows)} rows`).join(' · ')}</p>
+            </>
           )}
           <h4>Training examples per run</h4>
           {!training.length ? <p className="ll-muted">No runs with a recorded training size.</p> : (
-            <ul className="ll-bars">
-              {training.map((t) => (
-                <li key={t.run_id}>
-                  <span className="ll-span-label" title={t.run_id}>{t.target}<small>{fmtDay(t.created_at)} {fmtHM(t.created_at)}</small></span>
-                  <span className="ll-track"><span className="ll-bar" style={{ left: 0, right: `${100 - ((t.n_train ?? 0) / nMax) * 100}%` }} /></span>
-                  <span className="num">{t.n_train == null ? '–' : count(t.n_train)}</span>
-                </li>
-              ))}
-            </ul>
+            <Chart label="Training examples per run" x={{ domain: [0, Math.max(...training.map((t) => t.n_train ?? 0)) * 1.05], format: count }} y={{ type: 'band', domain: training.map((t) => t.run_id), format: runLabel }} height={40 + 30 * training.length}>
+              <Ranges data={training.map((t) => ({ ...t, y: t.run_id, x0: 0, x1: t.n_train ?? 0 }))} label="training run"
+                tip={(t) => <><b>{t.run_id}</b><br />{(t.n_train ?? 0).toLocaleString('en-GB')} training examples, trained {fmtDay(t.created_at)} {fmtHM(t.created_at)}</>} />
+            </Chart>
           )}
         </div>
       </div>

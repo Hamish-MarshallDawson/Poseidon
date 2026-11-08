@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { darkSeries, headline, horizonsIn, km, modesIn, outcomeSeries, pooledBrierSkill, routeView, sourceSpans, uniqueHoldouts, versionsIn } from './shape'
-import type { DarkRow, RouteRow } from './types'
+import type { DarkMetricRow as DarkRow, RouteMetricRow as RouteRow } from '../types'
 
 const r = (o: Partial<RouteRow>): RouteRow => ({ t: 0, mode: 'live', model_version: 'm', horizon_s: 3600, n: 1, cov80: null, cov95: null, median_err_m: null, baseline_median_err_m: null, skill: null, ...o })
 

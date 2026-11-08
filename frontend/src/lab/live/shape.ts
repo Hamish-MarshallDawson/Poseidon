@@ -1,5 +1,11 @@
 // Data shaping for "Live track record" and "Data collected" (pure; tested in shape.test.ts).
-import type { DarkRow, HoldoutRow, Mode, OutcomeRow, RouteRow, SourceRow } from './types'
+import type { DarkMetricRow as DarkRow, LabData, RouteMetricRow as RouteRow } from '../types'
+
+/** The two kinds of graded prediction this section separates. */
+export type Mode = 'live' | 'backtest'
+type OutcomeRow = LabData['outcomes'][number]
+type SourceRow = LabData['sources'][number]
+type HoldoutRow = LabData['holdouts'][number]
 
 export const BASELINE_PREFIX = 'baseline'
 export const isBaseline = (v: string) => v.startsWith(BASELINE_PREFIX)
@@ -100,5 +106,3 @@ export const hLabel = (s: number) => (s % 3600 === 0 ? `${s / 3600} h` : `${Math
 export const count = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e4 ? `${Math.round(n / 1000)} k` : n.toLocaleString('en-GB'))
 export const signedPct = (x: number | null | undefined) => (x == null ? '–' : `${x >= 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(1)}%`)
 
-/** SVG path through screen points. */
-export const path = (pts: [number, number][]) => pts.map(([a, b], i) => `${i ? 'L' : 'M'}${a.toFixed(1)},${b.toFixed(1)}`).join('')
