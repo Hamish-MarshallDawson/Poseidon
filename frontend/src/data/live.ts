@@ -1,4 +1,4 @@
-import type { ClientMsg, HistoryRange, Outcome, RiskScore, ServerMsg, TimelineEvent } from '../types'
+import type { ClientMsg, HistoryRange, ObservationQuery, ObservationReply, Outcome, RiskScore, ServerMsg, TimelineEvent } from '../types'
 import type { AdapterOptions, DataAdapter, FeedHandlers, FeedStatus } from './adapter'
 
 // The real backend: ws /ws (Auth0 token as the first message), GET /history/range. Self-contained on purpose
@@ -139,6 +139,15 @@ export function createLiveAdapter(opts: AdapterOptions): DataAdapter {
     timeline: (from, to) => read<TimelineEvent[]>('/timeline', { from_ts: from, to_ts: to }),
     scores: (as_of) => read<RiskScore[]>('/scores', as_of == null ? {} : { as_of }),
     outcomes: (from, to) => read<Outcome[]>('/outcomes', { from_ts: from, to_ts: to }),
+    async observations(q: ObservationQuery): Promise<ObservationReply> {
+      const token = await opts.getToken()
+      const p = new URLSearchParams({ kinds: q.kinds.join(','), start: String(q.start), end: String(q.end) })
+      if (q.mmsi != null) p.set('mmsi', String(q.mmsi))
+      if (q.bbox) p.set('bbox', q.bbox.join(','))
+      const res = await fetch(`${opts.httpBase}/observations?${p}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      if (!res.ok) throw Object.assign(new Error(`GET /observations: ${res.status}`), { status: res.status })
+      return res.json()
+    },
     modelReport() {
       reportCheck ??= (async () => {
         const token = await opts.getToken()
