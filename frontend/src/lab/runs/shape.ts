@@ -52,6 +52,7 @@ export interface RunDetail extends RunRecord {
   rationale: string | null
   rule: RuleCheck[]
   confirm: { run_id: string; passed: boolean } | null
+  decision_summary?: string | null
 }
 export type ProposalOutcome = 'champion' | 'candidate' | 'rejected' | 'invalid' | 'duplicate'
 export interface Proposal {
@@ -191,6 +192,14 @@ export function decisionLine(run: RunRecord): string {
  *  fallback to the sample data, can drop the selected run from the list; that must never leave a dangling id. */
 export function currentRun<R extends { run_id: string }>(selected: string | null, byId: Map<string, R>, shown: R[]): R | undefined {
   return (selected != null ? byId.get(selected) : undefined) ?? shown[0]
+}
+
+/** The run detail's decision lines: the backend's one-sentence decision_summary when present, with the stored
+ *  decision read in words under it; else that reading alone. */
+export function decisionHeadline(run: RunRecord, detail: Pick<RunDetail, 'decision_summary'> | null | undefined): { main: string; sub: string | null } {
+  const line = decisionLine(run)
+  const summary = detail?.decision_summary?.trim()
+  return summary ? { main: summary, sub: line === summary ? null : line } : { main: line, sub: null }
 }
 
 export interface RunFilters { target: string; proposer: string; status: string }

@@ -104,6 +104,8 @@ export interface RunDetail extends Run {
   rationale: string | null
   rule: RuleCheck[]
   confirm: { run_id: string; passed: boolean } | null
+  /** One plain sentence for the decision, e.g. "promoted by hand over route-dma14-v3; no paired test was run". */
+  decision_summary?: string | null
 }
 
 export type ProposalOutcome = 'champion' | 'candidate' | 'rejected' | 'invalid' | 'duplicate'
@@ -136,17 +138,25 @@ export interface LabEvent {
   detail: Record<string, unknown>
 }
 
+export interface LiveOffline { statistic: string; horizon_s: number; skill: number | null; skill_lo: number | null; skill_hi: number | null }
+
 export interface ModelSummary {
   target: Target
   label: string
   champion: { run_id: string | null; version: string; since: number | null; proposer: Proposer | null; source: Source | null }
-  offline: { primary_h: number; skill: number | null; skill_lo: number | null; skill_hi: number | null; holdout: string | null }
+  /** `statistic` names the held-out number ('log-loss skill', 'median-error skill'). */
+  offline: { primary_h: number; statistic?: string | null; skill: number | null; skill_lo: number | null; skill_hi: number | null; holdout: string | null }
   live: {
     hours: number
     n: number
     /** The version graded live, and for go-dark the target graded ("dark_1h"). */
     model_version?: string
     target?: string
+    /** What the live number is ('Brier skill', 'median-error skill') and at which horizon (s). */
+    statistic?: string
+    horizon_s?: number
+    /** The held-out number on the same statistic at the same horizon; null when the run has none (then no comparison). */
+    offline?: LiveOffline | null
     primary: { name: string; value: number | null; ref_label: string }
     calibration: { name: string; value: number | null; nominal: number | null; ok: boolean | null }
   } | null
@@ -158,7 +168,8 @@ export interface Summary {
   generated_at: number
   models: ModelSummary[]
   cycle: { state: 'manual' | 'scheduled'; last: number | null; next: number | null }
-  totals: { runs: number; proposals: number; graded_outcomes: number; graded_last_hour: number }
+  /** `graded_outcomes_estimated`: the total is the planner's estimate past the exact-count limit (show it with ~). */
+  totals: { runs: number; proposals: number; graded_outcomes: number; graded_outcomes_estimated?: boolean; graded_last_hour: number }
 }
 
 export type Mode = 'live' | 'backtest' | 'all' | (string & {})
@@ -195,6 +206,8 @@ export interface Metrics {
   godark: DarkMetricRow[]
   reliability: { target: string; bins: { p_mean: number; hit_rate: number; n: number }[] }[]
   lift: { target: string; top_share: number; top_hit_rate: number; all_hit_rate: number }[]
+  /** True when the row limit dropped the oldest buckets. */
+  truncated?: boolean
 }
 
 export interface LabData {
@@ -202,6 +215,10 @@ export interface LabData {
   sources: { src: string; stream: string; label: string; oldest: number | null; newest: number | null; windows: number; rows: number }[]
   training: { target: Target; run_id: string; created_at: number; n_train: number | null }[]
   holdouts: { target: Target; name: string; n: number | null; start: number | null; end: number | null; hash: string | null }[]
+  /** Epoch ms the running total of graded outcomes is counted from. */
+  counted_from?: number | null
+  /** True when the row limit dropped the oldest hourly buckets. */
+  truncated?: boolean
 }
 
 /** The fixtures file: every endpoint's response, same shapes. */

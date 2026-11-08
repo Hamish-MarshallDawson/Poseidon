@@ -27,8 +27,10 @@ export interface ModelSummaryLike {
   target: string
   label?: string
   champion: { run_id?: string | null; version: string; since?: number | null; proposer?: string | null }
-  offline: { primary_h: number; skill: number | null; skill_lo?: number | null; skill_hi?: number | null; holdout?: string | null }
-  live?: { hours?: number; n?: number; model_version?: string | null; target?: string | null; primary?: { name: string; value: number | null; ref_label?: string } | null } | null
+  offline: { primary_h: number; statistic?: string | null; skill: number | null; skill_lo?: number | null; skill_hi?: number | null; holdout?: string | null }
+  deployed?: boolean
+  live?: { hours?: number; n?: number; model_version?: string | null; target?: string | null; statistic?: string | null; horizon_s?: number | null
+    offline?: { statistic: string; horizon_s: number; skill: number | null; skill_lo?: number | null; skill_hi?: number | null } | null; primary?: { name: string; value: number | null; ref_label?: string } | null } | null
 }
 export interface RouteRowLike { t: number; mode?: string | null; model_version: string; horizon_s: number; n: number; skill: number | null }
 export interface GodarkRowLike { t: number; mode?: string | null; target: string; model_version: string; n: number; brier_skill: number | null }
@@ -59,7 +61,7 @@ const base = (v: string) => v.replace(/-cal\d+$/, '')
 export function offlineStatName(model: ModelSummaryLike, runs: RunLike[]): string {
   if (modelKey(model.target) === 'godark') return 'Brier skill'
   const run = runs.find((r) => r.run_id === model.champion.run_id)
-  return lossSkillName(run?.metrics?.loss_name)
+  return model.offline.statistic ?? lossSkillName(run?.metrics?.loss_name)
 }
 
 /** The champion's offline primary skill over time: one step per promotion or deployment (a recalibration keeps the

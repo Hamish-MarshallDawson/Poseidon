@@ -46,6 +46,7 @@ export function LiveTrackRecord({ metrics, champions = [] }: LiveTrackRecordProp
       <div className="ll-head">
         <p className="ll-muted">
         Every prediction is graded once its horizon has passed. {mode === 'live' ? 'Live: predictions made on our own AIS feed as it came in.' : 'Backtest: the same models replayed over past hours of the feed.'} One point per hour; hover a point for its numbers.
+        {metrics.truncated ? ' The oldest hours are left out: this window has more rows than the Lab loads at once.' : ''}
         </p>
         <Toggle label="Which predictions" value={mode} options={modes} onChange={setMode} name={(m) => MODE_NAME[m]} />
       </div>

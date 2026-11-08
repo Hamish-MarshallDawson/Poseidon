@@ -1,6 +1,6 @@
 import { Chart, Legend, Markers, Ranges, RefLine, extent, pad } from './charts'
 import { baselineOf, calValue, count, horizon, interval, proposerLabel, signedPct, sourceLabel, when } from './format'
-import { liveHorizon, offlineSkill, recordedOffline, type SkillFigure, type SkillRunLike } from './skill'
+import { liveComparison, recordedOffline, type SkillFigure, type SkillRunLike } from './skill'
 import type { ModelSummary, Summary } from './types'
 
 // One card per model (champion, since when, offline skill with its interval, live primary metric and calibration
@@ -17,7 +17,7 @@ export function Overview({ summary, runs = [] }: { summary: Summary | null; runs
       <dl className="lab-totals">
         <div><dt>Training runs</dt><dd>{count(totals.runs)}</dd></div>
         <div><dt>Gemini proposals</dt><dd>{count(totals.proposals)}</dd></div>
-        <div><dt>Graded outcomes</dt><dd>{count(totals.graded_outcomes)} <span>+{count(totals.graded_last_hour)} last hour</span></dd></div>
+        <div><dt>Graded outcomes</dt><dd title={totals.graded_outcomes_estimated ? 'an estimate: past the exact-count limit the database planner\'s count is shown' : undefined}>{totals.graded_outcomes_estimated ? '~' : ''}{count(totals.graded_outcomes)} <span>+{count(totals.graded_last_hour)} last hour</span></dd></div>
         <div>
           <dt>Improvement cycle</dt>
           <dd>{cycle.state === 'scheduled' ? 'Scheduled' : 'Run by hand'} <span>{cycle.last ? `last ${when(cycle.last)}` : 'not run yet'}{cycle.next ? `, next ${when(cycle.next)}` : ''}</span></dd>
@@ -29,8 +29,9 @@ export function Overview({ summary, runs = [] }: { summary: Summary | null; runs
 
 export function ModelCard({ m, runs = [] }: { m: ModelSummary; runs?: SkillRunLike[] }) {
   const base = baselineOf(m.target)
-  // The held-out figure on the statistic the model is graded on live (go-dark: Brier skill), else the recorded one, named.
-  const off = offlineSkill(m, runs) ?? recordedOffline(m, runs)
+  // The champion's held-out figure as recorded, labelled with its statistic (offline.statistic). The strip below
+  // pairs live with the held-out number on the live statistic instead.
+  const off = recordedOffline(m, runs)
   const h = horizon(off?.h ?? m.offline.primary_h)
   const iv = interval(off?.lo, off?.hi)
   const cal = m.live?.calibration
@@ -59,7 +60,7 @@ export function ModelCard({ m, runs = [] }: { m: ModelSummary; runs?: SkillRunLi
       <div className="lab-card__row">
         <span className="lab-k">Live, last {m.live?.hours ?? 24} h</span>
         {!m.live ? (
-          <p className="lab-muted">Not graded live.</p>
+          <p className="lab-muted">{m.deployed ? 'No live grades for this version yet.' : 'Not graded live.'}</p>
         ) : (
           <>
             <p>
@@ -84,18 +85,19 @@ export function ModelCard({ m, runs = [] }: { m: ModelSummary; runs?: SkillRunLi
   )
 }
 
-/** Held-out skill (with its interval) against live skill on one axis, with zero (no better than the baseline) marked.
- *  Both points are the same statistic at the same horizon: the live one's (go-dark: Brier skill at 1 h), so the
- *  held-out point is taken at that horizon, and left out when the champion has no comparable held-out figure. */
+/** Live skill next to the held-out skill on the same statistic at the same horizon (the backend's live.offline), with
+ *  zero (no better than the baseline) marked. When the run has no such held-out number only the live point is drawn;
+ *  with no live grades, the recorded held-out figure alone. Never two statistics or horizons on one axis. */
 function SkillStrip({ m, runs }: { m: ModelSummary; runs: SkillRunLike[] }) {
-  const live = m.live?.primary.value ?? null
-  const fig: SkillFigure | null = live != null ? offlineSkill(m, runs, liveHorizon(m)) : offlineSkill(m, runs) ?? recordedOffline(m, runs)
+  const cmp = liveComparison(m, runs)
+  const fig: SkillFigure | null = cmp ? cmp.offline : recordedOffline(m, runs)
+  const liveFig = cmp?.live ?? null
   const off = fig?.skill ?? null
+  const live = liveFig?.skill ?? null
   if (off == null && live == null) return null
   const base = baselineOf(m.target)
-  const h = horizon(fig?.h ?? liveHorizon(m))
-  const stat = fig?.name ?? 'skill'
-  const what = live != null ? m.live!.primary.name : `${stat} over ${base} at ${h}`
+  const h = horizon((liveFig ?? fig)!.h)
+  const stat = (liveFig ?? fig)!.name
   const rows = [...(off != null ? ['held-out'] : []), ...(live != null ? ['live'] : [])]
   const lo = fig?.lo ?? null, hi = fig?.hi ?? null
   const dom = pad(extent([0, off, lo, hi, live]), 0.12)
@@ -106,7 +108,7 @@ function SkillStrip({ m, runs }: { m: ModelSummary; runs: SkillRunLike[] }) {
   ]
   return (
     <figure className="lab-strip">
-    <Chart label={`${m.label}: ${what}, held-out ${signedPct(off)} and live ${signedPct(live)}`}
+    <Chart label={`${m.label}: ${stat} over ${base} at ${h}, held-out ${signedPct(off)} and live ${signedPct(live)}`}
       height={rows.length * 26 + 24} x={{ domain: dom, percent: true, ticks: 4, noGrid: true }} y={{ type: 'band', domain: rows }} margin={{ top: 4, bottom: 18 }}>
       <RefLine x={0} label="no skill" />
       <Ranges data={iv} tone="accent" thickness={8} tip={(d) => <>95% interval {interval(d.x0, d.x1)}</>} />
@@ -117,7 +119,7 @@ function SkillStrip({ m, runs }: { m: ModelSummary; runs: SkillRunLike[] }) {
       ...(iv.length ? [{ label: '95% interval', tone: 'accent' as const, kind: 'band' as const }] : []),
       ...(live != null ? [{ label: `live, last ${m.live?.hours ?? 24} h`, tone: live < 0 ? ('bad' as const) : ('ink' as const), kind: 'diamond' as const }] : []),
       { label: `${stat} over ${base} at ${h}; left of 0 is worse`, tone: 'muted' as const, kind: 'dashed' as const },
-    ]} /></figcaption>
+    ]} />{cmp && off == null && live != null ? <span className="lab-muted"> No held-out {stat} at {h} recorded for this run, so nothing to compare against.</span> : null}</figcaption>
     </figure>
   )
 }

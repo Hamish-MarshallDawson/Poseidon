@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ALL, STATUS_LABEL, calibrationChecks, calibrationOk, changeLine, currentRun, fmtCalCheck, configDiff, decisionLine, distinct, filterRuns, fmtCount, fmtMonth,
+  ALL, STATUS_LABEL, calibrationChecks, calibrationOk, changeLine, currentRun, decisionHeadline, fmtCalCheck, configDiff, decisionLine, distinct, filterRuns, fmtCount, fmtMonth,
   fmtPct, fmtStat, fmtWhen, horizonLabel, horizonRows, lossLabel, primarySkill, proposerLabel, skillRows, targetLabel, weakestStrata,
   type RunFilters, type RunRecord, type SkillRow,
 } from './shape'
@@ -121,6 +121,7 @@ function RunDetailView({ run, byId, loadDetail, proposals, champion }: { run: Ru
   const against = r.metrics?.decision?.against
   const vsChampion = !!against && !againstBaseline(against)
   const m = r.metrics
+  const headline = decisionHeadline(r, detail)
 
   return (
     <section id="lr-detail" className="lr-detail" aria-label={`Run ${run.run_id}`}>
@@ -131,7 +132,8 @@ function RunDetailView({ run, byId, loadDetail, proposals, champion }: { run: Ru
         </div>
         <StatusTag status={r.status} />
       </header>
-      <p className="lr-decision">{decisionLine(r)}</p>
+      <p className="lr-decision">{headline.main}</p>
+      {headline.sub && <p className="lr-muted">{headline.sub}</p>}
       {detail === undefined && <p className="lr-muted">Loading run detail…</p>}
 
       <h4>Promotion rule</h4>

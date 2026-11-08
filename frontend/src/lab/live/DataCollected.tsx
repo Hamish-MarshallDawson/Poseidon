@@ -2,7 +2,7 @@
 import { fmtDay, fmtHM } from '../../timeline/format'
 import { Chart, Legend, Line, Ranges, extent, type Tone } from '../charts'
 import type { LabData } from '../types'
-import { count, outcomeSeries, sourceSpans, uniqueHoldouts } from './shape'
+import { count, countedFrom, outcomeSeries, sourceSpans, uniqueHoldouts } from './shape'
 import './live.css'
 
 export interface DataCollectedProps { data: LabData | null }
@@ -18,6 +18,8 @@ export function DataCollected({ data }: DataCollectedProps) {
   const outs = outcomeSeries(data.outcomes)
   const opts = outs.flatMap((s) => s.points)
   const total = outs.reduce((a, s) => a + (s.points.at(-1)?.cumulative ?? 0), 0)
+  const from = countedFrom(data, opts[0]?.t)
+  const since = from == null ? '' : `since ${fmtDay(from)} ${fmtHM(from)}`
   const spans = sourceSpans(data.sources)
   const holdouts = uniqueHoldouts(data.holdouts)
   const training = data.training.filter((t) => t.n_train != null).sort((a, b) => a.created_at - b.created_at)
@@ -32,14 +34,15 @@ export function DataCollected({ data }: DataCollectedProps) {
           <h4>Graded predictions</h4>
           {!opts.length ? <p className="ll-muted">No graded predictions yet.</p> : (
             <>
-              <p className="ll-say"><b>{total.toLocaleString('en-GB')}</b> predictions graded against what happened since {fmtDay(opts[0].t)} {fmtHM(opts[0].t)}: the evidence every promotion and recalibration is judged on.</p>
-              <Chart label="Cumulative graded predictions" x={{ type: 'time', domain: extent(opts.map((p) => p.t)) }} y={{ domain: [0, Math.max(1, ...opts.map((p) => p.cumulative)) * 1.05], format: count, ticks: 4 }} height={180}>
+              <p className="ll-say">{data.truncated ? 'At least ' : ''}<b>{total.toLocaleString('en-GB')}</b> predictions graded against what happened {since}: the evidence every promotion and recalibration is judged on.
+                {data.truncated ? ' The oldest hours are left out (row limit), so this total is a lower bound.' : ''}</p>
+              <Chart label={`Cumulative graded predictions ${since}`} x={{ type: 'time', domain: extent(opts.map((p) => p.t)) }} y={{ domain: [0, Math.max(1, ...opts.map((p) => p.cumulative)) * 1.05], format: count, ticks: 4 }} height={180}>
                 {outs.map((s) => (
                   <Line key={s.mode} label={MODE_NAME[s.mode] ?? s.mode} tone={MODE_TONE[s.mode] ?? 'ink'} dots data={s.points.map((p) => ({ ...p, x: p.t, y: p.cumulative }))}
                     tip={(p) => <>{fmtDay(p.t)} {fmtHM(p.t)}<br />+{p.n.toLocaleString('en-GB')} graded, <b>{p.cumulative.toLocaleString('en-GB')}</b> in total</>} />
                 ))}
               </Chart>
-              <Legend items={outs.map((s) => ({ label: MODE_NAME[s.mode] ?? s.mode, tone: MODE_TONE[s.mode] ?? 'ink' }))} />
+              <Legend items={outs.map((s) => ({ label: `${MODE_NAME[s.mode] ?? s.mode}, cumulative ${since}`, tone: MODE_TONE[s.mode] ?? 'ink' }))} />
             </>
           )}
           <h4>Frozen held-out sets</h4>

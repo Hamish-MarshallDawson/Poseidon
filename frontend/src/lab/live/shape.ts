@@ -91,6 +91,10 @@ export function outcomeSeries(rows: OutcomeRow[]): { mode: string; points: { t: 
   })
 }
 
+/** Where the running total of graded outcomes starts: /lab/data's counted_from, else the first hourly point. */
+export const countedFrom = (data: Pick<LabData, 'counted_from'>, firstPoint: number | undefined): number | null =>
+  data.counted_from ?? firstPoint ?? null
+
 /** Sources with known history bounds, deepest history first. */
 export const sourceSpans = (rows: SourceRow[]) =>
   rows.filter((r): r is SourceRow & { oldest: number; newest: number } => r.oldest != null && r.newest != null)
