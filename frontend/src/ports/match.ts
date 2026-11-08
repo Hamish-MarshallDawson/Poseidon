@@ -25,6 +25,13 @@ const NOISE = /\b(PORT OF|PORT|PORTS|ANCHORAGE|ROADS|ROADSTEAD|OPL|OPA|ANCH|FOR 
 const km = (a: Port, lat: number, lon: number) =>
   Math.hypot((a.lat - lat) * 111.2, (a.lon - lon) * 111.2 * Math.cos((lat * Math.PI) / 180))
 
+// The closest port within maxKm of a point, or null.
+export function nearestPort(idx: PortIndex, lat: number, lon: number, maxKm = 40): Port | null {
+  let best: Port | null = null, bd = maxKm
+  for (const p of idx.all) { const d = km(p, lat, lon); if (d <= bd) { best = p; bd = d } }
+  return best
+}
+
 // `near` (the ship's [lat, lon]) breaks ties between same-name ports in different countries; without it an
 // ambiguous bare name stays unmatched rather than guessing.
 export function matchDestination(raw: string, idx: PortIndex, near?: [number, number]): { port: Port; how: 'locode' | 'name' } | null {
