@@ -1,4 +1,4 @@
-import type { ClientMsg, HistoryRange, ServerMsg } from '../types'
+import type { ClientMsg, HistoryRange, Outcome, RiskScore, ServerMsg, TimelineEvent } from '../types'
 import type { AdapterOptions, DataAdapter, FeedHandlers, FeedStatus } from './adapter'
 
 // The real backend: ws /ws (Auth0 token as the first message), GET /history/range. Self-contained on purpose
@@ -97,6 +97,19 @@ export function createLiveAdapter(opts: AdapterOptions): DataAdapter {
     connect()
   }
 
+  // A route that answers 404 or 501 is remembered for the session: it throws at once, so the callers keep their
+  // fallback without a request every frame.
+  const missing = new Set<string>()
+  let reportCheck: Promise<string | null> | undefined
+  async function read<T>(path: string, params: Record<string, number>): Promise<T> {
+    if (missing.has(path)) throw new Error(`GET ${path}: not available`)
+    const token = await opts.getToken()
+    const q = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString()
+    const res = await fetch(`${opts.httpBase}${path}${q ? `?${q}` : ''}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (res.status === 404 || res.status === 501) missing.add(path)
+    if (!res.ok) throw new Error(`GET ${path}: ${res.status}`)
+    return res.json()
+  }
   return {
     isMock: false,
     start,
@@ -123,8 +136,20 @@ export function createLiveAdapter(opts: AdapterOptions): DataAdapter {
       if (!res.ok) throw new Error(`GET /track: ${res.status}`)
       return ((await res.json()) as { track?: [number, number, number][] }).track ?? []
     },
-    timeline: () => Promise.reject(new Error('not implemented by backend')),
-    scores: () => Promise.reject(new Error('not implemented by backend')),
-    outcomes: () => Promise.reject(new Error('not implemented by backend')),
+    timeline: (from, to) => read<TimelineEvent[]>('/timeline', { from_ts: from, to_ts: to }),
+    scores: (as_of) => read<RiskScore[]>('/scores', as_of == null ? {} : { as_of }),
+    outcomes: (from, to) => read<Outcome[]>('/outcomes', { from_ts: from, to_ts: to }),
+    modelReport() {
+      reportCheck ??= (async () => {
+        const token = await opts.getToken()
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+        try {
+          let res = await fetch(`${opts.httpBase}/model/report`, { method: 'HEAD', headers })
+          if (res.status === 405) res = await fetch(`${opts.httpBase}/model/report`, { headers })
+          return res.ok ? `${opts.httpBase}/model/report` : null
+        } catch { return null }
+      })()
+      return reportCheck
+    },
   }
 }

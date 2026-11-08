@@ -35,6 +35,8 @@ export interface DataAdapter {
   outcomes(from_ts: number, to_ts: number): Promise<Outcome[]>
   // GET /track: one ship's past positions [ts, lon, lat], oldest first, at most one per minute, hours 1..24.
   track(mmsi: number, hours: number): Promise<[number, number, number][]>
+  // URL of the backend's model report page when it answers (checked once); null otherwise. Absent on the mock.
+  modelReport?(): Promise<string | null>
 }
 
 export interface AdapterOptions {

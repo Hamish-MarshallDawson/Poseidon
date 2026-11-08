@@ -203,6 +203,7 @@
 .lg-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
 .lg-entry { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lg-label { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.lg-link { font-weight: 400; font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); color: var(--dvm-accent-default); text-decoration: underline; }
 .tile {
   position: relative;
   flex: none;
