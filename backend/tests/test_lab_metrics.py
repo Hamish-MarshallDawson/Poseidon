@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import os
 
 import asyncpg
@@ -301,6 +302,68 @@ CREATE TABLE IF NOT EXISTS ml_proposals (id text PRIMARY KEY);
 @needs_db
 def test_routes_on_local_db():
     asyncio.run(_db_flow())
+
+
+async def _fishing_flow():
+    """Weekly live fishing scores (ml.fishing.score): 2 scored 40 days back, one graded (fished in an MPA)."""
+    con = await asyncpg.connect(URL)
+    W = T - 40 * 24 * H
+    try:
+        await _seed(con)
+        await con.executemany(schema.SCORE_INSERT, [
+            (f"fishing_mpa_7d:{300 + i}:{W}", 300 + i, "fishing_mpa_7d", W, 604800, p, "fishing-x", "fishing-v1",
+             "{}", None, "live") for i, p in enumerate((0.7, 0.1))])
+        await con.executemany(schema.OUTCOME_INSERT, [
+            (f"fishing_mpa_7d:300:{W}", 300, "fishing_mpa_7d", W, 604800, W + 9 * 24 * H, True, None, "ev1", 3600,
+             None, None, None, None, None, None, None, None, None)])
+    finally:
+        await con.close()
+    pool = await asyncpg.create_pool(URL, min_size=1, max_size=1)
+    app = FastAPI()
+    app.include_router(M.make_router(lambda: pool, lambda: {"route_model": "route-x", "godark_model": "godark-x"},
+                                     lambda: None, clock=lambda: NOW))
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as http:
+            m = (await http.get("/lab/metrics", params={"hours": 24})).json()
+            s = (await http.get("/lab/summary")).json()
+    finally:
+        await pool.close()
+    fishing = s["models"][2]
+    assert fishing["fishing_live"] == {"latest_week": W, "scored_latest_week": 2, "scored": 2, "graded": 1,
+                                       "positives": 1, "hit_rate": 1.0, "model_version": "fishing-x",
+                                       "top_share": 0.1, "top_hit_rate": 1.0, "all_hit_rate": 1.0}
+    # read from the weekly scores, not the 24 h grade window; the week is 40 days old, so amber
+    assert fishing["headline"] == {"text": "Top 10% right 100% of the time", "value": 100, "unit": "%"}
+    wk = time.strftime("%d %b", time.gmtime(W / 1000))
+    assert fishing["status"] == {"level": "warn", "text": f"Live: 2 vessels scored week of {wk} · 1 graded"}
+    assert fishing["note"] == "scored 2 vessels this week; 1 weekly predictions graded so far"
+    (fw,) = m["fishing"]
+    assert (fw["week"], fw["scored"], fw["graded"], fw["positives"]) == (W, 2, 1, 1)
+    assert fw["mean_p"] == pytest.approx(0.4) and fw["hit_rate"] == 1.0
+    assert s["totals"]["graded_outcomes"] == 18
+
+
+@needs_db
+def test_fishing_live_on_local_db():
+    asyncio.run(_fishing_flow())
+
+
+def test_fishing_live_card():
+    now = 100 * 24 * M.H_MS
+    fish = {"latest_week": now - 3 * 24 * M.H_MS, "scored_latest_week": 357, "graded": 0, "top_hit_rate": None}
+    assert M.fishing_live_card(fish, now) == (None, {"level": "ok", "text": "Live: 357 vessels scored this week"})
+    head, st = M.fishing_live_card(fish | {"graded": 1200, "top_hit_rate": 0.774}, now)
+    assert head == {"text": "Top 10% right 77% of the time", "value": 77, "unit": "%"}
+    assert st == {"level": "ok", "text": "Live: 357 vessels scored this week · 1,200 graded"}
+
+
+def test_fishing_live_totals():
+    assert M.fishing_live([]) is None
+    rows = [{"week": 1, "model_version": "a", "scored": 5, "graded": 5, "positives": 2},
+            {"week": 2, "model_version": "b", "scored": 3, "graded": 0, "positives": 0}]
+    f = M.fishing_live(rows)
+    assert (f["latest_week"], f["scored_latest_week"], f["scored"], f["graded"], f["hit_rate"],
+            f["model_version"]) == (2, 3, 8, 5, 0.4, "b")
 
 
 def test_truncation_keeps_the_newest_buckets():

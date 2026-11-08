@@ -116,7 +116,7 @@ def cycle(targets: list[str], rounds: int, proposals: int, retrain: bool, do_dep
             status["recalibrate"] = {"error": repr(e)[:300]}
             log(f"recalibrate failed: {e!r}")
     if not retrain:
-        return status | {"finished": now()}
+        return maybe_score_fishing(status, log) | {"finished": now()}
     reg = open_registry(None)
     # Gemini only with a key of its own: GEMINI_API_KEY belongs to the live briefings (free-tier quota).
     ml_key = os.getenv("ML_GEMINI_API_KEY")
@@ -147,7 +147,38 @@ def cycle(targets: list[str], rounds: int, proposals: int, retrain: bool, do_dep
             st["trace"] = traceback.format_exc()[-1500:]
             log(f"{t}: failed: {e!r}")
         st["finished"] = now()
-    return status | {"finished": now()}
+    return maybe_score_fishing(status, log) | {"finished": now()}
+
+
+def maybe_score_fishing(status: dict, log) -> dict:
+    if os.getenv("ML_FISHING_SCORE") == "1":   # optional: live weekly fishing scores (ml.fishing.score)
+        status["fishing_score"] = fishing_score(log)
+    return status
+
+
+def fishing_score(log) -> dict:
+    """Optional step (ML_FISHING_SCORE=1): score this week's fishing vessels with the fishing champion and grade past
+    weeks (ml.fishing.score). A dry run unless ML_FISHING_SCORE_WRITE=1, which writes scores and outcomes to Tiger.
+    A failure never fails the cycle."""
+    cmd = [sys.executable, "-m", "ml.fishing.score"]
+    if os.getenv("ML_FISHING_SCORE_WRITE") == "1":
+        cmd += ["--write", "--allow-tiger"]
+    t0 = time.time()
+    try:
+        p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired:
+        log("fishing score: timed out")
+        return {"rc": None, "error": "timeout"}
+    out = {"cmd": " ".join(cmd[1:]), "rc": p.returncode, "s": round(time.time() - t0, 1)}
+    try:
+        # progress lines are one-line JSON; the result is the indented document after them
+        start = 0 if p.stdout.startswith("{\n") else p.stdout.index("\n{\n") + 1
+        res = json.loads(p.stdout[start:])
+        out |= {k: res.get(k) for k in ("as_of", "model_version", "vessels_scored", "mode", "tiger")}
+    except ValueError:
+        out["tail"] = (p.stderr or p.stdout)[-300:]
+    log(f"fishing score rc={p.returncode} in {out['s']} s: {out.get('vessels_scored')} vessels")
+    return out
 
 
 def main(argv=None) -> None:
