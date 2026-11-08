@@ -14,7 +14,8 @@ held exits at once, so two trainings never overlap):
    ones, since a registry champion has only beaten earlier runs of the same registry): a run the loop promoted over an earlier registry champion (not the first run against the baseline) is
    copied into PREDICT_MODEL_DIR and named in champions.json, when its artifact is deployable. The first champion of
    a fresh registry is recorded but not deployed: it has not beaten anything the live system runs.
-Writes <ML_ARTIFACTS>/reports/auto-status.json (last cycle) and appends to auto-history.jsonl.
+Writes <ML_ARTIFACTS>/reports/auto-status.json (last cycle) and appends to auto-history.jsonl, and appends the cycle's
+runs, proposals and events to the Model Lab bundle at $POSEIDON_DATA/lab-history/ (ML_LAB_HISTORY).
 CPU: training threads are capped by ML_THREADS (default 3 of the server's 6); the unit also sets Nice and MemoryMax.
 """
 from __future__ import annotations
@@ -170,6 +171,12 @@ def main(argv=None) -> None:
         f.write(json.dumps({k: v for k, v in status.items() if k != "targets"} |
                            {"targets": {t: {k: v for k, v in s.items() if k != "trace"}
                                         for t, s in status["targets"].items()}}, default=str) + "\n")
+    try:   # the Lab's history bundle; a failure here never fails the cycle
+        from ml.core.history import DATA as HIST_DATA, append_cycle
+        status["lab_history"] = append_cycle(status, open_registry(None), HIST_DATA,
+                                             Path(os.getenv("ML_LAB_HISTORY", str(HIST_DATA / "lab-history"))))
+    except Exception as e:
+        status["lab_history"] = {"error": repr(e)[:300]}
     print(json.dumps(status, indent=1, default=str))
 
 
