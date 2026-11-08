@@ -19,6 +19,14 @@
 .risk-3 { background: var(--dvm-risk-3); }
 .risk-4 { background: var(--dvm-risk-4); }
 
+/* Zones (see src/layout.ts): these numbers must equal it; windows/place.check.ts verifies. */
+:root {
+  --lay-top: 56px;           /* windows never go above this */
+  --lay-bottom: 72px;        /* nor lower than 100vh minus this: the scrub bar band */
+  --lay-controls-top: 54px;  /* Display and zoom */
+  --lay-panel-top: 92px;     /* right-column panels start here, under the controls */
+}
+
 /* Status line (66:21909) */
 .status-line {
   position: fixed;
@@ -75,10 +83,10 @@
 
 .zoom {
   position: fixed;
-  top: 60px;
+  top: var(--lay-controls-top);
   right: 16px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   background: var(--dvm-bg-panel);
   border: 1px solid var(--dvm-border-default);
 }
@@ -94,8 +102,8 @@
 .scale-label { color: var(--dvm-text-secondary); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
 
 /* Layers pop-over (41:437) */
-.layers-wrap { position: fixed; top: 60px; right: 60px; transform-origin: top right; }
-.layers { width: 340px; max-height: calc(100vh - 160px); overflow: auto; padding-bottom: 8px; }
+.layers-wrap { position: fixed; top: var(--lay-panel-top); right: 16px; transform-origin: top right; }
+.layers { width: 340px; max-height: calc(100vh - var(--lay-panel-top) - var(--lay-bottom)); overflow: auto; padding-bottom: 8px; }
 .ly-cap { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 12px; border-bottom: 1px solid var(--dvm-border-subtle); }
 .ly-showing { font-size: var(--dvm-size-body); line-height: var(--dvm-line-body); }
 .ly-bar { position: relative; height: 4px; }
@@ -107,10 +115,10 @@
 
 /* Watchlist drop-in (56:4359): edge text/muted so it separates from the map without a shadow. */
 /* Frame 6 (67:14713): x 1064, y 56, so right 16; it drops in over the zoom buttons. */
-.watchlist-wrap { position: fixed; top: 56px; right: 16px; z-index: 1; transform-origin: top right; }
+.watchlist-wrap { position: fixed; top: var(--lay-panel-top); right: 16px; z-index: 1; transform-origin: top right; }
 .watchlist {
   width: 360px;
-  max-height: calc(100vh - 160px);
+  max-height: calc(100vh - var(--lay-panel-top) - var(--lay-bottom));
   display: flex;
   flex-direction: column;
   border-color: var(--dvm-text-muted);
@@ -209,6 +217,7 @@
   line-height: var(--dvm-line-body);
 }
 .legend-toggle .lamp { border: 1.5px solid var(--dvm-text-muted); }
+.legend-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
 .legend-toggle.on { background: var(--dvm-accent-subtle); border-color: var(--dvm-accent-default); color: var(--dvm-accent-default); }
 .legend-toggle.on .lamp { background: var(--dvm-accent-default); border-color: var(--dvm-accent-default); }
 .lt-icon { position: relative; width: 16px; height: 16px; }
@@ -221,7 +230,7 @@
 .legend-wrap { position: fixed; left: 16px; bottom: 66px; transform-origin: bottom left; }
 .legend {
   width: 480px;
-  max-height: calc(100vh - 140px);
+  max-height: calc(100vh - 66px - 104px);   /* bottom-left column: under the focus bar */
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -339,3 +348,20 @@
 .dvm-map .maplibregl-ctrl.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button,
 .dvm-map .maplibregl-ctrl.maplibregl-ctrl-attrib::after { display: none; }
 .dvm-map .maplibregl-ctrl.maplibregl-ctrl-attrib a { color: var(--dvm-text-secondary); }
+
+/* Phone: status line alone on the first row, toolbar under it (up to two rows), controls and panels below it;
+   the scrub bar takes the full width and the legend toggle, scale, legend and briefing move up above it. */
+@media (max-width: 720px) {
+  :root { --lay-phone-controls: 126px; --lay-phone-panel: 164px; }
+  .status-line, .focus-bar { max-width: calc(100vw - 32px); }
+  .focus-bar { top: var(--lay-phone-panel); }
+  .status-line.is-replay { max-width: calc(100vw - 32px); }
+  .top-right { top: 50px; left: 16px; justify-content: flex-start; }
+  .zoom, .dvm-theme-menu { top: var(--lay-phone-controls); }
+  .layers-wrap, .watchlist-wrap { top: var(--lay-phone-panel); }
+  .watchlist, .layers { width: calc(100vw - 32px); max-height: calc(100vh - var(--lay-phone-panel) - 124px); }
+  .legend-toggle { bottom: 72px; }
+  .legend-wrap { bottom: 118px; }
+  .legend { width: calc(100vw - 32px); max-height: calc(100vh - 118px - 170px); }
+  .scale { bottom: 80px; }
+}

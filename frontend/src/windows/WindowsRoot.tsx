@@ -7,7 +7,8 @@ import { Legend } from '../panels/Legend'
 import { FocusBar } from '../panels/FocusBar'
 import { WindowLayer } from './ShipWindow'
 import { LeaderLines } from './Leader'
-import { clampWindows, closeShipWindow } from './open'
+import { clampWindows, closeShipWindow, reflowWindows } from './open'
+import { briefing } from '../briefing/store'
 import '../panels/panels.css'
 import './windows.css'
 
@@ -33,12 +34,25 @@ export function WindowsRoot({ onLogout }: { onLogout?: () => void }) {
   useEffect(() => {
     let raf = 0
     const onResize = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(clampWindows) }
+    let timer = 0
+    const zoneKey = () => { const s = ui.get(); return [s.watchlistOpen, s.reviewOpen, s.layersOpen, s.legendOpen, s.focusMmsi !== null, briefing.get().open, briefing.get().status].join() }
+    let last = zoneKey()
+    const onZone = () => {
+      const k = zoneKey()
+      if (k === last) return
+      last = k
+      clearTimeout(timer)
+      timer = window.setTimeout(reflowWindows, 350)   // after the panels' own drop-in settles
+    }
+    const offs = [ui.subscribe(onZone), briefing.subscribe(onZone)]
     addEventListener('keydown', onKey)
     addEventListener('resize', onResize)
     return () => {
       removeEventListener('keydown', onKey)
       removeEventListener('resize', onResize)
       cancelAnimationFrame(raf)
+      clearTimeout(timer)
+      offs.forEach((off) => off())
     }
   }, [])
   return (

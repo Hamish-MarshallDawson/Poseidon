@@ -45,7 +45,14 @@ const ShipWindowView = memo(function ShipWindowView({ w, slot, exiting, onExited
     const geom = { spring, w: el.offsetWidth, h: el.offsetHeight }
     windowGeom.set(w.mmsi, geom)
     spring.onChange = scheduleLeader
-    const ro = new ResizeObserver(() => { geom.w = el.offsetWidth; geom.h = el.offsetHeight; scheduleLeader() })
+    const ro = new ResizeObserver(() => {
+      geom.w = el.offsetWidth; geom.h = el.offsetHeight; scheduleLeader()
+      // A card that grew (more rows) must not reach into the scrub bar band: slide it up.
+      const cur = ui.get().windows.find((x) => x.mmsi === w.mmsi)
+      if (!cur || cur.minimised) return
+      const p = clampToViewport(cur, innerWidth, innerHeight, geom.w, geom.h)
+      if (p.y !== cur.y) moveShipWindow(w.mmsi, cur.x, p.y)
+    })
     ro.observe(el)
     const onResize = () => setVh(innerHeight)
     addEventListener('resize', onResize)

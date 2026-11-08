@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, type CSSProperties, type ReactNode } from 'react'
+import { briefing } from '../briefing/store'
 import { ui } from '../store/ui'
 import { useTheme } from '../theme/theme'
 import { usePresence } from '../motion'
@@ -110,16 +111,20 @@ function LegendPanel() {
 
 export function Legend() {
   const open = ui.use((s) => s.legendOpen)
+  const briefOpen = briefing.use((s) => s.open)
   const { mounted, attach } = usePresence(open, { y: 12, opacity: 0 })
+  // The bottom-left column holds the legend or the briefing, never both.
+  useEffect(() => { if (briefOpen) ui.set({ legendOpen: false }) }, [briefOpen])
   return (
     <>
-      <button type="button" className={`legend-toggle ${open ? 'on' : ''}`} aria-expanded={open} aria-controls="legend-panel"
+      <button type="button" className={`legend-toggle ${open ? 'on' : ''}`} aria-expanded={open} aria-controls="legend-panel" data-zone disabled={briefOpen}
+        title={briefOpen ? 'Close the AI briefing to see the legend' : undefined}
         onClick={() => ui.set((s) => ({ legendOpen: !s.legendOpen }))}>
         <span className="lt-icon" aria-hidden><i /><i /><i /></span>
         Legend
         <span className="lamp" aria-hidden />
       </button>
-      {mounted && <div className="legend-wrap" ref={attach}><LegendPanel /></div>}
+      {mounted && <div className="legend-wrap" data-zone ref={attach}><LegendPanel /></div>}
     </>
   )
 }

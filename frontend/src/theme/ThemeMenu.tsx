@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Button, Lamp, Panel, Switch } from '../ui'
+import { ui } from '../store/ui'
 import { resetTheme, setTheme, useTheme, type ThemeState } from './theme'
 import './theme.css'
 
@@ -34,8 +35,8 @@ export default function ThemeMenu() {
   }, [open])
 
   return (
-    <div ref={wrap} className="dvm-theme-menu">
-      <Button ref={toggle} className="dvm-menu-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+    <div ref={wrap} className="dvm-theme-menu" data-zone>
+      <Button ref={toggle} className="dvm-menu-toggle" aria-expanded={open} aria-controls={id} onClick={() => { if (!open) ui.set({ watchlistOpen: false, reviewOpen: false, layersOpen: false }); setOpen(!open) }}>
         <Lamp state={open ? 'on' : 'off'} text={false} />
         Display
       </Button>

@@ -2,7 +2,7 @@
 .tl-bar {
   --tl-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   position: fixed; left: 50%; bottom: 16px; z-index: 20;
-  width: min(960px, calc(100vw - 32px)); height: 48px; box-sizing: border-box;
+  width: min(960px, calc(100vw - 272px));   /* clear of the legend toggle at the left (see src/layout.ts) */ height: 48px; box-sizing: border-box;
   display: flex; align-items: center; gap: 12px; padding: 0 8px;
   transform: translateX(-50%);
   background: var(--dvm-bg-panel); color: var(--dvm-text-primary);
@@ -11,6 +11,7 @@
   user-select: none;
 }
 /* Replay: the top edge goes from 1 px border/default to 2 px text/primary (inset shadow: no layout shift). */
+@media (max-width: 720px) { .tl-bar { width: calc(100vw - 32px); } }
 .tl-bar.is-replay { box-shadow: inset 0 1px 0 0 var(--dvm-replay-edge); border-top-color: var(--dvm-replay-edge); }
 
 .tl-btn {
