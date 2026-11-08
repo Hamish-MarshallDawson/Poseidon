@@ -114,6 +114,9 @@ body {
   padding: 28px 28px 24px;
 }
 .gate h1 { margin: 0; font-size: var(--dvm-size-title); line-height: var(--dvm-line-title); font-weight: 600; }
+/* Mano's wordmark is black on transparent; the dark themes invert it to white. */
+.gate__logo { display: block; width: 180px; height: auto; }
+[data-theme^='dark'] .gate__logo { filter: invert(1); }
 .gate__lede { margin: 0; color: var(--dvm-text-secondary); }
 .gate .dvm-btn { min-height: 36px; font-size: var(--dvm-size-body); }
 .gate__foot { margin: 0; font-family: var(--dvm-font-data); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); color: var(--dvm-text-muted); }
