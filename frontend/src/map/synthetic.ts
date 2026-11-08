@@ -54,7 +54,7 @@ export function startSynthetic(n: number): () => void {
       lat: anchor ? anchor[1] + (r() - 0.5) * 0.03 : s + r() * (nn - s), lon: anchor ? anchor[0] + (r() - 0.5) * 0.05 : w + r() * (e - w),
       sog_kn: sog, cog_deg: noHeading ? null : cog, heading_deg: noHeading ? null : (cog + (r() - 0.5) * 6 + 360) % 360,
       last_ts: now - Math.floor(r() * 60000), status: 'active', open_gap_id: null, risk_p: null, risk_rank: null,
-      sanctioned: r() < 0.001, spoof_recent: r() < 0.001 ? ['jump'] : [],
+      sanctioned: r() < 0.001, spoof_recent: r() < 0.001 ? ['jump'] : [], cls: r() < 0.7 ? 'A' : 'B',
     }
     if (r() < 0.001) {
       const start = now - Math.floor((10 + r() * 80) * 60000)

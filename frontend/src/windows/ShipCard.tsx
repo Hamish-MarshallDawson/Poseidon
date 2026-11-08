@@ -46,7 +46,7 @@ function Field({ label, value }: { label: string; value: string }) {
 }
 
 function subline(v: VesselView, flag: string | null | undefined, length: number | null | undefined): string {
-  return [TYPE_LABEL[v.type_group], `MMSI ${fmtMmsi(v.mmsi)}`, flag && `${flag} flag`, length && `${Math.round(length)} m`]
+  return [TYPE_LABEL[v.type_group], v.cls && `Class ${v.cls}`, `MMSI ${fmtMmsi(v.mmsi)}`, flag && `${flag} flag`, length && `${Math.round(length)} m`]
     .filter(Boolean).join(' · ')
 }
 

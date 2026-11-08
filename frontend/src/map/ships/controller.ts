@@ -28,6 +28,7 @@ const HULL_LEN: Record<SizeTier, number> = { far: 16, mid: 32, near: 64 }
 const OVERLAY_BOX: Record<SizeTier, number> = { far: 25, mid: 43, near: 80 }   // drawn bracket box incl. stroke (Figma export)
 const BADGE: Record<SizeTier, number> = { far: 5, mid: 7, near: 10 }
 const SPOOF_OFFSET: Record<SizeTier, number> = { far: 5, mid: 7, near: 10 }
+const CLASS_B_SCALE = 0.75              // Class B hull size: the non-colour cue next to the violet colour
 const SLOT_FADE_S = 0.15, DIM_FADE_S = 0.2
 const DATA_PASS_MS = 2000               // slot pass for new data at most this often while the map is still
 const FOCUS_PASS_MS = 2000
@@ -110,7 +111,7 @@ export class ShipController {
     this.unsubs.push(
       vessels.subscribe((changed, removed, frame) => this.onFrame(changed, removed, frame)),
       ui.subscribe((s, p) => this.onUi(s, p)),
-      themeStore.subscribe((s) => { this.state.reducedMotion = s.reducedMotion }),
+      themeStore.subscribe((s, p) => { this.state.reducedMotion = s.reducedMotion; if (s.classColour !== p.classColour) this.gpu.invalidate() }),
     )
   }
 
@@ -325,8 +326,8 @@ export class ShipController {
   // ---- instance list (runs inside the layer's render when invalidated) --------------------------------------------
 
   private readColours(): void {
-    const names = ['ship-normal', 'ship-selected', 'ship-dark', 'ship-spoof', 'ship-sanctioned', 'text-muted']
-    const fallback = ['#eee9dc', '#86c9e8', '#f26aa0', '#f2b33d', '#ff7650', '#a5a99f']
+    const names = ['ship-normal', 'ship-selected', 'ship-dark', 'ship-spoof', 'ship-sanctioned', 'text-muted', 'ship-class-a', 'ship-class-b']
+    const fallback = ['#eee9dc', '#86c9e8', '#f26aa0', '#f2b33d', '#ff7650', '#a5a99f', '#eee9dc', '#9a8fe8']
     names.forEach((n, i) => this.colourCache.list.set(rgba(readToken(n) || fallback[i]), i * 4))
     this.colourCache.key.set(rgba(readToken('ship-keyline') || readToken('bg-app') || '#15232d').slice(0, 3))
     const dim = parseFloat(readToken('focus-dim-opacity'))
@@ -399,16 +400,17 @@ export class ShipController {
     const sorted: Item[] = new Array(items.length)
     for (let i = 0; i < order.length; i++) sorted[i] = items[order[i] % 16_777_216]
 
-    // Hulls, bottom to top.
+    // Hulls, bottom to top. Class B is drawn at CLASS_B_SCALE as the non-colour cue; unknown class looks like today.
+    const byClass = themeStore.get().classColour
     const hits: Hit[] = []
     const len = HULL_LEN[tier]
     for (const it of sorted) {
       const v = it.v
       const near = tier === 'near'
-      const scale = near ? Math.min(1.4, Math.max(0.7, (v.length_m ?? 150) / 150)) : 1
+      const scale = (near ? Math.min(1.4, Math.max(0.7, (v.length_m ?? 150) / 150)) : 1) * (byClass && v.cls === 'B' ? CLASS_B_SCALE : 1)
       const hasHeading = st.hasHeading[it.slot] === 1
       const hollow = v.status === 'gap_open' || v.status === 'silent'
-      const colour = v.status === 'gap_open' ? Colour.Dark : v.spoof_recent.length ? Colour.Spoof : v.status === 'silent' ? 5 : Colour.Normal
+      const colour = v.status === 'gap_open' ? Colour.Dark : v.spoof_recent.length ? Colour.Spoof : v.status === 'silent' ? 5 : byClass && v.cls ? (v.cls === 'B' ? Colour.ClassB : Colour.ClassA) : Colour.Normal
       const type = hullType(v.type_group)
       const sprite = this.hullSprite(type, tier, hollow, hasHeading)
       const off = fanned?.has(it.mmsi) ? this.fan!.offsets.get(it.mmsi) : undefined

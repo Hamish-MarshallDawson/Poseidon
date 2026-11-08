@@ -8,7 +8,7 @@ export const TEXT_SIZES = ['default', 'large', 'largest'] as const
 export type ThemeName = (typeof THEMES)[number]
 export type SignalSet = (typeof SIGNAL_SETS)[number]
 export type TextSize = (typeof TEXT_SIZES)[number]
-export interface ThemeState { theme: ThemeName; signals: SignalSet; text: TextSize; reducedMotion: boolean }
+export interface ThemeState { theme: ThemeName; signals: SignalSet; text: TextSize; reducedMotion: boolean; classColour: boolean }
 
 const KEY = 'dvm-theme' // index.html reads the same key before first paint
 const mq = (q: string) => (typeof matchMedia === 'function' ? matchMedia(q) : null)
@@ -25,6 +25,7 @@ function readChoice(): Partial<ThemeState> {
   if (SIGNAL_SETS.includes(raw.signals as SignalSet)) c.signals = raw.signals as SignalSet
   if (TEXT_SIZES.includes(raw.text as TextSize)) c.text = raw.text as TextSize
   if (typeof raw.reducedMotion === 'boolean') c.reducedMotion = raw.reducedMotion
+  if (typeof raw.classColour === 'boolean') c.classColour = raw.classColour
   return c
 }
 
@@ -34,6 +35,7 @@ const resolve = (): ThemeState => ({
   signals: 'standard',
   text: 'default',
   reducedMotion: !!prefersStill?.matches,
+  classColour: true,
   ...choice,
 })
 

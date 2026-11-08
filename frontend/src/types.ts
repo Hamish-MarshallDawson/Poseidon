@@ -13,6 +13,7 @@ export interface VesselView {
   status: Status; open_gap_id: string | null;
   risk_p: number | null; risk_rank: number | null;
   sanctioned: boolean; spoof_recent: string[];
+  cls?: 'A' | 'B' | null;          // AIS class; missing or null = unknown, drawn as before
 }
 
 export interface GapEvent {

@@ -229,6 +229,7 @@
   padding: 16px;
 }
 .lg-title { margin: 0; font-weight: 600; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); }
+.lg-note { margin: 0; font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); color: var(--dvm-text-secondary); }
 .legend ul { margin: 0; padding: 0; list-style: none; }
 .lg-ships { display: flex; gap: 4px; }
 .lg-ships li { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }

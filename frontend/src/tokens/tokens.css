@@ -37,6 +37,8 @@
   --dvm-focus-dim-opacity: 0.4;
   --dvm-shadow-lift: #1d25292e;
   --dvm-signal-std-ship-normal: #1d2529;
+  --dvm-signal-std-ship-class-a: #1d2529;
+  --dvm-signal-std-ship-class-b: #802dd2;
   --dvm-signal-std-ship-selected: #1c5f86;
   --dvm-signal-std-ship-dark: #b3266b;
   --dvm-signal-std-ship-spoof: #9a6400;
@@ -48,6 +50,8 @@
   --dvm-signal-std-ship-ghost-fill: #b3266b24;
   --dvm-signal-std-ship-ghost-edge: #b3266bbf;
   --dvm-signal-cvd-ship-normal: #1d2529;
+  --dvm-signal-cvd-ship-class-a: #1d2529;
+  --dvm-signal-cvd-ship-class-b: #8a2bb5;
   --dvm-signal-cvd-ship-selected: #0c63e1;
   --dvm-signal-cvd-ship-dark: #522a03;
   --dvm-signal-cvd-ship-spoof: #807a03;
@@ -88,6 +92,8 @@
   --dvm-focus-dim-opacity: 0.45;
   --dvm-shadow-lift: #00000073;
   --dvm-signal-std-ship-normal: #eee9dc;
+  --dvm-signal-std-ship-class-a: #eee9dc;
+  --dvm-signal-std-ship-class-b: #9a8fe8;
   --dvm-signal-std-ship-selected: #86c9e8;
   --dvm-signal-std-ship-dark: #f26aa0;
   --dvm-signal-std-ship-spoof: #f2b33d;
@@ -99,6 +105,8 @@
   --dvm-signal-std-ship-ghost-fill: #f26aa024;
   --dvm-signal-std-ship-ghost-edge: #f26aa0bf;
   --dvm-signal-cvd-ship-normal: #eee9dc;
+  --dvm-signal-cvd-ship-class-a: #eee9dc;
+  --dvm-signal-cvd-ship-class-b: #c08ae8;
   --dvm-signal-cvd-ship-selected: #95cee9;
   --dvm-signal-cvd-ship-dark: #c98269;
   --dvm-signal-cvd-ship-spoof: #beaf3a;
@@ -139,6 +147,8 @@
   --dvm-focus-dim-opacity: 0.35;
   --dvm-shadow-lift: #00000040;
   --dvm-signal-std-ship-normal: #000000;
+  --dvm-signal-std-ship-class-a: #000000;
+  --dvm-signal-std-ship-class-b: #5b17a8;
   --dvm-signal-std-ship-selected: #0b4468;
   --dvm-signal-std-ship-dark: #8f0f4e;
   --dvm-signal-std-ship-spoof: #6e4700;
@@ -150,6 +160,8 @@
   --dvm-signal-std-ship-ghost-fill: #8f0f4e24;
   --dvm-signal-std-ship-ghost-edge: #8f0f4ebf;
   --dvm-signal-cvd-ship-normal: #000000;
+  --dvm-signal-cvd-ship-class-a: #000000;
+  --dvm-signal-cvd-ship-class-b: #6b1590;
   --dvm-signal-cvd-ship-selected: #0f3f6a;
   --dvm-signal-cvd-ship-dark: #4e2b02;
   --dvm-signal-cvd-ship-spoof: #7c7d18;
@@ -190,6 +202,8 @@
   --dvm-focus-dim-opacity: 0.35;
   --dvm-shadow-lift: #00000099;
   --dvm-signal-std-ship-normal: #ffffff;
+  --dvm-signal-std-ship-class-a: #ffffff;
+  --dvm-signal-std-ship-class-b: #b3b0f0;
   --dvm-signal-std-ship-selected: #a6dbf3;
   --dvm-signal-std-ship-dark: #ff7fb0;
   --dvm-signal-std-ship-spoof: #ffc24d;
@@ -201,6 +215,8 @@
   --dvm-signal-std-ship-ghost-fill: #ff7fb024;
   --dvm-signal-std-ship-ghost-edge: #ff7fb0bf;
   --dvm-signal-cvd-ship-normal: #ffffff;
+  --dvm-signal-cvd-ship-class-a: #ffffff;
+  --dvm-signal-cvd-ship-class-b: #d2a8f0;
   --dvm-signal-cvd-ship-selected: #39c1f9;
   --dvm-signal-cvd-ship-dark: #f59453;
   --dvm-signal-cvd-ship-spoof: #e5cd11;
@@ -214,6 +230,8 @@
 }
 :root, [data-theme], [data-signals] {
   --dvm-ship-normal: var(--dvm-signal-std-ship-normal);
+  --dvm-ship-class-a: var(--dvm-signal-std-ship-class-a);
+  --dvm-ship-class-b: var(--dvm-signal-std-ship-class-b);
   --dvm-ship-selected: var(--dvm-signal-std-ship-selected);
   --dvm-ship-dark: var(--dvm-signal-std-ship-dark);
   --dvm-ship-spoof: var(--dvm-signal-std-ship-spoof);
@@ -229,6 +247,8 @@
 }
 [data-signals="cvd"] {
   --dvm-ship-normal: var(--dvm-signal-cvd-ship-normal);
+  --dvm-ship-class-a: var(--dvm-signal-cvd-ship-class-a);
+  --dvm-ship-class-b: var(--dvm-signal-cvd-ship-class-b);
   --dvm-ship-selected: var(--dvm-signal-cvd-ship-selected);
   --dvm-ship-dark: var(--dvm-signal-cvd-ship-dark);
   --dvm-ship-spoof: var(--dvm-signal-cvd-ship-spoof);

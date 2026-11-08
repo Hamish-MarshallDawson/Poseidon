@@ -9,9 +9,9 @@ import { clock, EXTRAP_S, shownS } from './state'
 // dead reckoning, heading ease and opacity fades all run in the vertex shader from per-ship start/end values, so
 // the CPU touches the buffer only when a fix arrives or the slot set changes, never per frame.
 
-export const Colour = { Normal: 0, Selected: 1, Dark: 2, Spoof: 3, Sanctioned: 4, Keyline: 5 } as const
+export const Colour = { Normal: 0, Selected: 1, Dark: 2, Spoof: 3, Sanctioned: 4, Keyline: 5, ClassA: 6, ClassB: 7 } as const
 export type Colour = (typeof Colour)[keyof typeof Colour]
-export const N_COLOURS = 6
+export const N_COLOURS = 8
 const STRIDE = 28   // floats per instance
 
 const VS = `#version 300 es
@@ -23,7 +23,7 @@ layout(location=4) in vec4 a_op;    // op0 op1 tFade rotate
 layout(location=5) in vec4 a_oc;    // offX offY colour fadeDuration
 layout(location=6) in vec4 a_fx;    // fix time on the shown clock (s)
 uniform mat4 u_m; uniform float u_now; uniform float u_shown; uniform vec2 u_vp; uniform float u_wrap;
-uniform vec4 u_colors[6];
+uniform vec4 u_colors[8];
 out vec2 v_uv; out vec4 v_col; out float v_op;
 const vec2 C[6] = vec2[6](vec2(-.5,-.5), vec2(.5,-.5), vec2(-.5,.5), vec2(-.5,.5), vec2(.5,-.5), vec2(.5,.5));
 void main() {
