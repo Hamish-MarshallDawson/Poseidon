@@ -13,6 +13,9 @@ export interface Frame {
   trails?: Record<string, [number, number, number][]>
 }
 
+// How far back a ship's track history goes (focus mode draws it).
+export const TRAIL_MS = 6 * 3600_000
+
 export type VesselListener = (changed: number[], removed: number[], frame: Frame) => void
 
 // The current state of every ship, outside React. Applying a frame is O(changed), never O(all ships).
@@ -32,11 +35,20 @@ export class VesselStore {
     const changed: number[] = []
     if (frame.type === 'snapshot') {
       this.vessels.clear(); this.gaps.clear(); this.coverage.clear(); this.trails.clear(); this.spoofs.length = 0
-      for (const [k, t] of Object.entries(frame.trails ?? {})) this.trails.set(Number(k), t)
+      for (const [k, t] of Object.entries(frame.trails ?? {})) this.trails.set(Number(k), t.slice())
       for (const c of frame.coverage ?? []) this.coverage.set(c.cell_id, c)
     }
     for (const mmsi of frame.removed) if (this.vessels.delete(mmsi)) this.trails.delete(mmsi)
-    for (const v of frame.vessels) { this.vessels.set(v.mmsi, v); changed.push(v.mmsi) }
+    for (const v of frame.vessels) {
+      this.vessels.set(v.mmsi, v); changed.push(v.mmsi)
+      // Live snapshots send trails: {}, so a trail starts from the detail reply and grows here, one point per new fix.
+      const t = frame.type === 'delta' ? this.trails.get(v.mmsi) : undefined
+      if (t && v.last_ts > (t[t.length - 1]?.[0] ?? -Infinity)) {
+        t.push([v.last_ts, v.lon, v.lat])
+        const cut = t.findIndex((p) => p[0] >= v.last_ts - TRAIL_MS)
+        if (cut > 0) t.splice(0, cut)
+      }
+    }
     for (const g of frame.gaps) {
       const cur = this.gaps.get(g.id)
       if (!cur || g.version >= cur.version) this.gaps.set(g.id, g)
@@ -49,6 +61,11 @@ export class VesselStore {
     this.now_ts = frame.now_ts
     this.version++
     for (const l of this.listeners) l(changed, frame.removed, frame)
+  }
+
+  // The detail reply's trail ([ts, lon, lat], oldest first) seeds a ship's track; deltas extend it.
+  setTrail(mmsi: number, trail: [number, number, number][]): void {
+    if (this.vessels.has(mmsi)) this.trails.set(mmsi, trail.slice())
   }
 
   subscribe(listener: VesselListener): () => void {
