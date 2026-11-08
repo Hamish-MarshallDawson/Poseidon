@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { SessionBar, InvitePanelSlot } from '../collab/entry/SessionBar'
+import { collab } from '../collab/store'
 import { ui, type UIState } from '../store/ui'
 import { Switch } from '../ui'
 import { useMapInstance } from '../map/context'
@@ -99,19 +101,22 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
   // After the app has bound the yachts login (its effect runs after this one), so a restored yachts filter loads with a token.
   useEffect(() => void queueMicrotask(startShow), [])
   const layersOpen = ui.use((s) => s.layersOpen)
+  const me = collab.use((s) => s.me)   // the profile menu has Log out once the collaboration identity is loaded
   const { mounted, attach } = usePresence(layersOpen, { y: -8, opacity: 0 })
   const zoom = (by: number) => map?.easeTo({ zoom: map.getZoom() + by, duration: reducedMotion() ? 0 : 250 })
   return (
     <>
       <div className="top-right" data-zone>
+        <SessionBar onLogout={onLogout} />
         <WatchlistChip />
         <ReviewChip />
         <button type="button" className={`chip ${layersOpen ? 'on' : ''}`} aria-expanded={layersOpen} aria-controls="layers-panel"
           onClick={() => ui.set((s) => ({ layersOpen: !s.layersOpen, watchlistOpen: false, reviewOpen: false }))}>
           <span className="chip-square" aria-hidden />Layers
         </button>
-        {onLogout && <button type="button" className="chip chip-quiet" onClick={onLogout}>Log out</button>}
+        {onLogout && !me && <button type="button" className="chip chip-quiet" onClick={onLogout}>Log out</button>}
       </div>
+      <InvitePanelSlot />
       {mounted && <div className="layers-wrap" data-zone ref={attach}><LayersPanel /></div>}
       <div className="zoom" data-zone role="group" aria-label="Zoom">
         <button type="button" aria-label="Zoom in" onClick={() => zoom(1)}>+</button>

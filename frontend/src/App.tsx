@@ -18,6 +18,7 @@ import { AUTH_OFF, bindCollabAuth, devUser } from './collab/client'
 import { loadMe } from './collab/store'
 import { bindSocket } from './collab/socket'
 import { Presence } from './collab/presence/Presence'
+import { CollabEntry } from './collab/entry/CollabEntry'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
 const WindowsDemo = lazy(() => import('./windows/demo/WindowsDemo'))
@@ -31,7 +32,7 @@ export default function App() {
   if (demo === 'windows') return <Suspense><WindowsDemo /></Suspense>
   if (demo === 'basemap') return <Suspense><BasemapDemo /></Suspense>
   // VITE_AUTH=off (dev server only, never in a production build): skip Auth0; the backend must run with AUTH0_* empty.
-  if (AUTH_OFF) return <Monitor getToken={async () => undefined} onLogout={() => {}} profile={{ name: devUser }} />
+  if (AUTH_OFF) return <Monitor getToken={async () => undefined} onLogout={() => {}} profile={{ name: devUser, email: `${devUser}@dev.local`.toLowerCase() }} />
   if (isLoading) return <div className="gate"><p className="gate__foot">Loading…</p></div>
   if (!isAuthenticated) {
     return (
@@ -49,14 +50,14 @@ export default function App() {
   return (
     <Monitor
       getToken={() => getAccessTokenSilently()}
-      profile={user ? { name: user.name ?? user.nickname, picture: user.picture } : undefined}
+      profile={user ? { name: user.name ?? user.nickname, picture: user.picture, email: user.email_verified ? user.email : undefined } : undefined}
       onLogout={() => logout({ logoutParams: { returnTo: window.location.origin } })}
     />
   )
 }
 
 // The map-first screen: the map is everything; windows, panels, the scrub bar and the forecast drop in over it.
-export function Monitor({ getToken, onLogout, profile }: { getToken: () => Promise<string | undefined>; onLogout: () => void; profile?: { name?: string | null; picture?: string | null } }) {
+export function Monitor({ getToken, onLogout, profile }: { getToken: () => Promise<string | undefined>; onLogout: () => void; profile?: { name?: string | null; picture?: string | null; email?: string | null } }) {
   useFeed(getToken)
   useFollowState()
   useEffect(() => {
@@ -81,6 +82,7 @@ export function Monitor({ getToken, onLogout, profile }: { getToken: () => Promi
       <ReplayChrome />
       <ScrubBar />
       <ThemeMenu />
+      <CollabEntry />
     </>
   )
 }

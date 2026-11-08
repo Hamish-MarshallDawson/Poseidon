@@ -112,7 +112,10 @@ def make_router() -> APIRouter:
 
     @r.get("/sessions")
     async def list_sessions(user: dict = Depends(current_user)) -> dict:
-        return {"sessions": await _store().list_sessions(user["id"])}
+        rows = await _store().list_sessions(user["id"])
+        # `online`: the others who are in each session right now (private users are left out), for the entry pop-up.
+        return {"sessions": [{**s, "online": [{"id": u["id"], "name": u["name"], "picture": u["picture"]}
+                                              for u in hub.users_in(s["id"]) if u["id"] != user["id"]]} for s in rows]}
 
     @r.get("/sessions/{session_id}")
     async def get_session(session_id: uuid.UUID, user: dict = Depends(current_user)) -> dict:
