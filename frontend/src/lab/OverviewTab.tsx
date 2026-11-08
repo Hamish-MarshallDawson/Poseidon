@@ -32,7 +32,7 @@ export function OverviewTab({ model, runs, metrics }: OverviewTabProps) {
 function keyNumbers(target: string, m: NonNullable<OverviewTabProps['model']['summary']>, champ: ReturnType<typeof championRun>, metrics: OverviewTabProps['metrics']) {
   const pct = (x: number | null | undefined) => (x == null ? '–' : x > 0 && x < 0.1 ? `${(x * 100).toFixed(1)}%` : `${Math.round(x * 100)}%`)
   const hv = (unit: string) => (m as RichSummary).headline?.unit === unit ? (m as RichSummary).headline?.value ?? null : null
-  const graded = { label: 'graded live, 24 h', value: m.live ? m.live.n.toLocaleString('en-GB') : '–' }
+  const graded = { label: 'graded live, 24 h', value: (m.live?.n ?? 0).toLocaleString('en-GB') }
   if (target === 'route') {
     const r = routeLive(metrics, m.champion.version)
     return [
@@ -52,7 +52,7 @@ function keyNumbers(target: string, m: NonNullable<OverviewTabProps['model']['su
   const ho = heldOut(champ, m.offline.primary_h)
   return [
     { label: ho.recall != null ? 'fishing weeks spotted' : 'ranked correctly', value: ho.recall != null ? `${Math.round(ho.recall * 10)} in 10` : ho.aucPr != null ? `${Math.round(ho.aucPr * 10)} in 10` : '–' },
-    { label: 'held-out weeks tested', value: ho.n == null ? '–' : ho.n.toLocaleString('en-GB') },
+    { label: 'ship-weeks in the frozen test', value: ho.n == null ? '–' : ho.n.toLocaleString('en-GB') },
     graded,
   ]
 }
