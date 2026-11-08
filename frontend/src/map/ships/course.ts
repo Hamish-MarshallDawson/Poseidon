@@ -5,7 +5,7 @@ import { readToken } from '../../theme/tokens'
 import { latOf, lonOf, unitsPerMetre } from '../geo'
 import { clock, type ShipState } from './state'
 
-// Predicted course: a dashed line ahead of the front-window or focused ship along its COG, as far as it sails in
+// Predicted course: a dashed line ahead of the front-window ship along its COG, as far as it sails in
 // 10 min at its SOG, fading to the tip with a "+10 min" label. The start follows the drawn (animated) position, read
 // from ShipState.posAt at ~8 Hz; setData is skipped while nothing moved. MapLibre cannot combine line-gradient with
 // dashes, so the dashes are separate features whose line-opacity falls from 1 to 0.1.
@@ -54,7 +54,7 @@ export class CourseLine {
   private update(): void {
     const src = this.map?.getSource(SRC) as GeoJSONSource | undefined
     if (!src) return
-    const s = ui.get(), mmsi = s.frontMmsi ?? s.focusMmsi
+    const s = ui.get(), mmsi = s.frontMmsi
     const v = mmsi != null ? vessels.vessels.get(mmsi) : undefined
     const slot = mmsi != null ? this.state.slotOf.get(mmsi) : undefined
     let key = ''

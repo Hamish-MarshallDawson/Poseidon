@@ -24,6 +24,14 @@ export interface GapEvent {
   neighbours_heard: number; neighbours_baseline: number; cell_id: string;
   coverage_flag: "deliberate_candidate" | "coverage_gap" | "own_stall" | "unknown";
   radius_m?: number;               // server-derived, for the ghost circle
+  // Route prediction (backend model, optional): centre and 80 % / 95 % radii of where the ship is expected to be.
+  pred_lat?: number; pred_lon?: number; pred_r80_m?: number; pred_r95_m?: number;
+  pred_horizon_s?: number; pred_made_at?: number; pred_model?: string;
+}
+
+// The detail reply's optional route prediction: same fields as the gap, unprefixed (exact shape not final).
+export interface RoutePrediction {
+  lat?: number; lon?: number; r80_m?: number; r95_m?: number; horizon_s?: number; made_at?: number; model?: string;
 }
 
 export interface SpoofEvent {
@@ -46,7 +54,7 @@ export interface Stats { tracked: number; msgs_per_s: number; queue_depth: numbe
 // 06 section 2.7: one forecast row. Append-only on the server, so a frozen forecast stays checkable.
 export interface RiskScore {
   id: string; mmsi: number; made_at: number; as_of: number; horizon_s: number;   // 21600 = 6 h
-  target: "dark_6h"; p: number; rank: number | null; mode: "live" | "replay" | "backtest";
+  target: "dark_6h" | "dark_1h" | "dark_24h"; p: number; rank: number | null; mode: "live" | "replay" | "backtest";
   features: Record<string, number>; contrib: Record<string, number>; model_version: string;
 }
 // 06 section 2.10: what happened after a forecast.
@@ -86,7 +94,7 @@ export type ServerMsg =
               sources: SourceStatus[]; replay?: { from_ts: number; to_ts: number } })
   | (Base & { type: "ping"; now_ts: number })
   | (Base & { type: "detail"; mmsi: number; vessel: VesselView; statics: StaticDetail[]; gaps: GapEvent[];
-              spoofs: SpoofEvent[]; sanction: unknown | null; score: RiskScore | null;
+              spoofs: SpoofEvent[]; sanction: unknown | null; score: RiskScore | null; route_prediction?: RoutePrediction | null;
               trail?: [number, number, number][] });   // last 60 min [ts, lon, lat], oldest first
 
 export type ClientMsg =

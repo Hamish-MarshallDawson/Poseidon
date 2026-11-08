@@ -10,7 +10,7 @@ import { shownNow } from '../timeline/replay'
 import { fmtDuration } from '../timeline/format'
 import type { GapEvent, Outcome } from '../types'
 import { ForecastCheck } from './ForecastCheck'
-import { circle, ghostRadius } from './geo'
+import { circle, ghostOf } from './geo'
 import { COVERAGE_FLAG_LABEL, HORIZON_MS, REASON_LABEL, RESOLVE_LAG_MS, pct } from './labels'
 import { forecastUi } from './state'
 import './forecast.css'
@@ -100,13 +100,16 @@ function setup(map: MapLibreMap): () => void {
   const dark = tok('ship-dark'), muted = tok('text-muted')
   const before = map.getStyle().layers.find((l) => l.type === 'symbol')?.id   // ghosts sit under labels and ships
   for (const id of ['fc-ghost', 'fc-ghost-pt', 'fc-tags', 'fc-out']) map.addSource(id, { type: 'geojson', data: EMPTY })
-  map.addLayer({ id: 'fc-ghost-fill', type: 'fill', source: 'fc-ghost',
+  const inner = ['!=', ['get', 'ring'], true]   // the model's 95 % ring is an outline only
+  map.addLayer({ id: 'fc-ghost-fill', type: 'fill', source: 'fc-ghost', filter: inner as never,
     paint: { 'fill-color': ['match', ['get', 'kind'], 'dark', tok('ship-ghost-fill'), tok('coverage-dead')] } }, before)
-  map.addLayer({ id: 'fc-ghost-hatch', type: 'fill', source: 'fc-ghost',
+  map.addLayer({ id: 'fc-ghost-hatch', type: 'fill', source: 'fc-ghost', filter: inner as never,
     paint: { 'fill-pattern': ['match', ['get', 'kind'], 'dark', 'fc-hatch-dark', 'fc-hatch-grey'] } }, before)
   // The edge uses full ship/dark: ship/ghost-edge (75 %) fails 3:1 on water in Dark (forecast report).
-  map.addLayer({ id: 'fc-ghost-edge', type: 'line', source: 'fc-ghost',
+  map.addLayer({ id: 'fc-ghost-edge', type: 'line', source: 'fc-ghost', filter: inner as never,
     paint: { 'line-color': ['match', ['get', 'kind'], 'dark', dark, muted], 'line-width': 1.5, 'line-dasharray': [3, 2] } }, before)
+  map.addLayer({ id: 'fc-ghost-r95', type: 'line', source: 'fc-ghost', filter: ['==', ['get', 'ring'], true],
+    paint: { 'line-color': ['match', ['get', 'kind'], 'dark', dark, muted], 'line-width': 1, 'line-opacity': 0.4 } }, before)
   map.addLayer({ id: 'fc-ghost-cross', type: 'symbol', source: 'fc-ghost-pt',
     layout: { 'icon-image': ['match', ['get', 'kind'], 'dark', 'fc-cross-dark', 'fc-cross-grey'], 'icon-allow-overlap': true, 'icon-ignore-placement': true } })
   map.addLayer({ id: 'fc-out', type: 'symbol', source: 'fc-out',
@@ -141,27 +144,25 @@ function setup(map: MapLibreMap): () => void {
 
   // ---- ghosts: open gaps (not own_stall) as of the shown time; radius grows every animation frame while one is on screen.
   // Only deliberate_candidate ghosts by default: unknown and coverage_gap ones are often hours old and tens of km wide, so
-  // a grey ghost is drawn only for a ship with an open window or in focus. Focus mode keeps the focused ship's ghost and
-  // the deliberate ghosts of its related ships, and hides the rest.
+  // a grey ghost is drawn only for a ship with an open window.
   let gaps: GapEvent[] = []
   const labels = new Map<string, { m: Marker; el: HTMLDivElement }>()
   let hoverGap: string | null = null
   const syncGaps = () => {
     const t = shownNow()
     const s = ui.get()
-    const related = new Set(s.focusRelated.map((r) => r.mmsi))
     const picked = new Set(s.windows.map((w) => w.mmsi))
     const match = showFilter(s.show).match
     const shown = (g: GapEvent) => {
       if (s.follow && !picked.has(g.mmsi)) return false
       const v = vessels.vessels.get(g.mmsi)
-      if (match && !picked.has(g.mmsi) && g.mmsi !== s.focusMmsi && !(v && match(v))) return false   // Show filter
+      if (match && !picked.has(g.mmsi) && !(v && match(v))) return false   // Show filter
       const dark = g.coverage_flag === 'deliberate_candidate'
-      return s.focusMmsi != null ? g.mmsi === s.focusMmsi || (dark && related.has(g.mmsi)) : dark || picked.has(g.mmsi)
+      return dark || picked.has(g.mmsi)
     }
     gaps = [...vessels.gaps.values()].filter((g) => g.state === 'open' && g.start_ts <= t && g.coverage_flag !== 'own_stall' && shown(g))
     map.getSource<GeoJSONSource>('fc-ghost-pt')?.setData({ type: 'FeatureCollection', features: gaps.map((g) => ({
-      type: 'Feature', geometry: { type: 'Point', coordinates: [g.last_lon, g.last_lat] }, properties: { kind: kindOf(g) } })) })
+      type: 'Feature', geometry: { type: 'Point', coordinates: (({ lon, lat }) => [lon, lat])(ghostOf(g, t)) }, properties: { kind: kindOf(g) } })) })
     syncLabels(t)
   }
   const syncLabels = (t: number) => {
@@ -175,15 +176,18 @@ function setup(map: MapLibreMap): () => void {
         const wrap = document.createElement('div')
         const el = wrap.appendChild(document.createElement('div'))
         el.className = `fc-gap-label ${kindOf(g)}`
-        l = { m: new Marker({ element: wrap, anchor: 'left', offset: [14, 0] }).setLngLat([g.last_lon, g.last_lat]).addTo(map), el }
+        l = { m: new Marker({ element: wrap, anchor: 'left', offset: [14, 0] }).setLngLat([ghostOf(g, t).lon, ghostOf(g, t).lat]).addTo(map), el }
         labels.set(g.id, l)
       }
-      const r = ghostRadius(g, t)
+      const { r, model } = ghostOf(g, t)
       const dur = fmtDuration(t - g.start_ts)
-      const head = g.coverage_flag === 'deliberate_candidate' ? `No AIS ${dur} · within ${(r / 1000).toFixed(1)} km` : `No AIS ${dur} · ${COVERAGE_FLAG_LABEL[g.coverage_flag]}`
+      const km = (r / 1000).toFixed(1)
+      const hz = g.pred_horizon_s ? ` (${Math.round(g.pred_horizon_s / 3600)} h)` : ''
+      const head = g.coverage_flag === 'deliberate_candidate' ? (model ? `Model estimate · 80 % within ${km} km${hz}` : `No AIS ${dur} · within ${km} km`) : `No AIS ${dur} · ${COVERAGE_FLAG_LABEL[g.coverage_flag]}`
       const sub = g.coverage_flag === 'deliberate_candidate'
         ? `Reception normal nearby (${g.neighbours_heard} ships heard within 20 km)${g.last_sog_kn != null ? ` · last ${g.last_sog_kn.toFixed(1)} kn` : ''}${g.last_cog_deg != null ? `, ${String(Math.round(g.last_cog_deg)).padStart(3, '0')}°` : ''}`
         : `${g.neighbours_heard} ships heard within 20 km. Not counted as a silence.`
+      l.m.setLngLat([ghostOf(g, t).lon, ghostOf(g, t).lat])
       if (l.el.dataset.head !== head) { l.el.dataset.head = head; l.el.innerHTML = `<b></b><span></span>`; l.el.firstChild!.textContent = head; l.el.lastChild!.textContent = sub }
       l.el.classList.toggle('hidden', open.has(g.mmsi) || (far && hoverGap !== g.id))
     }
@@ -199,13 +203,16 @@ function setup(map: MapLibreMap): () => void {
     if (!gaps.length) { if (drawn.size) { drawn = new Map(); map.getSource<GeoJSONSource>('fc-ghost')?.setData(EMPTY) } return }
     const t = shownNow()
     const b = map.getBounds()
-    const vis = gaps.map((g) => ({ g, r: ghostRadius(g, t) }))
-      .filter(({ g, r }) => { const d = r / 111_320 * 2; return g.last_lat + d > b.getSouth() && g.last_lat - d < b.getNorth() && g.last_lon + d * 2 > b.getWest() && g.last_lon - d * 2 < b.getEast() })
+    const vis = gaps.map((g) => ({ g, o: ghostOf(g, t) })).map(({ g, o }) => ({ g, o, r: o.r + (o.r95 ?? 0) }))
+      .filter(({ o, r }) => { const d = r / 111_320 * 2; return o.lat + d > b.getSouth() && o.lat - d < b.getNorth() && o.lon + d * 2 > b.getWest() && o.lon - d * 2 < b.getEast() })
     const mpp = (40_075_016 * Math.cos((map.getCenter().lat * Math.PI) / 180)) / (512 * 2 ** map.getZoom())   // metres per CSS px
     const same = vis.length === drawn.size && vis.every(({ g, r }) => { const r0 = drawn.get(g.id); return r0 !== undefined && Math.abs(r - r0) < mpp / 2 })
     if (same) return
     drawn = new Map(vis.map(({ g, r }) => [g.id, r]))
-    const features = vis.map(({ g, r }) => ({ type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id }, geometry: { type: 'Polygon' as const, coordinates: [circle(g.last_lon, g.last_lat, r)] } }))
+    const features = vis.flatMap(({ g, o }) => [
+      { type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id }, geometry: { type: 'Polygon' as const, coordinates: [circle(o.lon, o.lat, o.r)] } },
+      ...(o.r95 ? [{ type: 'Feature' as const, properties: { kind: kindOf(g), id: g.id, ring: true }, geometry: { type: 'Polygon' as const, coordinates: [circle(o.lon, o.lat, o.r95)] } }] : []),
+    ])
     map.getSource<GeoJSONSource>('fc-ghost')?.setData({ type: 'FeatureCollection', features })
   }
   raf = requestAnimationFrame(tick)
@@ -244,7 +251,7 @@ function setup(map: MapLibreMap): () => void {
   const offV = vessels.subscribe(all)
   const offUi = ui.subscribe((s, p) => {
     if (s.windows !== p.windows || s.show !== p.show) drawTags()
-    if (s.windows !== p.windows || s.focusMmsi !== p.focusMmsi || s.focusRelated !== p.focusRelated || s.show !== p.show) syncGaps()
+    if (s.windows !== p.windows || s.show !== p.show) syncGaps()
   })
   const onZoom = () => { const z = zoomTier(map.getZoom()); if (z !== tier) { tier = z; drawTags() } syncLabels(shownNow()) }
   map.on('zoomend', onZoom)
@@ -255,7 +262,7 @@ function setup(map: MapLibreMap): () => void {
     map.off('zoomend', onZoom); map.off('mousemove', 'fc-ghost-fill', onEnter); map.off('mouseleave', 'fc-ghost-fill', onLeave)
     for (const l of labels.values()) l.m.remove()
     if (!map.style) return                                   // style already torn down by a swap
-    for (const id of ['fc-tags', 'fc-out', 'fc-ghost-cross', 'fc-ghost-edge', 'fc-ghost-hatch', 'fc-ghost-fill']) if (map.getLayer(id)) map.removeLayer(id)
+    for (const id of ['fc-tags', 'fc-out', 'fc-ghost-cross', 'fc-ghost-r95', 'fc-ghost-edge', 'fc-ghost-hatch', 'fc-ghost-fill']) if (map.getLayer(id)) map.removeLayer(id)
     for (const id of ['fc-ghost', 'fc-ghost-pt', 'fc-tags', 'fc-out']) if (map.getSource(id)) map.removeSource(id)
     for (const id of [...IMAGES, ...tagImages]) if (map.hasImage(id)) map.removeImage(id)
   }
