@@ -30,7 +30,15 @@ ml/.venv/bin/python -m ml.core.loop --target toy --rounds 3 --dry-run       # wh
 ml/.venv/bin/pytest -q ml/tests
 ```
 
-`--dry-run` uses fixed proposals instead of Gemini, so tests and rehearsals never call it.
+`--dry-run` uses fixed proposals instead of Gemini (logged with proposer `default`), so tests and rehearsals never
+call it. Tests use a file registry; set `ML_TEST_DATABASE_URL` to a local database to also test the SQL registry.
+
+What one loop does: with no champion yet, round 0 runs the target's default config against the baseline (and
+promotes it if it passes the rule). Each round then builds a summary of past runs (aggregates only), gets K
+proposals, refuses invalid ones and exact repeats of a config already evaluated (logged with the reason), trains
+and scores the rest with Bonferroni over K, re-runs the best passing one with `seed + 1`, and promotes it only if
+that passes too. At the end it writes `<ML_ARTIFACTS>/reports/<target>.html` and `.json`. Measured on the toy target
+(7,680 cases): 3 rounds of 3 proposals in about 10 s; one Gemini round adds about 8 s.
 
 ## Plugging in a target (ml/route, ml/godark)
 
@@ -52,9 +60,13 @@ Expose `SPEC` in `ml/<target>/target.py`, an instance of a subclass of `ml.core.
 | `summarise(scored)` | `{"3600": {"median_m": .., "p90_m": .., "cov80": .., "n": ..}, ...}` for the report |
 | `calibration(scored)` | `[{"name", "horizon_s", "value", "nominal", "tol"}]`, e.g. 80% radius coverage vs 0.80 |
 | `sanity(summary)` | reasons the numbers are too good to be true; any reason fails the run |
+| `dry_run_proposals` (optional) | list of `{"config", "rationale"}` the dry run steps through; else numeric settings are stepped |
+| `report_notes` (optional) | list of sentences printed under the report, e.g. "labels come from our own gap detector" |
 
 A config is a dict with at least `"model"` (a key of `models`) and `"seed"`; the rest is the target's (features,
-hyperparameters, `train_window_days`, sample weights). The loop reads `cfg["model"]`; the model reads the rest.
+hyperparameters, sample weights). The loop reads `cfg["model"]` and applies `train_window_days` if the schema
+allows it; the model reads the rest. `load_examples` should compute every candidate feature, because the loop
+loads examples once and each config picks its subset.
 
 ### Model interface (`ml.core.registry.Model`)
 
