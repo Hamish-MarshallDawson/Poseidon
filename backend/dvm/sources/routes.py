@@ -24,6 +24,7 @@ MAP_DEFAULT_LIMIT, MAP_MAX_LIMIT = 2000, 5000
 MAP_SHIP_MAX_WINDOW_MS = 400 * 86_400_000   # with mmsi: one ship's full history
 MAP_MAX_SHIPS = 100
 HEAT_MAX_WINDOW_MS = 90 * 86_400_000
+WINDOW_SLACK_MS = 60_000   # a client asking "the last 90 days" reads its clock twice: start and end drift by ms
 HEAT_CELL_MIN, HEAT_CELL_MAX, HEAT_CELL_DEFAULT = 0.05, 1.0, 0.1
 MODEL_DEFAULT_LIMIT, MODEL_MAX_LIMIT = 10_000, 50_000
 MAX_MMSIS = 1000
@@ -145,7 +146,7 @@ def make_router(get_pool: Callable[[], object], require_login: Callable[..., Awa
         end = end if end is not None else int(time.time() * 1000)
         start = start if start is not None else end - MAP_MAX_WINDOW_MS
         check_range(start, end)
-        if end - start > HEAT_MAX_WINDOW_MS:
+        if end - start > HEAT_MAX_WINDOW_MS + WINDOW_SLACK_MS:
             _bad("time window is capped at 90 days")
         async with pool().acquire() as con:
             return await query.heat(con, kinds_[0], box, start, end, cell_deg)

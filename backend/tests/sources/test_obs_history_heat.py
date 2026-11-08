@@ -143,6 +143,11 @@ def test_heat_sar_counts_matched_and_unmatched(client):
     assert body["cells"] == [{"lat": 60.05, "lon": 25.05, "value": 5.0, "n": 3}]
 
 
+def test_heat_90_days_with_clock_drift(client):
+    # popular.ts sends start = now - 90 days and end = a later Date.now(): a few ms over 90 days must still answer
+    assert heat(client, start=T0 - 90 * DAY, end=T0 + 25)["cells"]
+
+
 def test_heat_empty(client):
     body = heat(client, bbox="0,0,1,1")
     assert body["cells"] == [] and body["attribution"] == {}
