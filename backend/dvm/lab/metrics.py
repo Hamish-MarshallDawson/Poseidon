@@ -459,6 +459,7 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
         champs = _champions()
         async with _pool().acquire() as con:
             runs = await _fetch(con, RUNS)
+            fish = fishing_live([_row(x) for x in await _fetch(con, FISHING, int(now - FISHING_DAYS * 24 * H_MS))])
             live_route = await _fetch(con, LIVE_ROUTE, since, ROUTE_PRIMARY_H)
             dark_target = GODARK_PRIMARY
             live_dark = await _fetch(con, LIVE_DARK, since, dark_target)
@@ -472,7 +473,6 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
             proposals = await _optional(con, OPTIONAL_COUNT.format("ml_proposals"), default=0)
             sources = {x["run_id"]: x["source"] for x in await _optional(con, RUN_SOURCES, default=[], rows=True)}
             events = await _optional(con, EVENTS, default=[], rows=True)
-            fish = fishing_live([_row(x) for x in await _fetch(con, FISHING, int(now - FISHING_DAYS * 24 * H_MS))])
         for x in runs:
             x["metrics"] = _json(x["metrics"])
         models = []
@@ -494,14 +494,14 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                 live = route_live(rows, version, m) if key == "route" else dark_live(rows, version, dark_target, m)
                 if live is None and rows:
                     other = pick_version({x["model_version"]: x["n"] for x in rows}, version)
-            card = {"target": key, "label": LABELS[key], "champion": champion, "offline": offline,
-                    "live": live, "deployed": deployed, "note": note(live, deployed, other)}
-            if key == "fishing":
+            models.append({"target": key, "label": LABELS[key], "champion": champion, "offline": offline,
+                           "live": live, "deployed": deployed, "note": note(live, deployed, other)})
+        for card in models:   # weekly live fishing scores (ml.fishing.score)
+            if card["target"] == "fishing":
                 card["fishing_live"] = fish
                 if fish:
                     card["note"] = (f"scored {fish['scored_latest_week']} vessels this week; "
                                     f"{fish['graded']} weekly predictions graded so far")
-            models.append(card)
         last = max([x["created_at"] for x in runs] + [e["ts"] for e in events
                                                        if e["kind"] in ("trained", "recalibrated")], default=None)
         return {"generated_at": now, "models": models, "cycle": {"state": "manual", "last": last, "next": None},

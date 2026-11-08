@@ -244,6 +244,11 @@ async def _db_flow():
     assert godark["live"]["target"] == "dark_1h"   # no 6 h grades yet: the 1 h card
     assert godark["live"]["n"] == 10 and godark["champion"]["run_id"] is None
     assert fishing["deployed"] is False and fishing["live"] is None
+    assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 18, "graded_outcomes_estimated": False,
+                           "graded_last_hour": 0}
+    assert d["counted_from"] == T - 4 * H - 30 * 24 * H and d["truncated"] is False and m["truncated"] is False
+    assert s["cycle"] == {"state": "manual", "last": T - H / 2, "next": None}
+    # weekly live fishing scores, 40 days back
     W = T - 40 * 24 * H
     assert fishing["fishing_live"] == {"latest_week": W, "scored_latest_week": 2, "scored": 2, "graded": 1,
                                        "positives": 1, "hit_rate": 1.0, "model_version": "fishing-x"}
@@ -251,10 +256,6 @@ async def _db_flow():
     (fw,) = m["fishing"]
     assert (fw["week"], fw["scored"], fw["graded"], fw["positives"]) == (W, 2, 1, 1)
     assert fw["mean_p"] == pytest.approx(0.4) and fw["hit_rate"] == 1.0
-    assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 18, "graded_outcomes_estimated": False,
-                           "graded_last_hour": 0}
-    assert d["counted_from"] == T - 4 * H - 30 * 24 * H and d["truncated"] is False and m["truncated"] is False
-    assert s["cycle"] == {"state": "manual", "last": T - H / 2, "next": None}
 
     # lab-store's columns and tables (dvm/lab/schema.py) arrive: source, since and the cycle come from them.
     con = await asyncpg.connect(URL)
