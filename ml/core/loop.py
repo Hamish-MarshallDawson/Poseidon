@@ -90,18 +90,20 @@ def loop(spec: TargetSpec, rounds: int, *, reg: Registry, k: int = 4, dry_run: b
         row = run_one(spec, dict(spec.default_config), proposer="default", round_=0, **common)
         reg.log_proposal({"target": spec.name, "loop_id": loop_id, "round": 0, "proposer": "default",
                           "proposal": spec.default_config, "valid": True, "run_id": row["run_id"],
-                          "rationale": "default config: first run of the loop"})
+                          "rationale": "default config: first run of the loop", "source": "target default config"})
         history.append({"round": 0, "promoted": row["run_id"] if row["status"] == "champion" else None})
     for r in range(1, rounds + 1):
         champ = reg.champion(spec.name)
         try:
-            who, props = propose(spec, summary_for_proposer(spec, reg), k, r, dry_run)
+            who, source, props = propose(spec, summary_for_proposer(spec, reg), k, r, dry_run)
         except ProposerError as e:
             log(f"[{loop_id}] round {r}: proposer failed ({e}); stopping")
             history.append({"round": r, "error": str(e)})
             break
         ran = {_key(x["config"]): x["run_id"] for x in reg.list_runs(spec.name)
                if (x.get("metrics") or {}).get("state") == "done"}
+        if "fallback" in source:
+            log(f"[{loop_id}] round {r}: {source}")
         valid = []
         for p in props:
             errs = validate(spec, p.get("config"))
@@ -113,7 +115,7 @@ def loop(spec: TargetSpec, rounds: int, *, reg: Registry, k: int = 4, dry_run: b
         for p, errs in valid:
             pid_row = {"target": spec.name, "loop_id": loop_id, "round": r, "proposer": who,
                        "proposal": p.get("config"), "valid": not errs, "errors": errs,
-                       "rationale": p.get("rationale")}
+                       "rationale": p.get("rationale"), "source": source}
             if errs:
                 reg.log_proposal(pid_row)
                 log(f"[{loop_id}] round {r}: rejected proposal {p.get('config')}: {errs[:2]}")
@@ -138,7 +140,7 @@ def loop(spec: TargetSpec, rounds: int, *, reg: Registry, k: int = 4, dry_run: b
                                 parent_run=best["run_id"], **common)
                 reg.log_proposal({"target": spec.name, "loop_id": loop_id, "round": r, "proposer": who,
                                   "proposal": cfg2, "valid": True, "run_id": again["run_id"],
-                                  "rationale": f"second-seed confirmation of {best['run_id']}"})
+                                  "rationale": f"second-seed confirmation of {best['run_id']}", "source": source})
                 ok = again["status"] == "candidate"
                 if not ok:
                     log(f"[{loop_id}] round {r}: {best['run_id']} did not win again with seed {cfg2['seed']}")
@@ -148,7 +150,7 @@ def loop(spec: TargetSpec, rounds: int, *, reg: Registry, k: int = 4, dry_run: b
                 log(f"[{loop_id}] round {r}: promoted {promoted} (gain {mean_gain(spec, best):+.1%})")
         if not promoted:
             log(f"[{loop_id}] round {r}: champion kept ({(champ or {}).get('run_id', 'baseline')})")
-        history.append({"round": r, "proposer": who, "proposals": len(props), "valid": n_cmp,
+        history.append({"round": r, "proposer": who, "source": source, "proposals": len(props), "valid": n_cmp,
                         "passing": [x["run_id"] for x in passing], "promoted": promoted})
     out = {"loop_id": loop_id, "target": spec.name, "rounds": history,
            "champion": (reg.champion(spec.name) or {}).get("run_id")}

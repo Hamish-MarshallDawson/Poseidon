@@ -37,6 +37,7 @@ def _stat_fmt(x, unit) -> str:
 
 def build(spec: TargetSpec, reg: Registry) -> dict:
     runs = reg.list_runs(spec.name)
+    props = reg.list_proposals(spec.name)
     done = [r for r in runs if (r.get("metrics") or {}).get("state") == "done"]
     failed = [r for r in runs if (r.get("metrics") or {}).get("state") == "failed"]
     prim = [str(h) for h in spec.primary_horizons_s]
@@ -58,7 +59,8 @@ def build(spec: TargetSpec, reg: Registry) -> dict:
                 "decision_horizons": m["decision"]["horizons"], "alpha": m["decision"]["alpha"],
                 "n_train": m["split"]["n_train"], "seconds": m.get("seconds"), "mean_primary_skill": mean_skill(r)}
 
-    entries = [entry(r, i + 1) for i, r in enumerate(done)]
+    source = {p["run_id"]: p.get("source") for p in props if p.get("run_id")}
+    entries = [entry(r, i + 1) | {"source": source.get(r["run_id"])} for i, r in enumerate(done)]
     champ = next((e for e in entries if e["status"] == "champion"), None)
     holdouts = {json.dumps(r["metrics"]["holdout"], sort_keys=True) for r in done}
     curve, best = [], None
@@ -67,7 +69,6 @@ def build(spec: TargetSpec, reg: Registry) -> dict:
             best = e
         curve.append({"seq": e["seq"], "champion": best["run_id"] if best else None,
                       "skill": {h: (best["skill"].get(h, {}).get("skill") if best else 0.0) for h in prim}})
-    props = reg.list_proposals(spec.name)
     return {
         "target": spec.name, "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "statistic": spec.statistic, "loss_name": spec.loss_name, "loss_unit": spec.loss_unit,
@@ -78,7 +79,7 @@ def build(spec: TargetSpec, reg: Registry) -> dict:
                                           "error": r["metrics"].get("error")} for r in failed],
         "learning_curve": curve,
         "proposals": [{k: p.get(k) for k in ("id", "round", "proposer", "proposal", "valid", "errors", "run_id",
-                                              "rationale", "created_at", "loop_id")} for p in props],
+                                              "rationale", "created_at", "loop_id", "source")} for p in props],
         "notes": list(getattr(spec, "report_notes", [])),
     }
 
@@ -211,7 +212,7 @@ def render_html(rep: dict) -> str:
         parts.append("</div>")
     if ch:
         parts.append(f"<h2>Champion: <code>{e(ch['run_id'])}</code> ({e(ch['model'])}, proposed by "
-                     f"{e(ch['proposer'])})</h2><div class='grid'>")
+                     f"{e(ch['proposer'])}{(', ' + e(ch['source'])) if ch.get('source') else ''})</h2><div class='grid'>")
         for h in hs:
             v, s = ch["skill"].get(h), ch["summary"].get(h, {})
             if not v:
@@ -242,7 +243,8 @@ def render_html(rep: dict) -> str:
         why = "beat " + e(r["against"]) if r["verdict"] == "promoted" else (
             "passed vs " + e(r["against"]) if r["verdict"] == "passed the rule" else e(_short_verdict(r, unit)))
         parts.append(f"<tr><td>{i}</td><td><code>{e(r['run_id'])}</code></td><td>{r['round'] if r['round'] is not None else '–'}</td>"
-                     f"<td>{e(r['model'])}</td><td>{e(r['proposer'])}</td><td>{_pill(r['status'])}</td>"
+                     f"<td>{e(r['model'])}</td><td class='wrap'>{e(r['proposer'])}"
+                     f"{('<br><code>' + e(r['source']) + '</code>') if r.get('source') else ''}</td><td>{_pill(r['status'])}</td>"
                      + "".join(_skill_cell(r["skill"].get(h)) for h in prim)
                      + "".join(f"<td>{_stat_fmt(r['skill'].get(h, {}).get('stat'), unit)}</td>" for h in prim)
                      + f"<td>{r['n_train']:,}</td><td class='wrap'>{why}</td></tr>")
@@ -251,13 +253,14 @@ def render_html(rep: dict) -> str:
         parts.append("<h2>Proposals</h2><p class='muted'>Every proposal, including the ones the runner refused. "
                      "Configs are checked against a fixed schema; the proposer cannot change code, data or the "
                      "rule.</p><div class='panel scroll'><table><tr><th>Round</th><th>Proposer</th><th>Valid</th>"
-                     "<th>Config</th><th>Rationale</th><th>Outcome</th></tr>")
+                     "<th>Proposed by (model)</th><th>Config</th><th>Rationale</th><th>Outcome</th></tr>")
         status = {r["run_id"]: r["status"] for r in rep["runs"]}
         for p in rep["proposals"]:
             outcome = (_pill(status.get(p["run_id"], "run")) + f" <code>{e(p['run_id'])}</code>") if p["run_id"] \
                 else e("; ".join(p.get("errors") or [])[:240])
             parts.append(f"<tr><td>{p['round'] if p['round'] is not None else '–'}</td><td>{e(p['proposer'])}</td>"
                          f"<td>{_pill('valid' if p['valid'] else 'invalid')}</td>"
+                         f"<td class='wrap'><code>{e(p.get('source') or '–')}</code></td>"
                          f"<td class='wrap'><code>{e(json.dumps(p['proposal'], separators=(',', ':')))}</code></td>"
                          f"<td class='wrap'>{e(p.get('rationale') or '')}</td><td class='wrap'>{outcome}</td></tr>")
         parts.append("</table></div>")

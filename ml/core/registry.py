@@ -132,6 +132,8 @@ CREATE TABLE IF NOT EXISTS model_proposals (
   id bigserial PRIMARY KEY, target text NOT NULL, loop_id text, round int, proposer text NOT NULL,
   proposal jsonb NOT NULL, valid boolean NOT NULL, errors jsonb, run_id text, rationale text,
   created_at timestamptz NOT NULL DEFAULT now());
+-- source: what made the proposal (the Gemini model, or the dry-run list and why it was used)
+ALTER TABLE model_proposals ADD COLUMN IF NOT EXISTS source text;
 """
 
 
@@ -269,10 +271,10 @@ class SqlRegistry(Registry):
     def log_proposal(self, row: dict) -> int:
         return self._q(lambda c: c.fetchval(
             "INSERT INTO model_proposals (target, loop_id, round, proposer, proposal, valid, errors, run_id, "
-            "rationale) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id",
+            "rationale, source) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
             row["target"], row.get("loop_id"), row.get("round"), row["proposer"],
             json.dumps(row["proposal"], default=str), row["valid"], json.dumps(row.get("errors") or []),
-            row.get("run_id"), row.get("rationale")))
+            row.get("run_id"), row.get("rationale"), row.get("source")))
 
     def list_proposals(self, target: str) -> list[dict]:
         recs = self._q(lambda c: c.fetch("SELECT * FROM model_proposals WHERE target=$1 ORDER BY id", target))

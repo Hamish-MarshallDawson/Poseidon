@@ -41,6 +41,67 @@ def test_strip_drops_unsupported_keywords(spec):
     assert "additionalProperties" not in s and "uniqueItems" not in s["properties"]["features"]
 
 
+@pytest.fixture(autouse=True)
+def counter(tmp_path, monkeypatch):
+    monkeypatch.setenv("ML_GEMINI_COUNTER", str(tmp_path / "calls.json"))
+    monkeypatch.delenv("ML_GEMINI_DAILY_CAP", raising=False)
+    return tmp_path / "calls.json"
+
+
+def _ok(payload, key):
+    text = json.dumps({"proposals": [{"config": {"model": "linear", "seed": 0}, "rationale": "r"}]})
+    return {"steps": [{"type": "model_output", "content": [{"type": "text", "text": text}]}]}
+
+
+def test_model_default_and_override(spec, monkeypatch):
+    seen = []
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(propose, "_post", lambda p, k: seen.append(p["model"]) or _ok(p, k))
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    propose.propose(spec, {}, 1, 1, dry_run=False)
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-other")
+    propose.propose(spec, {}, 1, 1, dry_run=False)
+    assert seen == ["gemini-3.5-flash-lite", "gemini-other"]
+
+
+def test_daily_cap_falls_back_without_calling(spec, monkeypatch, counter):
+    calls = []
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("ML_GEMINI_DAILY_CAP", "2")
+    monkeypatch.setattr(propose, "_post", lambda p, k: calls.append(1) or _ok(p, k))
+    whos = [propose.propose(spec, {}, 1, 1, dry_run=False)[:2] for _ in range(3)]
+    assert len(calls) == 2
+    assert [w for w, _ in whos] == ["gemini", "gemini", "default"]
+    assert "fallback" in whos[2][1] and "daily Gemini cap" in whos[2][1]
+    assert list(json.loads(counter.read_text()).values()) == [2]
+
+
+def test_429_is_a_clean_fallback(spec, monkeypatch):
+    import io
+    import urllib.error
+
+    def boom(req, timeout):
+        raise urllib.error.HTTPError(propose.URL, 429, "Too Many Requests", {}, io.BytesIO(b"secret body"))
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(propose.urllib.request, "urlopen", boom)
+    who, source, ps = propose.propose(spec, {}, 3, 1, dry_run=False)
+    assert who == "default" and "429" in source and "secret" not in source
+    assert ps == propose.dry_run_proposals(spec, 3, 1)
+
+
+def test_other_http_errors_still_stop(spec, monkeypatch):
+    import io
+    import urllib.error
+
+    def boom(req, timeout):
+        raise urllib.error.HTTPError(propose.URL, 500, "err", {}, io.BytesIO(b""))
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(propose.urllib.request, "urlopen", boom)
+    with pytest.raises(propose.ProposerError) as ei:
+        propose.propose(spec, {}, 3, 1, dry_run=False)
+    assert not isinstance(ei.value, propose.ProposerSkipped)
+
+
 def test_gemini_parsing_without_network(spec, monkeypatch):
     seen = {}
 
@@ -53,8 +114,8 @@ def test_gemini_parsing_without_network(spec, monkeypatch):
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(propose, "_post", fake_post)
-    who, ps = propose.propose(spec, {"recent_runs": []}, 2, 1, dry_run=False)
-    assert who == "gemini" and len(ps) == 2
+    who, source, ps = propose.propose(spec, {"recent_runs": []}, 2, 1, dry_run=False)
+    assert who == "gemini" and source == seen["payload"]["model"] and len(ps) == 2
     assert len(ps[0]["rationale"]) == propose.MAX_RATIONALE
     assert propose.validate(spec, ps[0]["config"]) == [] and propose.validate(spec, ps[1]["config"])
     facts = json.loads(seen["payload"]["input"])

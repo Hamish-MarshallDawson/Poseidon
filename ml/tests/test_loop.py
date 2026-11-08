@@ -47,7 +47,22 @@ def test_loop_end_to_end(spec, tmp_path):
     html = open(out["report"]["html"]).read()
     rep = json.loads(open(out["report"]["json"]).read())
     assert champ["run_id"] in html and "Frozen held-out set" in html and "invalid" in html
+    assert "fixed dry-run list" in html and all(p.get("source") for p in props)
     assert rep["champion"]["run_id"] == champ["run_id"] and rep["learning_curve"]
+
+
+def test_loop_falls_back_on_429(spec, tmp_path, monkeypatch):
+    from ml.core import propose
+
+    def quota(*a, **k):
+        raise propose.ProposerSkipped("Gemini returned 429")
+    monkeypatch.setattr(propose, "gemini_proposals", quota)
+    reg = FileRegistry(tmp_path / "reg")
+    out = lp.loop(spec, 1, reg=reg, k=2, dry_run=False, artifacts=tmp_path / "art", n_folds=0, log=lambda *_: None)
+    assert out["rounds"][-1]["proposer"] == "default" and "429" in out["rounds"][-1]["source"]
+    r1 = [p for p in reg.list_proposals("toy") if p["round"] == 1]
+    assert r1 and all(p["proposer"] == "default" and "fallback" in p["source"] for p in r1)
+    assert "429" in open(out["report"]["html"]).read()
 
 
 def test_promoted_champion_is_beaten_only_by_rule(spec, tmp_path):
@@ -121,6 +136,7 @@ def test_sql_registry_loop(spec, tmp_path):
     assert reg.champion("toy")["run_id"] == out["champion"]
     assert isinstance(runs[0]["config"], dict) and isinstance(runs[0]["metrics"], dict)
     assert reg.list_proposals("toy") and any(not p["valid"] for p in reg.list_proposals("toy"))
+    assert all(p["source"] for p in reg.list_proposals("toy"))
     # one champion per target is enforced by the database, not just the code
     other = next(r for r in runs if r["status"] != "champion")
     with pytest.raises(asyncpg.UniqueViolationError):
