@@ -10,3 +10,4 @@ python-dotenv==1.2.4
 asyncpg==0.32.0
 jsonschema==4.26.0
 pytest==9.2.0
+pydantic==2.14.3   # ml/godark replays backend/dvm/gaps.py, which imports dvm.models
