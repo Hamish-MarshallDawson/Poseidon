@@ -47,7 +47,8 @@ describe('the latest decision in one plain sentence', () => {
     expect(s).not.toMatch(BANNED)
   })
   it('real hand decisions never say dead reckoning', () => {
-    for (const r of runs) expect(outcomePhrase(r)).not.toMatch(/dead reckoning/i)
+    for (const r of runs) expect(decisionSentence(r, byId)).not.toMatch(BANNED)
+    expect(outcomePhrase(runs.find((r) => r.run_id === 'route-dma90-v2')!)).toBe('promoted by hand')
     expect(latestDecided(runs, 'fishing')!.run_id).toBe('fishing-20261108T071925-e2db5c'.replace('e2db5c', 'be7ea1'))
     expect(changePhrase(runs.find((r) => !r.parent_run)!, byId)).toMatch(/^a first/)
   })

@@ -81,6 +81,9 @@ export function championLine(points: Point[], now: number): { x: number; y: numb
   return line
 }
 
+/** Words levels 1 and 2 never show. */
+export const JARGON = /skill|brier|log[ -]?loss|dead reckoning|isotonic|\bece\b|auc/i
+
 const WHO: Record<string, string> = { gemini: 'Gemini proposed', human: 'A person tried', default: 'The fixed list tried' }
 
 const words = (k: string) => k.replace(/_/g, ' ')
@@ -112,7 +115,11 @@ export function outcomePhrase(run: RunRecord): string {
   if (state && state !== 'done') return `not scored yet (${state})`
   if (!d) return run.status === 'champion' ? 'made champion by hand' : run.status === 'candidate' ? 'kept as a candidate' : run.status === 'retired' ? 'was champion, now replaced' : 'rejected'
   const v = verdict(d)
-  if (v.hand) return byHandLine(d, run.status === 'candidate' ? 'kept as a candidate' : 'rejected').replace(/dead reckoning/gi, 'a straight-line guess')
+  if (v.hand) {
+    // A person decided: their stored reason is shown only when it is plain words (the run panel has it in full).
+    const line = byHandLine(d, run.status === 'candidate' ? 'kept as a candidate' : 'rejected').replace(/dead reckoning/gi, 'a straight-line guess')
+    return JARGON.test(line) ? line.split(':')[0] : line
+  }
   if (d.promote) return v.won.length ? `promoted, better than ${v.against} at ${v.won.map(horizonLabel).join(', ')}` : `promoted, passed every check against ${v.against}`
   const why: string[] = []
   if (v.lost.length) why.push(`not better than ${v.against} at ${v.lost.map(horizonLabel).join(', ')}`)
