@@ -83,21 +83,13 @@ jobs:
           printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN" > ~/.ssh/known_hosts
+      # Deploys at once, or stages it while the server holds frontend releases (deploy/vultr/deploy.sh).
       - name: Deploy frontend
-        run: tar -C dist -cf - . | ssh -o BatchMode=yes root@$SERVER frontend
+        run: tar -C dist -cf - . | ssh -o BatchMode=yes root@$SERVER "frontend $GITHUB_SHA"
       # Restart the backend only when backend/ changed: each restart is an AISStream reconnect (12 per hour max).
-      - name: Did backend change?
-        id: be
-        run: |
-          before='${{ github.event.before }}'
-          if [ '${{ github.event_name }}' = push ] && git cat-file -e "$before^{commit}" 2>/dev/null && git diff --quiet "$before" HEAD -- backend; then
-            echo changed=false >> "$GITHUB_OUTPUT"
-          else
-            echo changed=true >> "$GITHUB_OUTPUT"
-          fi
-      # The server only stages the backend; Hamish's laptop agent reviews it and applies it (deploy/vultr/deploy.sh).
+      # Every main push stages the whole backend (cheap, nothing restarts). Staging only on change missed merges whose
+      # runs GitHub cancelled under concurrency. Hamish's laptop agent reviews the diff and applies it.
       - name: Stage backend for review
-        if: steps.be.outputs.changed == 'true'
         run: git archive HEAD backend | ssh -o BatchMode=yes root@$SERVER "backend $GITHUB_SHA"
       - name: Smoke check
         run: |
