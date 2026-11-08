@@ -53,6 +53,30 @@ hackathon, show that the loop works and improves, even if it can't run for weeks
 before 09:00, so it is shown as a time-machine backtest (pretend it is a week ago, predict, grade against what has
 arrived since).
 
+## Zones: protected areas and national-waters borders (Hamish's "Possible illegal fishing" idea, checked 04:40 UTC)
+
+- **GFW fishing events** (`public-global-fishing-events:latest`) work for our regions: 526 events in 1 to 8 Oct in
+  the Danish straits, 32 in the Gulf of Oman. Each carries `regions` (`eez`, `eez12Nm`, `mpa`, `mpaNoTake`,
+  `protectedseas`, `rfmo`, `highSeas`), and `fishing.potentialRisk` and `vesselPublicAuthorizationStatus`. 102 of 200
+  sampled Danish events were inside a protected area. About 3 to 4 days late, like the rest of GFW.
+- **EEZ shapes:** Marine Regions WFS (`geo.vliz.be`, CC BY 4.0) returned the 7 EEZs touching the Danish box in 5.7 s
+  (33 MB unclipped). Its `mrgid` matches GFW's `eez` tags (5674 Denmark, 5694 Sweden), so live zone tags and GFW labels
+  share one id system.
+- **Protected-area shapes:** the World Database on Protected Areas map service (UNEP-WCMC) answers bbox queries: 662
+  non-terrestrial sites touch the Danish box, 24 in Hormuz plus the Gulf of Oman. Its `no_take` filter returned 0, so
+  use GFW's `mpaNoTake` tag for no-take status. Licence: free for non-commercial use with attribution (to confirm).
+- **How it ties into prediction:**
+  1. Live detection layer (Hamish's filter): tag each live ship with its EEZ, any protected area it is in, and its
+     distance to the nearest EEZ border; flag fishing-type ships at fishing speeds inside protected areas, and gaps
+     that open near a border.
+  2. Features for go-dark risk and route models: inside a protected area, distance to the border, EEZ changes along
+     the path.
+  3. Predicted incursion: a dark ship's predicted cone crossing a protected area or another country's EEZ becomes an
+     alert with a probability.
+  4. Delayed grading and labels: GFW fishing events, tagged with the same zones, confirm 3 to 4 days later whether the
+     ship fished there, the same predict-now, grade-later loop; historical events (with `potentialRisk`) are labels
+     for a fishing-risk target.
+
 ## Work in flight
 
 | Who | What | Issue |
