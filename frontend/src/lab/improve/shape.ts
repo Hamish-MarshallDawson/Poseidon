@@ -76,12 +76,16 @@ export function championSteps(model: ModelSummaryLike, runs: RunLike[], events: 
     .filter((e) => e.target === model.target)
     .sort((a, b) => a.ts - b.ts)
 
+  // A recalibration is a champion step only once that version went live (or is the current champion);
+  // one built but not installed stays a marker, not a step.
+  const live = new Set(evs.filter((e) => e.kind === 'deployed').map((e) => e.version))
   const steps: Step[] = []
   for (const e of evs) {
     const version = e.version ?? e.run_id ?? '?'
     const prev = steps[steps.length - 1]
     if (prev && prev.version === version) continue           // deployed, then promoted, the same version: one step
     if (e.kind === 'recalibrated') {
+      if (!live.has(version) && version !== cur.version) continue
       const v = prev && base(prev.version) === base(version) ? prev : { ...value({ ...e, version }) }
       steps.push({ t: e.ts, value: v.value, lo: v.lo, hi: v.hi, version, run_id: e.run_id ?? null, how: 'recalibrated' })
     } else {
