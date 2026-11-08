@@ -1,6 +1,15 @@
 import type { LabSectionProps } from '../sections'
+import { DataCollected } from './DataCollected'
+import { LiveTrackRecord } from './LiveTrackRecord'
 
-// Placeholder slot: lab-live replaces this file (keep the export name and props). Lab.tsx draws the section heading.
-export function Live(props: LabSectionProps) {
-  return <p className="lab-muted">Coming soon: built by lab-live. {props.sample ? 'Showing sample data.' : ''}</p>
+// The Lab's "Live track record" slot (Lab.tsx draws the section heading): graded predictions from /lab/metrics,
+// then "Data collected" from /lab/data. The headline sentence speaks for the running route champion.
+export function Live({ metrics, data, summary }: LabSectionProps) {
+  const champions = summary?.models.map((m) => m.champion.version).filter(Boolean) ?? []
+  return (
+    <>
+      <LiveTrackRecord metrics={metrics} champions={champions} />
+      <DataCollected data={data} />
+    </>
+  )
 }
