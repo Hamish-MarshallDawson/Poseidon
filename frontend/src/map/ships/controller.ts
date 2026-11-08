@@ -42,6 +42,7 @@ const L = {
   heat: 'dvm-heat', dead: 'dvm-dead', deadEdge: 'dvm-dead-edge',
   inferred: 'dvm-inferred', chips: 'dvm-chips', fan: 'dvm-fan', ships: 'dvm-ships',
 }
+const HEAT_OPACITY = 0.7
 const S = { heat: 'dvm-heat', dead: 'dvm-dead', inferred: 'dvm-inferred', chips: 'dvm-chips', fan: 'dvm-fan' }
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 const FONT = ['Barlow Semi Condensed Medium']   // served from public/basemap/fonts (scripts/basemap/glyphs.py)
@@ -133,15 +134,17 @@ export class ShipController {
     // Heat map (zoomed out): ship counts on a screen grid, ramp from the heat/0..4 tokens, faded out across HEAT_FADE as the
     // ships fade in. Under the place labels so names stay readable; the no-receiver hatch is a different thing (grey pattern, dashed edge).
     const heat = (i: number, fb: string) => readToken(`heat-${i}`) || fb
+    // Traditional ramp (blue, cyan, green, yellow, orange, red; viridis for colour-blind): low alpha and radius, so no bloom.
+    const stops = [0, 0.1, 0.25, 0.4, 0.55, 0.75, 1]
+    const fallback = ['#2f5fd000', '#2f5fd040', '#1fb5d861', '#3cb86775', '#e6d02a85', '#f08a1c91', '#d62a1f99']
     map.addLayer({
       id: L.heat, type: 'heatmap', source: S.heat,
       paint: {
-        'heatmap-weight': ['interpolate', ['linear'], ['get', 'n'], 1, 0.2, 6, 0.5, 40, 1],
-        'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 0.8, 4, 1, 7, 1.3],
-        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 20, 4, 28, 7, 36],
-        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'],
-          0, heat(0, '#a9bdf000'), 0.15, heat(1, '#4f6aa873'), 0.4, heat(2, '#7390d2a6'), 0.7, heat(3, '#a4bcf2d1'), 1, heat(4, '#e6eef2f2')],
-        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], HEAT_FADE[0], 1, HEAT_FADE[1], 0],
+        'heatmap-weight': ['interpolate', ['linear'], ['get', 'n'], 1, 0.35, 6, 0.75, 40, 1],
+        'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 0.6, 4, 0.8, 7, 0.9],
+        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 12, 4, 16, 7, 22],
+        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], ...stops.flatMap((d, i) => [d, heat(i, fallback[i])])],
+        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], HEAT_FADE[0], HEAT_OPACITY, HEAT_FADE[1], 0],
       },
     }, map.getLayer(BASEMAP_FIRST_LABEL_LAYER) ? BASEMAP_FIRST_LABEL_LAYER : underLand)
     // Carries the GFW attribution into the map's credits while Popular places is on (visibility follows the heat map).
@@ -281,7 +284,7 @@ export class ShipController {
     vis([L.heat], layers.density && !following && (pop || !filtering))
     vis(['dvm-popular-attr'], layers.density && pop)
     // Popular places is always visible; the live heat map fades out as ships fade in.
-    if (map.getLayer(L.heat)) map.setPaintProperty(L.heat, 'heatmap-opacity', pop ? 1 : ['interpolate', ['linear'], ['zoom'], HEAT_FADE[0], 1, HEAT_FADE[1], 0])
+    if (map.getLayer(L.heat)) map.setPaintProperty(L.heat, 'heatmap-opacity', pop ? HEAT_OPACITY : ['interpolate', ['linear'], ['zoom'], HEAT_FADE[0], HEAT_OPACITY, HEAT_FADE[1], 0])
     vis([L.chips], !following && !filtering)
     vis([L.dead, L.deadEdge], layers.coverage)
   }
