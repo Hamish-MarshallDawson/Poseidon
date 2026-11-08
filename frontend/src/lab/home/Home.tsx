@@ -44,6 +44,7 @@ function HomeCard({ target, m, runs, metrics }: { target: LabModel; m: RichSumma
         <Sparkline points={series} label={`${info.name} champions over time`} />
         <span>{total} runs · {gem} by Gemini</span>
       </span>
+      <span className="lab-home-card__enter"><span>Explore {info.name.toLowerCase()}</span><span aria-hidden="true">→</span></span>
     </button>
   )
 }
