@@ -8,6 +8,7 @@ import { reducedMotion, usePresence } from '../motion'
 import { popular } from '../data/popular'
 import { ThemeSettings } from '../theme/ThemeMenu'
 import { ReviewChip } from '../review/ReviewPanel'
+import { DelayedLayers } from './DelayedLayers'
 import { ChannelChip } from '../collab/docs/Channel'
 import { SHOW_FILTERS, showFilter } from '../show/registry'
 import { setShow, startShow } from '../show/state'
@@ -79,6 +80,7 @@ function DisplayPanel() {
           {key === 'density' && layers.density && <HeatChoice />}
         </Fragment>
       ))}
+      <DelayedLayers />
       <span className="kicker ly-head">Settings</span>
       <ThemeSettings />
     </div>
