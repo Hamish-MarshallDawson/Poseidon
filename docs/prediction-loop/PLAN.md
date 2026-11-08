@@ -70,6 +70,9 @@ Briefs are in `docs/handoffs/`. Research reports land in `docs/prediction-loop/r
 - **Decided:** one `.env` in the primary checkout, linked into every worktree on the desktop and copied to the laptop.
 - **Decided:** speed up the GFW backfill (month-range requests and parallel workers) and fix gap events first, in the
   background, while the prediction plan is researched.
+- **Decided:** training and inference run on Hamish's desktop (RTX 5080), not on Aiden's desktop (RTX 3080) or the
+  Vultr server (Aiden, 8 Nov, about 04:00 UTC). Access to that machine is still to be arranged with Hamish.
+- **Decided:** delegated Claude agents start in auto permission mode (hc templates changed 8 Nov).
 
 ## Open, for Aiden
 
