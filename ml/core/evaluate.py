@@ -158,8 +158,10 @@ def bootstrap(a: np.ndarray, b: np.ndarray, fn, alpha: float = ALPHA, B: int = B
     if len(a) == 0:
         return float("nan"), float("nan"), float("nan")
     rng = np.random.default_rng(seed)
-    idx = rng.integers(0, len(a), size=(B, len(a)))
-    reps = np.array([fn(a[i], b[i]) for i in idx])
+    reps = []
+    for k in range(0, B, 64):   # in chunks: a (B, n) index matrix would be GBs for large held-out sets
+        for i in rng.integers(0, len(a), size=(min(64, B - k), len(a))):
+            reps.append(fn(a[i], b[i]))
     lo, hi = np.quantile(reps, [alpha / 2, 1 - alpha / 2])
     return float(fn(a, b)), float(lo), float(hi)
 
