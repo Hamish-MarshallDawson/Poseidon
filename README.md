@@ -5,6 +5,8 @@
 
 # POSEIDON
 
+Found live at this link: https://192-248-153-178.sslip.io/
+
 POSEIDON watches live ship tracking (AIS) and flags ships that go quiet while other ships in the same area keep reporting. It gives an analyst a short list of candidates, a risk estimate for each ship, a replay of the picture, and a shared workspace for a team. It was built at HackTheBurgh.
 
 ![The live picture over the Baltic and Gulf of Finland: ships, heat map, review list and replay bar (illustrative data)](docs/readme/map-overview.jpg)
