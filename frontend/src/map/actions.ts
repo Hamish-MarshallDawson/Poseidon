@@ -5,5 +5,5 @@ import { ui } from '../store/ui'
 export { openShipWindow } from '../windows/open'
 
 export function setFocus(mmsi: number | null): void {
-  ui.set({ focusMmsi: mmsi, ...(mmsi == null ? { focusRelated: [] } : {}) })
+  ui.set({ focusMmsi: mmsi, ...(mmsi == null ? { focusRelated: [], focusLoading: false } : {}) })
 }

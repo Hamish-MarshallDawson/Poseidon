@@ -11,6 +11,7 @@ import { fmtEta, matchDestination, usePortInfo } from '../ports'
 import type { Departure, PortIndex } from '../ports'
 import { YachtSection } from '../yachts/Yachts'
 import { toggleReview, useInReview } from '../review/store'
+import { ShipPresence } from '../collab/presence/SharedList'
 
 // Body of a ship window: R2/Forecast/Ship card (Figma 56:4598), states No AIS and Active.
 // Fields come from the live VesselView, its open GapEvent, the risk fields, and the `detail` reply.
@@ -100,6 +101,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
         <span className={`sc-chip ${noAis ? 'noais' : ''}`}>{noAis ? 'No AIS' : 'AIS heard'}{replay && ` · as of ${utcTime(now, false)}`}</span>
       </div>
       <p className="sc-sub">{subline(v, statics?.flag_iso2 ?? v.flag, statics?.length_m ?? v.length_m)}</p>
+      <ShipPresence mmsi={mmsi} />
       <Route v={v} destination={statics?.destination} eta={statics?.eta_utc} ports={ports} departure={departure} />
       <div className="sc-timer">
         <span className="sc-clock">{hms(now - v.last_ts)}</span>
@@ -132,7 +134,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
       </div>
       <EvidenceStrip ts={v.last_ts} now={now} />
       <div className="sc-actions">
-        <Button onClick={onFocus}>Track history</Button>
+        <Button onClick={onFocus}>Nearby ships</Button>
         <Button onClick={() => runBriefing([mmsi])}>Brief me</Button>
         <Button variant={inReview ? 'outline' : 'filled'} aria-pressed={inReview} onClick={() => toggleReview(mmsi)}>
           {inReview ? 'In review' : 'Add to review'}
@@ -143,7 +145,7 @@ export const ShipCard = memo(function ShipCard({ mmsi, onFocus }: { mmsi: number
   )
 })
 
-// What the Track history path shows: how far back the oldest point is.
+// What the always-on past track shows: how far back the oldest point is.
 function trackCaption(trail: [number, number, number][] | undefined): string {
   if (!trail || trail.length < 2) return 'No track yet'
   const min = Math.round((trail[trail.length - 1][0] - trail[0][0]) / 60000)

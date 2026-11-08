@@ -1,14 +1,27 @@
 import { useState } from 'react'
 import { Button, Kbd } from '../ui'
-import { ui, type FocusRelation } from '../store/ui'
+import { ui } from '../store/ui'
 import { useVessel } from '../windows/hooks'
-import { TYPE_LABEL, fmtMmsi } from '../windows/format'
+import { setFocus } from '../map/actions'
+import { fmtMmsi } from '../windows/format'
+import { openShipWindow } from '../windows/open'
+import { fmtKm, utcTime } from '../map/focus'
 
-// Focus bar (density report, focus mode 39:1366): "FOCUS · name · type · MMSI", reason chips for the related
-// ships, a breadcrumb when focus moved from one ship to another, and "Leave focus [Esc]".
+// Focus bar ("Nearby ships"): the focused ship, how many ships came within 5 km of its track in 6 h, a list of them with
+// their closest approach (a row opens that ship's window), a breadcrumb when focus moved from one ship to another, and
+// "Leave [Esc]".
 
-const REASON_LABEL: Record<FocusRelation['reason'], string> = {
-  nearby: 'Nearby', rendezvous: 'Possible rendezvous', also_dark: 'Also no AIS', same_flag: 'Same flag',
+function Row({ r }: { r: { mmsi: number; cpaM: number; cpaTs: number; met: boolean } }) {
+  const v = useVessel(r.mmsi)
+  return (
+    <li>
+      <button type="button" className="fb-row" onClick={() => openShipWindow(r.mmsi)}>
+        <b>{v?.name ?? fmtMmsi(r.mmsi)}</b>
+        <span>{utcTime(r.cpaTs)} · {fmtKm(r.cpaM)}</span>
+        {r.met && <span className="reason-chip">Both slow, within 500 m</span>}
+      </button>
+    </li>
+  )
 }
 
 function Crumb({ mmsi, onClick }: { mmsi: number; onClick: () => void }) {
@@ -19,6 +32,7 @@ function Crumb({ mmsi, onClick }: { mmsi: number; onClick: () => void }) {
 export function FocusBar() {
   const focus = ui.use((s) => s.focusMmsi)
   const related = ui.use((s) => s.focusRelated)
+  const loading = ui.use((s) => s.focusLoading)
   const v = useVessel(focus ?? -1)
   // Breadcrumb trail: derived during render from focus changes, cleared when focus is left.
   const [trail, setTrail] = useState<{ last: number | null; path: number[] }>({ last: focus, path: [] })
@@ -31,26 +45,23 @@ export function FocusBar() {
   }
   if (focus === null) return null
 
-  const counts = new Map<FocusRelation['reason'], number>()
-  for (const r of related) counts.set(r.reason, (counts.get(r.reason) ?? 0) + 1)
+  const name = v?.name ?? fmtMmsi(focus)
+  const n = related.length
 
   return (
-    <div className="panel focus-bar" data-zone role="region" aria-label="Focus">
-      <span className="kicker">Focus</span>
-      {trail.path.map((m) => (
-        <span key={m} className="fb-step"><Crumb mmsi={m} onClick={() => ui.set({ focusMmsi: m })} /><span aria-hidden>›</span></span>
-      ))}
-      <span className="fb-name">
-        <b>{v?.name ?? fmtMmsi(focus)}</b>
-        {v && ` · ${TYPE_LABEL[v.type_group]} · MMSI ${fmtMmsi(focus)}`}
-      </span>
-      <span className="fb-reasons">
-        {related.length === 0 && <span className="fb-none">No related ships shown</span>}
-        {[...counts].map(([reason, n]) => <span key={reason} className="reason-chip">{REASON_LABEL[reason]} {n}</span>)}
-      </span>
-      <Button className="btn-small" onClick={() => ui.set({ focusMmsi: null, focusRelated: [] })}>
-        Leave focus <Kbd>Esc</Kbd>
-      </Button>
+    <div className="panel focus-bar" data-zone role="region" aria-label="Nearby ships">
+      <div className="fb-head">
+        {trail.path.map((m) => (
+          <span key={m} className="fb-step"><Crumb mmsi={m} onClick={() => ui.set({ focusMmsi: m })} /><span aria-hidden>›</span></span>
+        ))}
+        <span className="fb-name">
+          Nearby ships · <b>{name}</b> · {loading ? 'Finding ships near the track…' : n ? `${n} within 5 km in 6 h` : 'none within 5 km in 6 h'}
+        </span>
+        <Button className="btn-small" onClick={() => setFocus(null)}>
+          Leave <Kbd>Esc</Kbd>
+        </Button>
+      </div>
+      {n > 0 && !loading && <ul className="fb-list">{related.map((r) => <Row key={r.mmsi} r={r} />)}</ul>}
     </div>
   )
 }

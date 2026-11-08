@@ -121,3 +121,22 @@ Emailed invites, Auth0 Organizations, a roles UI (roles are fixed: owner invites
 CRDT editing, editing or deleting documents, removing members, presence deltas (full list each time), more than
 one backend process (presence is in this process's memory). Name and picture are taken from the client's Auth0
 profile unverified; a later step could read them from Auth0's `/userinfo` with the same token.
+
+## Invites with an addressee (issue #117)
+
+`invites.py`. `POST /sessions/{id}/invites` takes an optional body `{to}`: a user id or an email (lowercased; it matches
+a user once they have posted that email in `POST /me {email}`). Answer: `{id, token, session_id, expires_at}`; with no
+`to` it is the link invite as before. Owner only.
+
+| Route | Answer |
+|---|---|
+| `GET /invites` | `{incoming: [{id, session_id, session_title, from: User, created_at, expires_at}], outgoing: [{id, session_id, session_title, to: User\|{email}\|null, created_at, expires_at, status: "pending"\|"accepted"\|"declined"}]}`; revoked and expired ones are left out |
+| `POST /invites/{id-or-token}/accept` | `Session`; an id works only for the addressee |
+| `POST /invites/{id}/decline` | 204; the addressee only |
+| `DELETE /invites/{id}` | 204; the creator only (revoke; the link stops working too) |
+
+Server to client (any open socket of that user, no session needed; a local-dev socket says who it is with
+`{"type": "auth", "dev_user": "<name>"}`): `{"type": "invite", "invite_id", "session_id"}` when an invite arrives for you,
+and `{"type": "invites_changed"}` when one of yours or for you was accepted, declined, revoked, or newly matched by an
+email. On both, re-read `GET /invites`. Only a link's SHA-256 is stored, so an old link can't be copied again; the UI
+keeps the links it created. The addressee's email is unverified client input (see the shortcut note in `invites.py`).

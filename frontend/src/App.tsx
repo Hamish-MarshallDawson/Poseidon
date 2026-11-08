@@ -14,6 +14,10 @@ import { BriefingPanel } from './briefing/BriefingPanel'
 import { bindBriefingAuth } from './briefing/store'
 import { bindYachtsAuth } from './yachts/store'
 import { Review } from './review/ReviewPanel'
+import { AUTH_OFF, bindCollabAuth, devUser } from './collab/client'
+import { loadMe } from './collab/store'
+import { bindSocket } from './collab/socket'
+import { Presence } from './collab/presence/Presence'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
 const WindowsDemo = lazy(() => import('./windows/demo/WindowsDemo'))
@@ -21,11 +25,13 @@ const BasemapDemo = lazy(() => import('./basemap/BasemapDemo'))
 
 // Auth0 login gates the map; the backend checks the same access token on the WebSocket.
 export default function App() {
-  const { isLoading, isAuthenticated, error, loginWithRedirect, logout, getAccessTokenSilently } = useAuth0()
+  const { isLoading, isAuthenticated, error, loginWithRedirect, logout, getAccessTokenSilently, user } = useAuth0()
   const demo = new URLSearchParams(location.search).get('demo')
   if (demo === 'tokens') return <Suspense><TokensDemo /></Suspense>
   if (demo === 'windows') return <Suspense><WindowsDemo /></Suspense>
   if (demo === 'basemap') return <Suspense><BasemapDemo /></Suspense>
+  // VITE_AUTH=off (dev server only, never in a production build): skip Auth0; the backend must run with AUTH0_* empty.
+  if (AUTH_OFF) return <Monitor getToken={async () => undefined} onLogout={() => {}} profile={{ name: devUser }} />
   if (isLoading) return <div className="gate"><p className="gate__foot">Loading…</p></div>
   if (!isAuthenticated) {
     return (
@@ -43,21 +49,25 @@ export default function App() {
   return (
     <Monitor
       getToken={() => getAccessTokenSilently()}
+      profile={user ? { name: user.name ?? user.nickname, picture: user.picture } : undefined}
       onLogout={() => logout({ logoutParams: { returnTo: window.location.origin } })}
     />
   )
 }
 
 // The map-first screen: the map is everything; windows, panels, the scrub bar and the forecast drop in over it.
-export function Monitor({ getToken, onLogout }: { getToken: () => Promise<string | undefined>; onLogout: () => void }) {
+export function Monitor({ getToken, onLogout, profile }: { getToken: () => Promise<string | undefined>; onLogout: () => void; profile?: { name?: string | null; picture?: string | null } }) {
   useFeed(getToken)
   useFollowState()
   useEffect(() => {
     bindDetailSender((m) => adapter?.send(m))
     bindBriefingAuth(getToken)
     bindYachtsAuth(getToken)
+    bindCollabAuth(getToken)
+    const unbindSocket = bindSocket()
+    if (profile) void loadMe(profile)
     const off = onDetail(receiveDetail)
-    return () => { off(); bindDetailSender(null); bindBriefingAuth(null); bindYachtsAuth(null) }
+    return () => { off(); bindDetailSender(null); bindBriefingAuth(null); bindYachtsAuth(null); bindCollabAuth(null); unbindSocket() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (
@@ -67,6 +77,7 @@ export function Monitor({ getToken, onLogout }: { getToken: () => Promise<string
       <WindowsRoot onLogout={onLogout} />
       <BriefingPanel />
       <Review />
+      <Presence />
       <ReplayChrome />
       <ScrubBar />
       <ThemeMenu />

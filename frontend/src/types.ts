@@ -92,4 +92,7 @@ export type ServerMsg =
 export type ClientMsg =
   | { type: "subscribe"; bbox: [[number, number], [number, number]]; min_status?: Status }
   | { type: "replay"; action: "play" | "pause" | "seek" | "speed" | "live"; t?: number; speed?: number }
-  | { type: "detail"; mmsi: number };
+  | { type: "detail"; mmsi: number }
+  | { type: "session_join"; session_id: string; dev_user?: string }   // collaboration (src/collab/socket.ts)
+  | { type: "session_leave" }
+  | { type: "presence"; viewing: number | null; following: number[]; bbox: [number, number, number, number] | null; private: boolean };
