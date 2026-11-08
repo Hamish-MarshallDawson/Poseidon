@@ -21,6 +21,7 @@ function onKey(e: KeyboardEvent) {
   if (inWindow) closeShipWindow(Number(inWindow.dataset.mmsi))
   else if (s.layersOpen) ui.set({ layersOpen: false })
   else if (s.watchlistOpen) ui.set({ watchlistOpen: false })
+  else if (s.reviewOpen) ui.set({ reviewOpen: false })
   else if (s.legendOpen) ui.set({ legendOpen: false })
   else if (s.focusMmsi !== null) ui.set({ focusMmsi: null, focusRelated: [] })
   else if (s.frontMmsi !== null) closeShipWindow(s.frontMmsi)
