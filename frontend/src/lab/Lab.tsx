@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { lab } from './api'
+import { lab, offline } from './api'
 import { useLab } from './useLab'
 import { Home } from './home/Home'
 import { ModelPage } from './ModelPage'
@@ -16,7 +16,7 @@ export function Lab({ onClose }: { onClose: () => void }) {
   const route = useLabRoute()
   const closeRef = useRef<HTMLButtonElement>(null)
   const modelRef = useRef(route.model)
-  modelRef.current = route.model
+  useEffect(() => { modelRef.current = route.model }, [route.model])
   useEffect(() => {
     closeRef.current?.focus()
     const onKey = (e: KeyboardEvent) => {
@@ -29,9 +29,11 @@ export function Lab({ onClose }: { onClose: () => void }) {
     document.body.style.overflow = 'hidden'
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
   }, [onClose])
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { bodyRef.current?.scrollTo?.({ top: 0 }) }, [route.model])
   const loadDetail = useCallback(async (id: string) => (await lab.run(id)).value, [])
   return (
-    <div className="lab" role="dialog" aria-modal="true" aria-labelledby="lab-title">
+    <div ref={bodyRef} className="lab" role="dialog" aria-modal="true" aria-labelledby="lab-title">
       <header className="lab-head">
         <nav className="lab-head__title" aria-label="Model Lab">
           <h1 id="lab-title">
@@ -42,7 +44,7 @@ export function Lab({ onClose }: { onClose: () => void }) {
           {!route.model && <p>Three models that learn from our own feed. Each new version must beat the current one on a frozen test before it goes live.</p>}
         </nav>
         <div className="lab-head__meta">
-          {state.sample && <span className="lab-tag" title={state.errors.join('\n') || undefined}>Sample data</span>}
+          {state.sample && <span className="lab-tag" role="status" title={state.errors.join('\n') || undefined}>{offline() ? 'Sample data' : 'Server unreachable: sample data'}</span>}
           {state.summary && <span className="lab-muted">Updated {when(state.sample ? state.summary.generated_at : state.now)}</span>}
           <button ref={closeRef} type="button" className="lab-close" onClick={onClose} aria-label="Close the Model Lab and return to the map">
             <span aria-hidden>×</span> Map

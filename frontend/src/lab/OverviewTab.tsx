@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { championRun, championSeries, godarkLive, heldOut, modelView, routeLive, type RichSummary } from './model'
 import { Chart, Legend, Markers, RefLine, Step, extent, pad, timeFull } from './charts'
 import { StatusLine } from './Status'
@@ -67,7 +68,7 @@ function ChampionChart({ target, name, series, metrics, champion, h, sameStat }:
         && r.median_err_m != null && r.baseline_median_err_m)
         .map((r) => ({ x: r.t, y: 1 - r.median_err_m! / r.baseline_median_err_m!, n: r.n }))
     : []
-  const now = Date.now()
+  const [now] = useState(() => Date.now())
   const xs = [...series.map((p) => p.t), ...live.map((p) => p.x), now]
   const xd = pad(extent(xs), 0.04)
   const yd = pad(extent([0, ...series.map((p) => p.v), ...live.map((p) => p.y)]), 0.1)
