@@ -116,7 +116,7 @@ def cycle(targets: list[str], rounds: int, proposals: int, retrain: bool, do_dep
             status["recalibrate"] = {"error": repr(e)[:300]}
             log(f"recalibrate failed: {e!r}")
     if not retrain:
-        return status | {"finished": now()}
+        return maybe_score_fishing(status, log) | {"finished": now()}
     reg = open_registry(None)
     # Gemini only with a key of its own: GEMINI_API_KEY belongs to the live briefings (free-tier quota).
     ml_key = os.getenv("ML_GEMINI_API_KEY")
@@ -147,7 +147,13 @@ def cycle(targets: list[str], rounds: int, proposals: int, retrain: bool, do_dep
             st["trace"] = traceback.format_exc()[-1500:]
             log(f"{t}: failed: {e!r}")
         st["finished"] = now()
-    return status | {"finished": now()}
+    return maybe_score_fishing(status, log) | {"finished": now()}
+
+
+def maybe_score_fishing(status: dict, log) -> dict:
+    if os.getenv("ML_FISHING_SCORE") == "1":   # optional: live weekly fishing scores (ml.fishing.score)
+        status["fishing_score"] = fishing_score(log)
+    return status
 
 
 def fishing_score(log) -> dict:
@@ -194,8 +200,6 @@ def main(argv=None) -> None:
             return
         status = cycle([t for t in a.targets.split(",") if t], a.rounds, a.proposals, not a.no_retrain,
                        not a.no_deploy, a.models_dir, log=lambda m: print(f"[{now()}] {m}", flush=True))
-        if os.getenv("ML_FISHING_SCORE") == "1":   # optional: live weekly fishing scores (ml.fishing.score)
-            status["fishing_score"] = fishing_score(lambda m: print(f"[{now()}] {m}", flush=True))
     reports = DEFAULT_ARTIFACTS / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     (reports / "auto-status.json").write_text(json.dumps(status, indent=1, default=str))

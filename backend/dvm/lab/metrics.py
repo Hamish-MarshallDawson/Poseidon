@@ -496,14 +496,14 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                     other = pick_version({x["model_version"]: x["n"] for x in rows}, version)
             models.append({"target": key, "label": LABELS[key], "champion": champion, "offline": offline,
                            "live": live, "deployed": deployed, "note": note(live, deployed, other)})
+        last = max([x["created_at"] for x in runs] + [e["ts"] for e in events
+                                                       if e["kind"] in ("trained", "recalibrated")], default=None)
         for card in models:   # weekly live fishing scores (ml.fishing.score)
             if card["target"] == "fishing":
                 card["fishing_live"] = fish
                 if fish:
                     card["note"] = (f"scored {fish['scored_latest_week']} vessels this week; "
                                     f"{fish['graded']} weekly predictions graded so far")
-        last = max([x["created_at"] for x in runs] + [e["ts"] for e in events
-                                                       if e["kind"] in ("trained", "recalibrated")], default=None)
         return {"generated_at": now, "models": models, "cycle": {"state": "manual", "last": last, "next": None},
                 "totals": {"runs": len(runs), "proposals": proposals or 0, "graded_outcomes": totals["graded"],
                            "graded_outcomes_estimated": bool(totals["estimated"]),
