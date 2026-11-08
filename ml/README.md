@@ -96,13 +96,18 @@ it too, so the backend can find it without a database.
   calibration check is within its tolerance (5 points); and no stratum with n >= 30 is worse by more than 10%. Ties
   keep the champion. In the loop the winner must also win again with a second seed.
 - **Gemini** proposes configs only; the runner validates them against `config_schema` and logs every proposal,
-  accepted or rejected, in `model_proposals`.
+  accepted or rejected, in `model_proposals`, with `source` naming the model that made it.
+- **Gemini quota:** the key is shared with the site's briefings (free tier: 20 requests a day on gemini-3.5-flash).
+  Model: `GEMINI_MODEL`, default `gemini-3.5-flash-lite`. The loop makes at most `ML_GEMINI_DAILY_CAP` calls per UTC
+  day (default 6, one per round), counted in `ML_GEMINI_COUNTER` (default `/home/aiden/data/poseidon/gemini_calls.json`,
+  per machine). At the cap or on a 429, the round falls back to the dry-run list: proposer `default`, and a source
+  that says why. Other Gemini errors stop the loop.
 
 ## Registry tables (local)
 
 `model_runs (run_id, target, model, config, data_hash, train_from, train_to, metrics, artifact, proposer, parent_run,
 status, created_at, loop_id, round, git_sha)`, status `candidate | champion | rejected | retired` (retired: a former
 champion). `model_proposals (id, target, loop_id, round, proposer, proposal, valid, errors, run_id, rationale,
-created_at)`.
+created_at, source)`.
 
 Data: Danish Maritime Authority AIS archive; Global Fishing Watch (CC BY-NC 4.0); our own live AIS.

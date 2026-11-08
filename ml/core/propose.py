@@ -7,8 +7,11 @@ code. Promotion is decided by `evaluate.decide`, never by the proposer.
 from __future__ import annotations
 
 import copy
+import fcntl
 import json
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 import urllib.error
 import urllib.request
 
@@ -16,7 +19,11 @@ import jsonschema
 
 from ml.core.target import TargetSpec
 
-MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
+# The key's free tier is shared with the site's briefings (20 requests a day on gemini-3.5-flash), so the loop caps
+# its own calls per UTC day and counts them in a file (per machine).
+DEFAULT_DAILY_CAP = 6
+DRY_RUN_LABEL = "fixed dry-run list"
 URL = "https://generativelanguage.googleapis.com/v1beta/interactions"   # same API as backend/dvm/briefing
 TIMEOUT_S = 90
 MAX_RATIONALE = 300
@@ -24,6 +31,46 @@ MAX_RATIONALE = 300
 
 class ProposerError(Exception):
     pass
+
+
+class ProposerSkipped(ProposerError):
+    """Gemini was not asked or said no for quota reasons (429, or our own daily cap): fall back, don't stop."""
+
+
+def gemini_model() -> str:
+    from ml.core import env  # noqa: F401  (loads the repo .env)
+    return os.getenv("GEMINI_MODEL") or DEFAULT_MODEL
+
+
+def daily_cap() -> int:
+    return int(os.getenv("ML_GEMINI_DAILY_CAP", DEFAULT_DAILY_CAP))
+
+
+def counter_path() -> Path:
+    return Path(os.getenv("ML_GEMINI_COUNTER", "/home/aiden/data/poseidon/gemini_calls.json"))
+
+
+def take_call() -> int:
+    """Reserve one Gemini call for today (UTC), or raise ProposerSkipped at the cap. Returns today's count.
+    Locked so parallel loops on one machine share the count."""
+    p = counter_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    today = datetime.now(timezone.utc).date().isoformat()
+    with open(p, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        try:
+            d = json.loads(f.read() or "{}")
+        except ValueError:
+            d = {}
+        n = int(d.get(today, 0))
+        if n >= daily_cap():
+            raise ProposerSkipped(f"daily Gemini cap reached ({n}/{daily_cap()} calls today, ML_GEMINI_DAILY_CAP)")
+        d = {today: n + 1}
+        f.seek(0)
+        f.truncate()
+        f.write(json.dumps(d))
+    return n + 1
 
 
 def validate(spec: TargetSpec, cfg) -> list[str]:
@@ -103,13 +150,16 @@ def _post(payload: dict, key: str) -> dict:
         with urllib.request.urlopen(req, timeout=TIMEOUT_S) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise ProposerSkipped("Gemini returned 429 (quota exhausted; the key is shared with the briefings)") \
+                from None
         raise ProposerError(f"Gemini returned HTTP {e.code}") from None   # never echo the body: it can carry the key
     except (urllib.error.URLError, TimeoutError, OSError, ValueError):
         raise ProposerError("Gemini is unreachable or timed out") from None
 
 
-def gemini_proposals(spec: TargetSpec, summary: dict, k: int) -> list[dict]:
-    from ml.core import env  # noqa: F401  (loads the repo .env)
+def gemini_proposals(spec: TargetSpec, summary: dict, k: int, model: str | None = None) -> list[dict]:
+    model = model or gemini_model()
     key = os.getenv("GEMINI_API_KEY", "")
     if not key:
         raise ProposerError("GEMINI_API_KEY is not set (repo .env)")
@@ -117,8 +167,9 @@ def gemini_proposals(spec: TargetSpec, summary: dict, k: int) -> list[dict]:
         "type": "array", "items": {"type": "object", "required": ["config", "rationale"], "properties": {
             "config": _strip(spec.config_schema), "rationale": {"type": "string"}}}}}}
     facts = {"target": spec.name, "how_many": k, "config_schema": spec.config_schema, "summary": summary}
-    payload = {"model": MODEL, "system_instruction": SYSTEM, "input": json.dumps(facts, default=str),
+    payload = {"model": model, "system_instruction": SYSTEM, "input": json.dumps(facts, default=str),
                "response_format": {"type": "text", "mime_type": "application/json", "schema": schema}}
+    take_call()
     data = _post(payload, key)
     try:
         out = [st for st in data["steps"] if st.get("type") == "model_output"][-1]
@@ -134,8 +185,14 @@ def gemini_proposals(spec: TargetSpec, summary: dict, k: int) -> list[dict]:
     return clean
 
 
-def propose(spec: TargetSpec, summary: dict, k: int, round_: int, dry_run: bool) -> tuple[str, list[dict]]:
-    """(proposer label, proposals). Each proposal is {"config", "rationale"}; validate before running."""
+def propose(spec: TargetSpec, summary: dict, k: int, round_: int, dry_run: bool) -> tuple[str, str, list[dict]]:
+    """(proposer, source, proposals). proposer is the registry label (gemini | default); source names what made
+    them (the Gemini model, or the dry-run list and why). Each proposal is {"config", "rationale"}; validate before
+    running. A 429 or our daily cap falls back to the dry-run list instead of stopping the loop."""
     if dry_run:
-        return "default", dry_run_proposals(spec, k, round_)
-    return "gemini", gemini_proposals(spec, summary, k)
+        return "default", DRY_RUN_LABEL, dry_run_proposals(spec, k, round_)
+    model = gemini_model()
+    try:
+        return "gemini", model, gemini_proposals(spec, summary, k, model)
+    except ProposerSkipped as e:
+        return "default", f"{DRY_RUN_LABEL} (fallback: {model} skipped: {e})", dry_run_proposals(spec, k, round_)
