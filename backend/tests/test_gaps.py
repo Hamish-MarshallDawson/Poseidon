@@ -117,18 +117,12 @@ def test_whole_area_going_quiet_is_never_deliberate():
     assert gaps and {g["coverage_flag"] for g in gaps.values()} <= {"coverage_gap", "unknown"}
 
 
-def test_own_stall_overlapping_the_silence():
-    det = GapDetector()
-    det.note_stall(T0 + 20 * MIN, T0 + 25 * MIN)
-    gaps = latest(run(det, 90, fleet(), off_between(10, 80)))
-    assert [g["coverage_flag"] for g in gaps.values() if g["mmsi"] == TARGET] == ["own_stall"]
-
-
-def test_a_stall_noted_later_turns_an_open_gap_into_own_stall():
+def test_a_stall_noted_later_turns_an_open_gap_into_own_stall_only_if_it_explains_it():
     det = GapDetector()
     versions = run(det, 60, fleet(), off_between(10, 999))
     assert latest(versions)[next(iter(det.open.values()))["id"]]["coverage_flag"] == "deliberate_candidate"
-    more = det.note_stall(T0 + 15 * MIN, T0 + 18 * MIN)
+    assert det.note_stall(T0 + 15 * MIN, T0 + 18 * MIN) == []   # 3 of the 50 silent minutes: not explained
+    more = det.note_stall(T0 + 12 * MIN, T0 + 55 * MIN)           # now only 2 + 5 minutes are left outside
     assert [g["coverage_flag"] for g in more] == ["own_stall"] and more[0]["version"] == 2
 
 
@@ -189,3 +183,38 @@ def test_gap_rows_fit_the_gaps_table_and_repeat_writes_are_skipped():
     row = store.append_args("gaps", next(iter(g.values())))
     assert len(row) == len(store.APPEND_COLS["gaps"])
     assert store.GAPS_INSERT.endswith("ON CONFLICT (id, version) DO NOTHING")
+
+
+def test_a_short_restart_does_not_explain_a_long_silence():
+    det = GapDetector()
+    det.note_stall(T0 + 50 * MIN, T0 + 50 * MIN + 10_000)   # a 10 s deploy restart, 40 min into the silence
+    gaps = latest(run(det, 120, fleet(), off_between(10, 100)))
+    assert [g["coverage_flag"] for g in gaps.values() if g["mmsi"] == TARGET] == ["deliberate_candidate"]
+
+
+def test_an_outage_covering_most_of_the_silence_is_own_stall():
+    det = GapDetector()
+    det.note_stall(T0 + 12 * MIN, T0 + 70 * MIN)   # only 2 + 10 min of the 70 min silence fall outside it
+    gaps = latest(run(det, 120, fleet(), off_between(10, 80)))
+    assert [g["coverage_flag"] for g in gaps.values() if g["mmsi"] == TARGET] == ["own_stall"]
+
+
+def test_an_open_own_stall_gap_is_judged_normally_once_it_outgrows_the_outage():
+    det = GapDetector()
+    det.note_stall(T0 + 12 * MIN, T0 + 40 * MIN)
+    versions = run(det, 110, fleet(), off_between(10, 999))
+    flags = [g["coverage_flag"] for g in versions if g["mmsi"] == TARGET]
+    assert flags[0] == "own_stall" and flags[-1] == "deliberate_candidate"
+
+
+def test_a_ship_whose_speed_jitters_but_stays_put_gets_no_gap():
+    """In port the reported speed can read over 1 kn while the position doesn't move."""
+    det = GapDetector()
+    versions = []
+    for t in range(T0, T0 + 90 * MIN, 30_000):
+        versions += det.tick(t)
+        for m, (lat, lon, _) in fleet().items():
+            if m == TARGET and t >= T0 + 15 * MIN:
+                continue
+            versions += det.observe(fix(m, t, lat, lon if m == TARGET else lon + (t - T0) / 3.6e6 / 6, 2.5))
+    assert not [g for g in versions if g["mmsi"] == TARGET] and det.stats["not_moving"] >= 1
