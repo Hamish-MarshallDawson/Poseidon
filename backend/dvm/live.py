@@ -1,6 +1,8 @@
 """In-memory live state: the latest position and identity per vessel, and what changed since the last tick."""
 from __future__ import annotations
 
+import time
+
 from dvm.models import PositionReport, Record, VesselStatic, VesselView
 
 STATIC_FIELDS = ("imo", "name", "callsign", "ship_type", "type_group", "length_m", "beam_m", "draught_m",
@@ -17,6 +19,7 @@ class Live:
         self.changed: set[int] = set()
         self.gaps: dict[str, dict] = {}        # gap id -> latest version (dvm/gaps.py), open and recently closed
         self.open_gap: dict[int, str] = {}     # mmsi -> id of its open gap
+        self.forecast = None                   # dvm.predict.forecast.Forecast when PREDICT=1: risk, route predictions
 
     def apply(self, rec: Record) -> bool:
         """Update state. Returns True if the record is new information worth storing."""
@@ -46,7 +49,20 @@ class Live:
                           type_group=s.get("type_group", "unknown"), length_m=s.get("length_m"),
                           lat=p.lat, lon=p.lon, sog_kn=p.sog_kn, cog_deg=p.cog_deg, heading_deg=p.heading_deg,
                           last_ts=p.ts, status=self._status(mmsi), open_gap_id=self.open_gap.get(mmsi),
-                          cls=p.cls).model_dump()
+                          cls=p.cls, **self._risk(mmsi)).model_dump()
+
+    def _risk(self, mmsi: int) -> dict:
+        if self.forecast is None:
+            return {}
+        p, rank = self.forecast.risk_of(mmsi)
+        return {"risk_p": p, "risk_rank": rank}
+
+    def gap_out(self, g: dict, now_ms: int | None = None) -> dict:
+        """A gap as sent to browsers: with the newest route prediction (pred_* fields) while it is open, if any."""
+        if self.forecast is None or g["state"] != "open":
+            return g
+        extra = self.forecast.gap_fields(g["id"], now_ms or int(time.time() * 1000))
+        return {**g, **extra} if extra else g
 
     def _status(self, mmsi: int) -> str:
         """gap_open only when the open gap looks like the ship (deliberate_candidate); other open gaps are silent."""
@@ -62,7 +78,9 @@ class Live:
         """06 section 4.3 `detail` reply. shortcut: `statics` holds the merged current identity, not the last 5 records."""
         return {"type": "detail", "mmsi": mmsi, "vessel": self.view(mmsi),
                 "statics": [{"mmsi": mmsi, **self.static.get(mmsi, {})}],
-                "gaps": self.gaps_of(mmsi), "spoofs": [], "sanction": None, "score": None}
+                "gaps": [self.gap_out(g) for g in self.gaps_of(mmsi)], "spoofs": [], "sanction": None,
+                "score": self.forecast.score_of(mmsi) if self.forecast else None,
+                **({"route_prediction": rp} if self.forecast and (rp := self.forecast.route_block(mmsi)) else {})}
 
     def apply_gaps(self, events: list[dict]) -> None:
         """Gap versions from the detector: keep the latest per id and the ship's gap_open status."""
@@ -84,7 +102,7 @@ class Live:
 
     def snapshot_gaps(self, now_ms: int) -> list[dict]:
         """Open gaps, plus gaps closed in the last hour, for a browser that has just connected."""
-        return [g for g in self.gaps.values()
+        return [self.gap_out(g, now_ms) for g in self.gaps.values()
                 if g["state"] == "open" or (g["end_ts"] or 0) >= now_ms - CLOSED_SHOWN_MS]
 
     def take_changes(self, now_ms: int, stale_after_s: int) -> tuple[list[dict], list[int]]:
