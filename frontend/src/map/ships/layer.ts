@@ -1,7 +1,7 @@
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl'
 import type { Atlas, Sprite } from './sprites'
 import type { ShipState } from './state'
-import { clock, EXTRAP_S } from './state'
+import { clock, EXTRAP_S, shownS } from './state'
 
 // The ship hot path: one MapLibre custom layer drawing instanced quads from a typed array.
 // Measured against a symbol layer before choosing (see briefs/reports/map.md): with per-frame interpolation the
@@ -12,7 +12,7 @@ import { clock, EXTRAP_S } from './state'
 export const Colour = { Normal: 0, Selected: 1, Dark: 2, Spoof: 3, Sanctioned: 4, Keyline: 5, ClassA: 6, ClassB: 7 } as const
 export type Colour = (typeof Colour)[keyof typeof Colour]
 export const N_COLOURS = 8
-const STRIDE = 24   // floats per instance
+const STRIDE = 28   // floats per instance
 
 const VS = `#version 300 es
 layout(location=0) in vec4 a_p;     // x0 y0 x1 y1 (mercator)
@@ -21,7 +21,8 @@ layout(location=2) in vec4 a_hs;    // h0 dh  w h (css px)
 layout(location=3) in vec4 a_uv;    // u0 v0 u1 v1
 layout(location=4) in vec4 a_op;    // op0 op1 tFade rotate
 layout(location=5) in vec4 a_oc;    // offX offY colour fadeDuration
-uniform mat4 u_m; uniform float u_now; uniform vec2 u_vp; uniform float u_wrap;
+layout(location=6) in vec4 a_fx;    // fix time on the shown clock (s)
+uniform mat4 u_m; uniform float u_now; uniform float u_shown; uniform vec2 u_vp; uniform float u_wrap;
 uniform vec4 u_colors[8];
 out vec2 v_uv; out vec4 v_col; out float v_op;
 const vec2 C[6] = vec2[6](vec2(-.5,-.5), vec2(.5,-.5), vec2(-.5,.5), vec2(-.5,.5), vec2(.5,-.5), vec2(.5,.5));
@@ -29,8 +30,8 @@ void main() {
   vec2 c = C[gl_VertexID];
   float span = a_vt.w - a_vt.z;
   float e = span > 0. ? clamp((u_now - a_vt.z) / span, 0., 1.) : 1.;
-  float dt = clamp(u_now - a_vt.w, 0., ${EXTRAP_S}.);
-  vec2 pos = mix(a_p.xy, a_p.zw, e) + a_vt.xy * dt + vec2(u_wrap, 0.);
+  float dt = clamp(u_shown - a_fx.x, 0., ${EXTRAP_S}.);                  // dead reckoning from the fix's own time
+  vec2 pos = a_p.zw + a_vt.xy * dt + (a_p.xy - a_p.zw) * (1. - e * e * (3. - 2. * e)) + vec2(u_wrap, 0.);
   vec4 clip = u_m * vec4(pos, 0., 1.);
   float h = radians(a_hs.x + a_hs.y * e * e * (3. - 2. * e)) * a_op.w;
   vec2 o = c * a_hs.zw;                                    // y down = stern for a bow-up sprite
@@ -75,10 +76,10 @@ export class InstanceBuffer {
     if (slot >= 0) {
       d[i] = s.x0[slot]; d[i + 1] = s.y0[slot]; d[i + 2] = s.x1[slot]; d[i + 3] = s.y1[slot]
       d[i + 4] = s.vx[slot]; d[i + 5] = s.vy[slot]; d[i + 6] = s.t0[slot]; d[i + 7] = s.t1[slot]
-      d[i + 8] = s.h0[slot]; d[i + 9] = s.dh[slot]
+      d[i + 8] = s.h0[slot]; d[i + 9] = s.dh[slot]; d[i + 24] = s.tf[slot]
     } else {
       d[i] = d[i + 2] = x; d[i + 1] = d[i + 3] = y
-      d[i + 4] = d[i + 5] = d[i + 6] = d[i + 7] = d[i + 8] = d[i + 9] = 0
+      d[i + 4] = d[i + 5] = d[i + 6] = d[i + 7] = d[i + 8] = d[i + 9] = d[i + 24] = 0
     }
     d[i + 10] = sp.w * scale; d[i + 11] = sp.h * scale
     d[i + 12] = sp.u0; d[i + 13] = sp.v0; d[i + 14] = sp.u1; d[i + 15] = sp.v1
@@ -92,7 +93,7 @@ export function writeMotion(buf: InstanceBuffer, state: ShipState, inst: number,
   const d = buf.data, i = inst * STRIDE
   d[i] = state.x0[slot]; d[i + 1] = state.y0[slot]; d[i + 2] = state.x1[slot]; d[i + 3] = state.y1[slot]
   d[i + 4] = state.vx[slot]; d[i + 5] = state.vy[slot]; d[i + 6] = state.t0[slot]; d[i + 7] = state.t1[slot]
-  d[i + 8] = state.h0[slot]; d[i + 9] = state.dh[slot]
+  d[i + 8] = state.h0[slot]; d[i + 9] = state.dh[slot]; d[i + 24] = state.tf[slot]
 }
 
 export interface ShipLayerHooks {
@@ -121,11 +122,11 @@ export function createShipLayer(id: string, atlas: Atlas, buf: InstanceBuffer, h
       prog = gl.createProgram()!
       gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog)
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`ship program: ${gl.getProgramInfoLog(prog)}`)
-      for (const n of ['u_m', 'u_now', 'u_vp', 'u_wrap', 'u_colors', 'u_tex', 'u_key']) u[n] = gl.getUniformLocation(prog, n)
+      for (const n of ['u_m', 'u_now', 'u_shown', 'u_vp', 'u_wrap', 'u_colors', 'u_tex', 'u_key']) u[n] = gl.getUniformLocation(prog, n)
       vbo = gl.createBuffer()!
       vao = gl.createVertexArray()!
       gl.bindVertexArray(vao); gl.bindBuffer(gl.ARRAY_BUFFER, vbo)
-      for (let a = 0; a < 6; a++) {
+      for (let a = 0; a < 7; a++) {
         gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 4, gl.FLOAT, false, STRIDE * 4, a * 16); gl.vertexAttribDivisor(a, 1)
       }
       gl.bindVertexArray(null)
@@ -162,6 +163,7 @@ export function createShipLayer(id: string, atlas: Atlas, buf: InstanceBuffer, h
       gl.bindVertexArray(vao)
       gl.uniformMatrix4fv(u.u_m, false, args.defaultProjectionData.mainMatrix as Float32Array)   // mercator 0..1 → clip
       gl.uniform1f(u.u_now, now)
+      gl.uniform1f(u.u_shown, shownS())
       const canvas = map.getCanvas()
       gl.uniform2f(u.u_vp, canvas.clientWidth, canvas.clientHeight)
       gl.uniform4fv(u.u_colors, colours.list)
