@@ -298,7 +298,9 @@ export class ShipController {
   private view(): View | null {
     const map = this.map
     if (!map) return null
-    const c = map.getCenter(), zoom = map.getZoom(), canvas = map.getCanvas()
+    const canvas = map.getCanvas(), zoom = map.getZoom()
+    // Not getCenter(): flyTo({ padding }) leaves padding on the camera, which moves the centre off the canvas midpoint.
+    const c = map.unproject([canvas.clientWidth / 2, canvas.clientHeight / 2])
     const tier = sizeTier(zoom)
     return { cx: mercX(c.lng), cy: mercY(c.lat), worldSize: 512 * 2 ** zoom, width: canvas.clientWidth, height: canvas.clientHeight, zoom, hullPx: HULL_LEN[tier] }
   }
