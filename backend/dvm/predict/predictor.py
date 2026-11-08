@@ -25,7 +25,7 @@ from typing import Iterable, Optional
 
 import asyncpg
 
-from dvm.predict import artifact, features as F, grader, schema
+from dvm.predict import artifact, features as F, forecast as FC, grader, schema
 
 log = logging.getLogger(__name__)
 
@@ -80,19 +80,24 @@ def route_rows(model, mmsi: int, track: F.Track, as_of: int, made_at: int, stati
     return out
 
 
+PRIMARY_H = 21600   # dark_6h, the frontend's primary target: its row carries the feature snapshot
+
+
 def godark_rows(model, mmsi: int, track: F.Track, made_at: int, static: Optional[dict], mode: str) -> list[dict]:
-    """`scores` rows, one per horizon. The full feature snapshot goes on the shortest horizon's row only (the others
-    point at it), which keeps the table small: the features are the same for every horizon."""
+    """`scores` rows, one per horizon. The full feature snapshot goes on the dark_6h row only (the others point at
+    it), which keeps the table small: the features are the same for every horizon. `contrib` holds the model's top
+    contributions per horizon (empty for the baseline)."""
     feats = F.features_at(track, made_at, static)
     if feats is None:
         return []
     ps = model.predict(feats)
-    first = min(ps)
+    contrib = model.contributions(feats)
+    main = PRIMARY_H if PRIMARY_H in ps else min(ps)
     ids = {h: f"score-{mmsi}-dark_{h // 3600}h-{made_at}" for h in ps}
     snap = {k: (round(v, 6) if isinstance(v, float) else v) for k, v in feats.items()}
     return [{"id": ids[h], "mmsi": mmsi, "target": f"dark_{h // 3600}h", "made_at": made_at, "horizon_s": h,
              "p": float(p), "model_version": model.version, "feature_version": model.feature_version,
-             "features": snap if h == first else {"same_as": ids[first]}, "contrib": None, "mode": mode}
+             "features": snap if h == main else {"same_as": ids[main]}, "contrib": contrib.get(h) or {}, "mode": mode}
             for h, p in sorted(ps.items())]
 
 
@@ -108,10 +113,26 @@ def tracks_from_rows(rows: Iterable) -> dict[int, F.Track]:
     return {m: F.Track.from_rows(rs) for m, rs in by.items()}
 
 
+WARM_SCORES = ("SELECT id, mmsi, target, made_at, horizon_s, p, model_version, feature_version, features, contrib, mode "
+               "FROM scores WHERE time = (SELECT max(time) FROM scores WHERE time > to_timestamp($1::bigint / 1000.0) "
+               "AND target LIKE 'dark\\_%' AND mode = $2) AND target LIKE 'dark\\_%' AND mode = $2")
+WARM_ROUTES = (f"SELECT {', '.join(schema.ROUTE_COLS)} FROM route_predictions "
+               "WHERE time > to_timestamp($1::bigint / 1000.0) AND (gap_id = ANY($2::text[]) OR time > to_timestamp($3::bigint / 1000.0))")
+
+
 class Predictor:
     def __init__(self, url: str, model_dir: Optional[Path], interval_s: float = 300, sample_n: int = 150,
-                 max_gaps: int = 500, mode: str = "live", clock=now_ms, rng: Optional[random.Random] = None):
+                 max_gaps: int = 500, mode: str = "live", clock=now_ms, rng: Optional[random.Random] = None,
+                 score_n: int = 300, p_alert: float = 0.2, on_cycle=None):
+        """sample_n: active ships with a route prediction per cycle; score_n: ships with a go-dark score per cycle,
+        those scored longest ago first, so the ranking covers every moving ship within an hour or so. on_cycle is
+        called with the Forecast after every cycle (the Hub's frames)."""
         self.url, self.interval_s, self.sample_n, self.max_gaps, self.mode = url, interval_s, sample_n, max_gaps, mode
+        self.score_n = max(score_n, sample_n)
+        self.forecast = FC.Forecast(p_alert)
+        self.on_cycle = on_cycle
+        self._scored_at: dict[int, int] = {}
+        self._frozen_h: Optional[int] = None   # the newest hour whose frozen score set is written
         self.champions = artifact.Champions(model_dir)
         self.clock, self.rng = clock, rng or random.Random()
         self.pool: Optional[asyncpg.Pool] = None
@@ -131,6 +152,22 @@ class Predictor:
             await schema.setup(con)
             since = self.clock() - GAP_WINDOW_MS
             self._done_gaps = {(r["gap_id"], r["model_version"]) for r in await con.fetch(PREDICTED_GAPS, since)}
+            await self._warm_forecast(con)
+
+    async def _warm_forecast(self, con) -> None:
+        """After a restart: the newest scores of the last hour and the route predictions of open gaps (and of the
+        last 6 h), so the map's risk, watchlist and ghost circles are back before the first cycle."""
+        now = self.clock()
+        open_ids = [g["id"] for g in await con.fetch(OPEN_GAPS, now - GAP_WINDOW_MS) if g["state"] == "open"]
+        scores = []
+        for r in await con.fetch(WARM_SCORES, now - FC.RISK_TTL_MS, self.mode):
+            d = dict(r)
+            d["features"], d["contrib"] = (json.loads(d[k]) if isinstance(d[k], str) else d[k] for k in ("features", "contrib"))
+            scores.append(d)
+            self._scored_at[d["mmsi"]] = d["made_at"]
+            self._frozen_h = max(self._frozen_h or 0, d["made_at"])
+        routes = [dict(r) for r in await con.fetch(WARM_ROUTES, now - GAP_WINDOW_MS, open_ids, now - FC.ROUTE_TTL_MS)]
+        self.forecast.update(scores, routes, set(open_ids), now)
 
     async def close(self) -> None:
         if self.pool:
@@ -201,11 +238,13 @@ class Predictor:
                       if r["mmsi"] not in in_gap and _moving(r)]
             if isinstance(godark, artifact.GodarkBaseline):
                 await self._base_rate(con, godark, now)
-            sample = self.rng.sample(active, min(self.sample_n, len(active)))
-            mmsis = [g["mmsi"] for g in todo] + [r["mmsi"] for r in sample]
+            self.rng.shuffle(active)   # ties (never scored) in random order
+            to_score = sorted(active, key=lambda r: self._scored_at.get(r["mmsi"], 0))[: self.score_n]
+            sample = {r["mmsi"] for r in self.rng.sample(to_score, min(self.sample_n, len(to_score)))}
+            mmsis = [g["mmsi"] for g in todo] + [r["mmsi"] for r in to_score]
             statics = await self._statics(con, mmsis, now)
             gap_tracks = await self._tracks(con, [g["mmsi"] for g in todo], [g["start_ts"] for g in todo])
-            act_tracks = await self._tracks(con, [r["mmsi"] for r in sample], [now] * len(sample))
+            act_tracks = await self._tracks(con, [r["mmsi"] for r in to_score], [now] * len(to_score))
 
             routes, scores = [], []
             for g in todo:
@@ -213,27 +252,41 @@ class Predictor:
                 if t is not None:   # no stored track (e.g. older than our data): nothing to predict from
                     routes += route_rows(route, g["mmsi"], t, g["start_ts"], now, statics.get(g["mmsi"]), g["id"],
                                          self.mode)
-            for r in sample:
+            for r in to_score:
                 t = act_tracks.get(r["mmsi"])
+                self._scored_at[r["mmsi"]] = now
                 if t is None:
                     continue
-                routes += route_rows(route, r["mmsi"], t, now, now, statics.get(r["mmsi"]), None, self.mode)
+                if r["mmsi"] in sample:
+                    routes += route_rows(route, r["mmsi"], t, now, now, statics.get(r["mmsi"]), None, self.mode)
                 scores += godark_rows(godark, r["mmsi"], t, now, statics.get(r["mmsi"]), self.mode)
+            self.forecast.update(scores, routes, {g["id"] for g in gap_rows}, now)
+            hour = now // H_MS * H_MS
+            frozen = self.forecast.frozen_set(hour) if self._frozen_h is None or hour > self._frozen_h else []
             async with con.transaction():
                 if routes:
                     await con.executemany(schema.ROUTE_INSERT, [tuple(x[c] for c in schema.ROUTE_COLS) for x in routes])
-                if scores:
+                if frozen:
                     await con.executemany(schema.SCORE_INSERT, [
                         tuple(json.dumps(x[c]) if c in ("features", "contrib") and x[c] is not None else x[c]
-                              for c in schema.SCORE_COLS) for x in scores])
+                              for c in schema.SCORE_COLS) for x in frozen])
+            self._frozen_h = max(self._frozen_h or 0, hour)
             self._done_gaps |= {(g["id"], route.version) for g in todo}
+            if len(self._scored_at) > 50_000:   # ships long gone
+                self._scored_at = {m: t for m, t in self._scored_at.items() if t > now - 6 * H_MS}
             graded = await grader.grade_all(con, now)
-        counts = {"gaps": len(todo), "active": len(sample), "route_rows": len(routes), "score_rows": len(scores),
+        if self.on_cycle:
+            try:
+                self.on_cycle(self.forecast)
+            except Exception as e:  # noqa: BLE001 - the frames are a view; the ledger is already written
+                log.warning("Forecast hand-over to the map failed: %s", e)
+        counts = {"gaps": len(todo), "active": len(to_score), "route_sample": len(sample), "route_rows": len(routes),
+                  "scored": len(scores), "score_rows": len(frozen),
                   "graded": graded}
         s = self.status
         s.update(state="running", last_cycle_ms=now, last_cycle_s=round(time.monotonic() - t0, 2), last_error=None,
                  cycles=s["cycles"] + 1, route_rows=s["route_rows"] + len(routes),
-                 score_rows=s["score_rows"] + len(scores), graded=s["graded"] + sum(graded.values()))
+                 score_rows=s["score_rows"] + len(frozen), graded=s["graded"] + sum(graded.values()))
         return counts
 
     async def run(self) -> None:

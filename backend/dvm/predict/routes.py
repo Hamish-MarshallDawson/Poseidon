@@ -12,10 +12,15 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 from typing import Callable, Optional
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
+
+from dvm import gaps as gaps_mod
+from dvm.predict import forecast as FC
 
 H_MS = 3_600_000
 
@@ -48,6 +53,57 @@ LIVE_DARK = ("SELECT o.target, o.model_version, o.horizon_s, count(*) AS n, coun
              "GROUP BY 1, 2, 3 ORDER BY 3, 2")
 
 
+SCORE_SET = ("SELECT id, mmsi, target, made_at, horizon_s, p, model_version, features, contrib, mode FROM scores "
+             "WHERE target = $1 AND time = (SELECT max(time) FROM scores WHERE target = $1 "
+             "AND time <= to_timestamp($2::bigint / 1000.0) AND time > to_timestamp($3::bigint / 1000.0)) "
+             "ORDER BY p DESC, mmsi")
+OUTCOMES = ("SELECT score_id, mmsi, made_at, resolved_at, label, censored, lead_s FROM outcomes WHERE target = $1 "
+            "AND made_at + horizon_s::bigint * 1000 + $4::bigint BETWEEN $2 AND $3 ORDER BY made_at, score_id LIMIT $5")
+TL_GAPS = ("SELECT * FROM (SELECT DISTINCT ON (id) id, mmsi, start_ts, end_ts FROM gaps "
+           "WHERE start_ts <= $2 AND start_ts > $1 - 86400000::bigint AND ($3::int IS NULL OR mmsi = $3) "
+           "ORDER BY id, version DESC) g WHERE end_ts IS NULL OR end_ts >= $1 ORDER BY start_ts DESC LIMIT $4")
+TL_FREEZES = ("SELECT DISTINCT made_at FROM scores WHERE target = $3 AND time >= to_timestamp($1::bigint / 1000.0) "
+              "AND time <= to_timestamp($2::bigint / 1000.0) ORDER BY made_at")
+HISTORY_RANGE = ("SELECT (SELECT ts FROM positions ORDER BY time LIMIT 1) AS t0, "
+                 "(SELECT ts FROM positions ORDER BY time DESC LIMIT 1) AS t1")
+RESOLVE_LAG_MS = 30 * 60_000      # the frontend's RESOLVE_LAG_MS: an outcome is due made_at + horizon + 30 min
+TIMELINE_MAX = 5000
+CENSORED_TS = {"coverage_gap": "coverage_gap", "unknown": "coverage_gap", "own_stall": "own_stall",
+               "no_truth": "data_end", "data_end": "data_end", "already_dark": "already_dark"}
+
+
+def outcome_ts(o) -> dict:
+    """An outcomes row as the frontend's Outcome. A censored row keeps label miss/hit and says why in `censored`
+    (our `unknown`, open sea with no neighbours to compare, maps to coverage_gap: we can't tell it from a hole)."""
+    return {"score_id": o["score_id"], "mmsi": o["mmsi"], "made_at": o["made_at"], "resolved_at": o["resolved_at"],
+            "label": "hit" if o["label"] else "miss",
+            "censored": CENSORED_TS.get(o["censored"], "coverage_gap") if o["censored"] else None,
+            "lead_s": o["lead_s"] if o["label"] else None}
+
+
+def coverage_spans(t0: Optional[int], t1: Optional[int], lo: int, hi: int,
+                   stalls: list[tuple[int, int]]) -> list[dict]:
+    """`coverage` timeline spans in [lo, hi]: stored history as `data`, our known outages inside it as `own_stall`."""
+    if t0 is None or t1 is None:
+        return []
+    a, b = max(lo, t0), min(hi, t1)
+    if a >= b:
+        return []
+    spans, edge = [], a
+    for s0, s1 in sorted(stalls):
+        s0, s1 = max(s0, a), min(s1, b)
+        if s1 <= s0 or s1 <= edge:
+            continue
+        s0 = max(s0, edge)
+        if s0 > edge:
+            spans.append((edge, s0, "data"))
+        spans.append((s0, s1, "own_stall"))
+        edge = s1
+    if edge < b:
+        spans.append((edge, b, "data"))
+    return [{"kind": "coverage", "id": f"cov-{x}-{y}", "start_ts": x, "end_ts": y, "state": st} for x, y, st in spans]
+
+
 def _clean(r) -> dict:
     d = dict(r)
     for k in ("config", "metrics"):
@@ -57,7 +113,9 @@ def _clean(r) -> dict:
 
 
 def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable[[], Optional[dict]],
-                require_login, clock: Callable[[], int] = lambda: int(time.time() * 1000)) -> APIRouter:
+                require_login, clock: Callable[[], int] = lambda: int(time.time() * 1000),
+                report_dir: Optional[Path] = None, stalls: Callable[[], list] = lambda: list(gaps_mod.KNOWN_STALLS)
+                ) -> APIRouter:
     r = APIRouter(dependencies=[Depends(require_login)])
 
     def _pool() -> asyncpg.Pool:
@@ -114,5 +172,60 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                 champions[x["target"]] = x["run_id"]
         return {"hours": hours, "runs": sorted(runs, key=lambda x: -x["created_at"]), "champions": champions,
                 "running": running(), "live_route": live_route, "live_godark": live_dark}
+
+    @r.get("/scores")
+    async def scores(as_of: Optional[int] = None, target: str = Query(FC.PRIMARY, pattern=r"^dark_(1|6|24)h$")) -> list:
+        """RiskScore[]: the newest frozen (hourly) score set at or before as_of (default now), ranked by p."""
+        t = as_of if as_of is not None else clock()
+        async with _pool().acquire() as con:
+            rows = await _fetch(con, SCORE_SET, target, t, t - 2 * H_MS)
+        out = []
+        for i, x in enumerate(rows, 1):
+            d = dict(x)
+            for k in ("features", "contrib"):
+                d[k] = json.loads(d[k]) if isinstance(d[k], str) else (d[k] or {})
+            out.append(FC.risk_score(d, i))
+        return out
+
+    @r.get("/outcomes")
+    async def outcomes(from_ts: int, to_ts: int, target: str = Query(FC.PRIMARY, pattern=r"^dark_(1|6|24)h$")) -> list:
+        """Outcome[] of frozen scores whose window closed (made_at + horizon + 30 min) in [from_ts, to_ts]."""
+        if to_ts < from_ts:
+            raise HTTPException(422, "to_ts is before from_ts")
+        async with _pool().acquire() as con:
+            rows = await _fetch(con, OUTCOMES, target, from_ts, to_ts, RESOLVE_LAG_MS, 50_000)
+        return [outcome_ts(o) for o in rows]
+
+    @r.get("/timeline")
+    async def timeline(from_ts: int, to_ts: int, mmsi: Optional[int] = None) -> list:
+        """TimelineEvent[] in [from_ts, to_ts]: gaps (latest version, newest 5,000), dark_6h outcomes, hourly forecast
+        freezes and coverage spans. No spoof or meeting events: there is no detector for them yet."""
+        if to_ts < from_ts:
+            raise HTTPException(422, "to_ts is before from_ts")
+        async with _pool().acquire() as con:
+            gap_rows = await _fetch(con, TL_GAPS, from_ts, to_ts, mmsi, TIMELINE_MAX)
+            outs = await _fetch(con, OUTCOMES, FC.PRIMARY, from_ts, to_ts, RESOLVE_LAG_MS, TIMELINE_MAX)
+            freezes = await _fetch(con, TL_FREEZES, from_ts, to_ts, FC.PRIMARY)
+            span = await con.fetchrow(HISTORY_RANGE)
+        ev = [{"kind": "gap", "id": g["id"], "mmsi": g["mmsi"], "start_ts": g["start_ts"], "end_ts": g["end_ts"]}
+              for g in gap_rows]
+        ev += [{"kind": "freeze", "id": f"freeze-{f['made_at']}", "ts": f["made_at"]} for f in freezes]
+        ev += [{"kind": "outcome", "id": f"out-{o['score_id']}", "mmsi": o["mmsi"], "ts": o["resolved_at"],
+                "label": "censored" if o["censored"] else ("hit" if o["label"] else "miss")}
+               for o in outs if mmsi is None or o["mmsi"] == mmsi]
+        ev += coverage_spans(span["t0"], span["t1"], from_ts, to_ts, stalls())
+        return ev
+
+    @r.get("/model/report", response_class=HTMLResponse)
+    async def model_report() -> HTMLResponse:
+        """The newest training report HTML (ml.core.report) in PREDICT_REPORT_DIR, or 404."""
+        files = []
+        if report_dir and report_dir.is_dir():
+            files = [f for f in report_dir.rglob("*.html") if f.is_file()]
+        if not files:
+            raise HTTPException(404, "no training report yet")
+        newest = max(files, key=lambda f: f.stat().st_mtime)
+        return HTMLResponse(newest.read_text(encoding="utf-8", errors="replace"),
+                            headers={"X-Report-File": newest.name})
 
     return r

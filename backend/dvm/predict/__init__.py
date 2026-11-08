@@ -10,7 +10,7 @@ from typing import Optional
 _running = None   # the running Predictor, if any (for /health and the leaderboard)
 
 
-async def start(store) -> None:
+async def start(store, on_cycle=None) -> None:
     """Wait for the store's setup (outcomes and the append-only trigger must exist), then run the predictor."""
     global _running
     from dvm import config
@@ -18,7 +18,8 @@ async def start(store) -> None:
 
     while store.pool is None:
         await asyncio.sleep(1)
-    _running = Predictor(store.url, config.PREDICT_MODEL_DIR, config.PREDICT_INTERVAL_S, config.PREDICT_SAMPLE)
+    _running = Predictor(store.url, config.PREDICT_MODEL_DIR, config.PREDICT_INTERVAL_S, config.PREDICT_SAMPLE,
+                         score_n=config.PREDICT_SCORE_SAMPLE, p_alert=config.PREDICT_P_ALERT, on_cycle=on_cycle)
     try:
         await _running.run()
     finally:

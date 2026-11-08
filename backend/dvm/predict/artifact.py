@@ -40,6 +40,7 @@ log = logging.getLogger(__name__)
 
 ROUTE_HORIZONS_S = (3600, 3 * 3600, 6 * 3600, 24 * 3600)
 GODARK_HORIZONS_S = (3600, 6 * 3600, 24 * 3600)
+CONTRIB_TOP = 5                          # contributions kept per go-dark score
 ROUTE_BASELINE_VERSION = "baseline-dr-v1"
 GODARK_BASELINE_VERSION = "baseline-rate-v1"
 
@@ -89,6 +90,9 @@ class GodarkBaseline:
 
     def predict(self, feats: Mapping) -> dict[int, float]:
         return {h: 1 - math.exp(-self.rate_per_h * h / 3600) for h in self.horizons_s}
+
+    def contributions(self, feats: Mapping) -> dict[int, dict[str, float]]:
+        return {}   # the same p for every ship: nothing to attribute
 
 
 class _Lgbm:
@@ -164,6 +168,16 @@ class GodarkModel(_Lgbm):
     def predict(self, feats: Mapping) -> dict[int, float]:
         x = self._row(feats)
         return {h: calibrate(float(b.predict(x)[0]), cal) for h, (b, cal) in self.heads.items()}
+
+    def contributions(self, feats: Mapping, top: int = CONTRIB_TOP) -> dict[int, dict[str, float]]:
+        """Per horizon, the features that moved this ship's raw score most (LightGBM's SHAP values, pred_contrib),
+        largest first. In the model's raw (log-odds) units, before calibration."""
+        x, out = self._row(feats), {}
+        for h, (b, _) in self.heads.items():
+            vals = b.predict(x, pred_contrib=True)[0][:-1]   # the last column is the bias
+            best = sorted(zip(self.features, vals), key=lambda kv: -abs(kv[1]))[:top]
+            out[h] = {k: round(float(v), 5) for k, v in best if v != 0}
+        return out
 
 
 def calibrate(raw: float, cal: Optional[Mapping]) -> float:
