@@ -25,6 +25,7 @@ from dvm.rawlog import RawLog
 from dvm.sources import digitraffic, schema as sources_schema
 from dvm.sources.routes import make_router as sources_router
 from dvm.store import Store
+from dvm.yachts.routes import make_router as yachts_router
 
 log = logging.getLogger("dvm")
 BAD_LOG_EVERY_S = 10
@@ -475,6 +476,7 @@ class _CurrentHub:
 app.include_router(briefing_router(_CurrentHub(), require_login))   # POST /briefing, POST /briefing/speech
 # GET /observations, /sources, /model/observations, /model/positions, /model/statics (dvm/sources/routes.py)
 app.include_router(sources_router(lambda: hub.store.pool if hub.store else None, require_login))
+app.include_router(yachts_router(lambda: hub.store.pool if hub.store else None, lambda: hub.live, require_login))   # GET /yachts (#101)
 
 
 @app.websocket("/ws")
