@@ -16,7 +16,7 @@ import { Colour, createShipLayer, InstanceBuffer, N_COLOURS, writeMotion, type S
 import { buildAtlas, hullKey, TIERS, TYPES, type HullType, type Sprite } from './sprites'
 import { CourseLine } from './course'
 import { shownNow } from '../../timeline/replay'
-import { ghostRadius } from '../../forecast/geo'
+import { ghostOf } from '../../forecast/geo'
 import { clock, setShownClock, ShipState } from './state'
 import { yachts, yachtBadge } from '../../yachts/store'
 import { showFilter } from '../../show/registry'
@@ -343,9 +343,10 @@ export class ShipController {
       if (g.state !== 'open' || g.start_ts > t || g.coverage_flag === 'own_stall') continue
       const dark = g.coverage_flag === 'deliberate_candidate'
       if (!dark && !picked.has(g.mmsi)) continue
-      const mpp = (40_075_016 * Math.cos((g.last_lat * Math.PI) / 180)) / view.worldSize
-      const p = map.project([g.last_lon, g.last_lat])
-      zones.push({ x: p.x, y: p.y, r: Math.max(14, ghostRadius(g, t) / mpp) })
+      const o = ghostOf(g, t)
+      const mpp = (40_075_016 * Math.cos((o.lat * Math.PI) / 180)) / view.worldSize
+      const p = map.project([o.lon, o.lat])
+      zones.push({ x: p.x, y: p.y, r: Math.max(14, (o.r95 ?? o.r) / mpp) })
     }
     if (!zones.length) return
     // Chips stay near their ships: only the gap's last fix (24 px disc) is protected, and a chip moves at most 40 px.

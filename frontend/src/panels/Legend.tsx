@@ -1,4 +1,5 @@
-import { useEffect, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { adapter } from '../data/index'
 import { briefing } from '../briefing/store'
 import { ui } from '../store/ui'
 import { useTheme } from '../theme/theme'
@@ -33,6 +34,14 @@ const MARK = { left: 17, top: 3, width: 12, height: 32 }
 
 function Tile({ children, replay }: { children?: ReactNode; replay?: boolean }) {
   return <span className={`tile ${replay ? 'tile-replay' : ''}`} aria-hidden>{children}</span>
+}
+
+// "How the forecast is made": shown only when the backend serves its model report (checked once).
+let reportUrl: Promise<string | null> | undefined
+function ReportLink() {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => { reportUrl ??= adapter?.modelReport?.() ?? Promise.resolve(null); reportUrl.then(setUrl, () => {}) }, [])
+  return url ? <a className="lg-link" href={url} target="_blank" rel="noopener noreferrer">How the forecast is made</a> : null
 }
 
 function Entry({ label, children, extra }: { label: string; children: ReactNode; extra?: ReactNode }) {
@@ -75,7 +84,7 @@ function LegendPanel() {
         <Entry label="Heard, inferred">
           <Tile><i className="g-heard" /><i className="g-inferred" /></Tile>
         </Entry>
-        <Entry label="Could be in here">
+        <Entry label="Could be in here" extra={<ReportLink />}>
           <Tile>
             <span className="g-ghost">
               {/* The hatch sheet's lines start 1,183 px in; Figma centres it 600 px right of the circle. */}
