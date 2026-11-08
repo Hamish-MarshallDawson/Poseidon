@@ -171,9 +171,12 @@ def _empty_metrics() -> dict:
             "decision": None, "seconds": None}
 
 
-def _decision(leg: dict, horizons: dict | None, calibration: list | None) -> dict:
+def _decision(leg: dict, comparison: dict | None, calibration: list | None) -> dict:
+    """A person's decision, not the rule's: no paired test was run, so `horizons` (the rule's per-horizon wins) is
+    empty and the plain skill comparison with the reference is in `comparison` (lo/hi/win null)."""
     return {"promote": leg["promote"], "against": leg["against"], "alpha": None, "n_comparisons": None,
-            "horizons": horizons, "calibration": calibration, "reasons": leg["reasons"], "by": "human"}
+            "horizons": {}, "comparison": comparison, "calibration": calibration, "reasons": leg["reasons"],
+            "by": "human"}
 
 
 def route_metrics(m: dict, leg: dict, ref: dict | None) -> dict:

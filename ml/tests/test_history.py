@@ -51,7 +51,8 @@ def test_route_conversion_fills_skill_calibration_and_decision():
     cal = {(c["horizon_s"], c["nominal"]): c for c in m["calibration"]}
     assert cal[(3600, 0.8)]["ok"] is True          # 0.81 within 0.05 of 0.80
     assert cal[(3600, 0.95)]["ok"] is True         # 0.90 within 0.05 of 0.95 (boundary)
-    d = m["decision"]["horizons"]["3600"]
+    assert m["decision"]["horizons"] == {}                 # no paired test: a person decided
+    d = m["decision"]["comparison"]["3600"]
     assert d["cand"] == 0.35 and d["ref"] == 0.30 and abs(d["diff"] - 0.05) < 1e-12 and d["lo"] is None
     assert m["decision"]["reasons"] == ["why"] and m["decision"]["by"] == "human"
     assert m["strata"] is None and m["cv"] is None
