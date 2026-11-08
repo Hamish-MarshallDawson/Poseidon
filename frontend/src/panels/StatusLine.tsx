@@ -10,8 +10,6 @@ import { fmtInt, minutes, utcTime } from '../windows/format'
 export function StatusLine() {
   const feed = ui.use((s) => s.feed)
   const view = ui.use((s) => s.view)
-  const focus = ui.use((s) => s.focusMmsi)
-  const related = ui.use((s) => s.focusRelated.length)
   const show = ui.use((s) => s.show)
   const heatLayer = ui.use((s) => s.layers.density && !s.follow)
   yachts.use((s) => s.byMmsi)   // the yachts filter counts from this list
@@ -19,12 +17,10 @@ export function StatusLine() {
   const stalled = feed.sources.some((s) => s.state === 'stall' || s.state === 'down')
 
   const parts = [
-    focus !== null
-      ? `Nearby ships · ${related} shown`
-      : `${fmtInt(view.shown)} of ${fmtInt(view.inView)} ${replay ? 'then' : 'ships in view'}`,   // replay wording per 68:16538
+    `${fmtInt(view.shown)} of ${fmtInt(view.inView)} ${replay ? 'then' : 'ships in view'}`,   // replay wording per 68:16538
   ]
-  if (focus === null && view.stacked) parts.push(`${fmtInt(view.stacked)} in stacks`)
-  if (focus === null && heatLayer && show === 'all' && view.zoom < HEAT_FADE[1]) parts.push(`heat map: ${fmtInt(view.inView)} ships`)
+  if (view.stacked) parts.push(`${fmtInt(view.stacked)} in stacks`)
+  if (heatLayer && show === 'all' && view.zoom < HEAT_FADE[1]) parts.push(`heat map: ${fmtInt(view.inView)} ships`)
   if (view.noCoverageCells) parts.push(`${fmtInt(view.noCoverageCells)} cells without coverage`)
   if (stalled) parts.push('our feed paused')
 

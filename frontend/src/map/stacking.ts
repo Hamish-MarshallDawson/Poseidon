@@ -7,8 +7,7 @@ export const OPACITY = { full: 1, routine: 0.8, trace: 0.2 }   // Context = --dv
 export interface Rank { decision: 'inspect' | 'watch' | 'none'; rank: number }
 
 // Z tier 1..8 (tier 0, the selected/focused/hovered ship, is drawn after everything and never sorted).
-export function zTier(v: VesselView, related: boolean, rank: Rank | undefined): number {
-  if (related) return 1
+export function zTier(v: VesselView, rank: Rank | undefined): number {
   if (rank?.decision === 'inspect') return 2
   if (v.status === 'gap_open') return 3
   if (rank?.decision === 'watch') return 4

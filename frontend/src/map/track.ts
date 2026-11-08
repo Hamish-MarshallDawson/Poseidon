@@ -5,7 +5,7 @@ import { TRAIL_MS, vessels } from '../store/vessels'
 import { shownNow } from '../timeline/replay'
 import { onTokensChange, readToken } from '../theme/tokens'
 
-// Past track of every selected ship (an open ship window, or the focused ship): one GeoJSON source, drawn as a solid
+// Past track of every selected ship (an open ship window): one GeoJSON source, drawn as a solid
 // accent line with a thin bg/app casing that fades with age, a dot at each fix, a start ring and an oldest-time label.
 // Data: the store's trail (live detail trail + deltas), prepended with GET /track (24 h) once per ship.
 
@@ -133,7 +133,6 @@ export class TrackRenderer {
       return
     }
     const sel = new Set<number>(s.windows.map((w) => w.mmsi))
-    if (s.focusMmsi != null) sel.add(s.focusMmsi)
     const features: GeoJSON.Feature[] = []
     const nowMs = vessels.now_ts || Date.now()
     for (const mmsi of sel) {
