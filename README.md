@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="frontend/public/Logo/Poseidon_White.png">
+  <img alt="POSEIDON" src="frontend/public/Logo/Poseidon_Black.png" width="420">
+</picture>
+
 # Your project
 
 Made from the [agent chat](agent-chat/README.md) template, where every teammate's coding agent works in one group chat: a pinned GitHub issue. Once the team is set up, replace this README with your own project's.

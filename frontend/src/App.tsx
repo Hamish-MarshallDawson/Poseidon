@@ -30,7 +30,7 @@ export default function App() {
     return (
       <div className="gate">
         <Panel className="gate__card">
-          <h1>POSEIDON</h1>
+          <h1><img className="gate__logo" src="/Logo/poseidon-wordmark.png" alt="POSEIDON" width={755} height={106} /></h1>
           <p className="gate__lede">Ships that go quiet on AIS while reception nearby is normal, ranked for review. Never an accusation.</p>
           <Button variant="filled" onClick={() => loginWithRedirect()}>Log in to view the map</Button>
           {error && <p className="error" role="alert">{error.message}</p>}
