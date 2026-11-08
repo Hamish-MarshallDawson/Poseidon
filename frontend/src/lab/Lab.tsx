@@ -45,7 +45,7 @@ export function Lab({ onClose }: { onClose: () => void }) {
         </div>
       </header>
       <main className="lab-body">
-        <Overview summary={state.summary} />
+        <Overview summary={state.summary} runs={state.runs ?? []} />
         <Section id="improve" title="How it improved" lede="Each step is a promotion: a run that beat the champion on the frozen held-out set. Live results on our feed are drawn over it.">
           {state.summary && state.runs && state.events
             ? <Improve summary={state.summary} runs={state.runs} events={state.events} metrics={state.metrics} proposals={state.proposals ?? []} />

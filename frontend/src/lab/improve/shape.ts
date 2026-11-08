@@ -2,10 +2,14 @@
 // event markers with their tooltip text, and the recalibration log. Pure functions over the /lab/* contract (lab.md),
 // typed structurally so they accept lab-shell's full types.
 
+import { byHandLine, promotionWhy, verdict, type DecisionLike } from '../decision'
+import { sameModel } from '../live/shape'
+import { heldOutBrier, lossSkillName } from '../skill'
+
 export type ModelKey = 'route' | 'godark' | 'fishing'
 
 export interface SkillAt { n?: number | null; skill: number | null; skill_lo?: number | null; skill_hi?: number | null }
-export interface Decision { promote?: boolean | null; against?: string | null; reasons?: string[] | null; horizons?: Record<string, { win?: boolean | null }> | null }
+export type Decision = DecisionLike
 export interface RunLike {
   run_id: string
   target: string
@@ -15,7 +19,7 @@ export interface RunLike {
   parent_run?: string | null
   created_at: number
   config?: Record<string, unknown> | null
-  metrics?: { skill?: Record<string, SkillAt> | null; decision?: Decision | null } | null
+  metrics?: { skill?: Record<string, SkillAt> | null; summary?: Record<string, Record<string, unknown> | null | undefined> | null; loss_name?: string | null; decision?: Decision | null } | null
 }
 export interface EventLike { ts: number; target: string; kind: string; run_id?: string | null; version?: string | null; label?: string | null; detail?: Record<string, unknown> | null }
 export interface ProposalLike { id: string; target: string; created_at: number; proposer?: string | null; rationale?: string | null; run_id?: string | null; outcome?: string | null; valid?: boolean | null; errors?: string[] | null; proposal?: unknown }
@@ -24,7 +28,7 @@ export interface ModelSummaryLike {
   label?: string
   champion: { run_id?: string | null; version: string; since?: number | null; proposer?: string | null }
   offline: { primary_h: number; skill: number | null; skill_lo?: number | null; skill_hi?: number | null; holdout?: string | null }
-  live?: { hours?: number; n?: number; primary?: { name: string; value: number | null; ref_label?: string } | null } | null
+  live?: { hours?: number; n?: number; model_version?: string | null; target?: string | null; primary?: { name: string; value: number | null; ref_label?: string } | null } | null
 }
 export interface RouteRowLike { t: number; mode?: string | null; model_version: string; horizon_s: number; n: number; skill: number | null }
 export interface GodarkRowLike { t: number; mode?: string | null; target: string; model_version: string; n: number; brier_skill: number | null }
@@ -50,24 +54,42 @@ export interface Step { t: number; value: number | null; lo: number | null; hi: 
 
 const base = (v: string) => v.replace(/-cal\d+$/, '')
 
+/** The statistic the Improve chart plots for a model, the same one it is graded on live: go-dark's held-out values
+ *  are Brier skill (metrics.summary), not the log-loss skill its run records score; route and fishing use metrics.skill. */
+export function offlineStatName(model: ModelSummaryLike, runs: RunLike[]): string {
+  if (modelKey(model.target) === 'godark') return 'Brier skill'
+  const run = runs.find((r) => r.run_id === model.champion.run_id)
+  return lossSkillName(run?.metrics?.loss_name)
+}
+
 /** The champion's offline primary skill over time: one step per promotion or deployment (a recalibration keeps the
  *  offline skill but changes the version), ending with the current champion. Values come from the run record, then
- *  the event's `skill_<h>h` detail, then the summary (for the current champion and its earlier, uncalibrated self). */
+ *  the event's `skill_<h>h` detail, then the summary (for the current champion and its earlier, uncalibrated self).
+ *  Go-dark uses the held-out Brier skill from the run's metrics.summary only, so it shares an axis with live Brier skill. */
 export function championSteps(model: ModelSummaryLike, runs: RunLike[], events: EventLike[]): Step[] {
   const key = modelKey(model.target)
   const h = model.offline.primary_h
   const byId = new Map(runs.map((r) => [r.run_id, r]))
   const cur = model.champion
+  const isCur = (version: string) => base(version) === base(cur.version) || (cur.run_id != null && version === cur.run_id)
+  const none = { value: null, lo: null, hi: null }
+  const brier = (run: RunLike | undefined) => {
+    const b = heldOutBrier(run, h)
+    return b ? { value: b.skill, lo: b.lo, hi: b.hi } : null
+  }
+  const curRun = byId.get(cur.run_id ?? '') ?? byId.get(cur.version) ?? byId.get(base(cur.version))
   const fromSummary = (version: string) =>
-    base(version) === base(cur.version) || (cur.run_id != null && version === cur.run_id)
-      ? { value: model.offline.skill, lo: model.offline.skill_lo ?? null, hi: model.offline.skill_hi ?? null } : null
+    !isCur(version) ? null
+      : key === 'godark' ? brier(curRun)
+        : { value: model.offline.skill, lo: model.offline.skill_lo ?? null, hi: model.offline.skill_hi ?? null }
   const value = (e: { run_id?: string | null; version: string; detail?: Record<string, unknown> | null }) => {
     const run = byId.get(e.run_id ?? '') ?? byId.get(e.version)
+    if (key === 'godark') return brier(run) ?? fromSummary(e.version) ?? none
     const s = skillAt(run, h)
     if (s && s.skill != null) return { value: s.skill, lo: s.skill_lo ?? null, hi: s.skill_hi ?? null }
     const d = e.detail?.[`skill_${Math.round(h / 3600)}h`]
     if (typeof d === 'number') return { value: d, lo: null, hi: null }
-    return fromSummary(e.version) ?? { value: null, lo: null, hi: null }
+    return fromSummary(e.version) ?? none
   }
 
   const evs = events
@@ -94,7 +116,7 @@ export function championSteps(model: ModelSummaryLike, runs: RunLike[], events: 
   }
   if (!steps.some((s) => s.version === cur.version)) {
     const t = cur.since ?? steps[steps.length - 1]?.t ?? 0
-    steps.push({ t, ...(fromSummary(cur.version) ?? { value: null, lo: null, hi: null }), version: cur.version, run_id: cur.run_id ?? null, how: 'current' })
+    steps.push({ t, ...(fromSummary(cur.version) ?? none), version: cur.version, run_id: cur.run_id ?? null, how: 'current' })
     steps.sort((a, b) => a.t - b.t)
   }
   return steps
@@ -105,8 +127,9 @@ export function championSteps(model: ModelSummaryLike, runs: RunLike[], events: 
 export interface LivePoint { t: number; value: number; n: number }
 export interface LiveSeries { live: LivePoint[]; backtest: LivePoint[]; name: string }
 
-/** The champion's skill per bucket on our own feed at the primary horizon (baseline rows dropped, n-weighted over
- *  model versions), split into live grading and backtest replays. Route: median-error skill over dead reckoning;
+/** The champion's skill per bucket on our own feed at the primary horizon, split into live grading and backtest
+ *  replays. Only the champion's own model_version counts (a "-calN" champion predicts under its base version's name);
+ *  other versions graded in the same hour (a retired champion still predicting) are left out, not averaged in. Route: median-error skill over dead reckoning;
  *  go-dark: Brier skill over the base rate. Fishing is not graded live yet. */
 export function liveSkill(model: ModelSummaryLike, metrics: MetricsLike | null | undefined): LiveSeries {
   const key = modelKey(model.target)
@@ -122,10 +145,12 @@ export function liveSkill(model: ModelSummaryLike, metrics: MetricsLike | null |
     rows = (metrics?.godark ?? []).filter((r) => r.target === target).map((r) => ({ ...r, v: r.brier_skill }))
     name = `Brier skill over the base rate at ${hoursLabel(h)}`
   }
+  const own = [model.champion.version, model.champion.run_id, model.live?.model_version].filter((x): x is string => !!x)
+  const isChampion = (v: string) => own.some((c) => sameModel(c, v))
   const fold = (mode: 'live' | 'backtest') => {
     const acc = new Map<number, { s: number; n: number }>()
     for (const r of rows) {
-      if ((r.mode ?? 'live') !== mode || r.model_version.startsWith('baseline') || r.v == null || !(r.n > 0)) continue
+      if ((r.mode ?? 'live') !== mode || !isChampion(r.model_version) || r.v == null || !(r.n > 0)) continue
       const a = acc.get(r.t) ?? { s: 0, n: 0 }
       a.s += r.v * r.n
       a.n += r.n
@@ -164,16 +189,27 @@ const describeRun = (run: RunLike | undefined, byId: Map<string, RunLike>) => {
   return run.model ? `model ${run.model}` : null
 }
 
-/** Plain-words reason for a promote/reject from the rule's decision, e.g. "did not beat the champion at 7 d". */
+/** Plain-words reason for a promote/reject from the stored decision (read as in the runs table, see decision.ts):
+ *  "promoted by hand: <first reason>", "beat the baseline at 7 d", "did not beat the champion at 7 d". */
 export function decisionWhy(run: RunLike | undefined): string | null {
   const d = run?.metrics?.decision
-  if (!d) return null
-  const hs = Object.entries(d.horizons ?? {})
-  const lost = hs.filter(([, v]) => v?.win === false).map(([h]) => hoursLabel(Number(h)))
-  const against = d.against && /baseline/i.test(d.against) && !/^champion/i.test(d.against) ? 'the baseline' : 'the champion'
-  if (d.promote) return `beat ${against} at every primary horizon`
-  if (lost.length) return `did not beat ${against} at ${lost.join(', ')}`
-  return d.reasons?.[0] ?? 'failed the promotion rule'
+  return d ? whyOf(d, run?.status) : null
+}
+
+/** The same, from a decision (a run's, or a promoted/rejected event's detail when the run is not listed). */
+export function whyOf(d: Decision, status?: string | null): string | null {
+  const v = verdict(d)
+  if (v.hand) return byHandLine(d, status === 'candidate' ? 'kept as a candidate' : status === 'rejected' ? 'rejected' : 'not promoted')
+  if (d.promote) return promotionWhy(d, hoursLabel)
+  if (v.lost.length) return `did not beat ${v.against} at ${v.lost.map(hoursLabel).join(', ')}`
+  return v.reason ?? 'failed the promotion rule'
+}
+
+/** A promoted/rejected event carries the decision's by, against and reasons in its detail. */
+function eventWhy(e: EventLike): string | null {
+  const d = e.detail
+  if (!d || (d.against == null && d.reasons == null && d.by == null)) return null
+  return whyOf({ ...(d as Decision), promote: e.kind === 'promoted' })
 }
 
 /** Markers for one model: promoted, rejected, recalibrated and deployed events (rejected runs without an event are
@@ -193,7 +229,7 @@ export function markers(model: ModelSummaryLike, runs: RunLike[], events: EventL
       t: e.ts, kind, target: e.target, run_id: e.run_id ?? null,
       title: `${MARKER_LABEL[kind]} · ${e.version ?? e.run_id ?? e.target}`,
       changed: kind === 'recalibrated' ? e.label ?? null : describeRun(run, byId),
-      why: kind === 'promoted' || kind === 'rejected' ? decisionWhy(run) ?? e.label ?? null : kind === 'recalibrated' ? null : e.label ?? null,
+      why: kind === 'promoted' || kind === 'rejected' ? decisionWhy(run) ?? eventWhy(e) ?? e.label ?? null : kind === 'recalibrated' ? null : e.label ?? null,
     })
   }
   for (const r of runs) {
