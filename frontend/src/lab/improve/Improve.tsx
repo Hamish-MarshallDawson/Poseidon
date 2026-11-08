@@ -31,7 +31,7 @@ export function Improve({ summary, runs, events, metrics, proposals = [] }: Impr
   return (
     <section className="lab-improve" aria-labelledby="lab-improve-title">
       <header className="lab-improve__head">
-        <h2 id="lab-improve-title">How it improved</h2>
+        <h3 id="lab-improve-title" className="lab-sr">Model</h3>
         <div role="tablist" aria-label="Model" className="lab-improve__tabs">
           {models.map((m) => (
             <button key={m.target} role="tab" type="button" aria-selected={m.target === model.target} onClick={() => setSel(m.target)}>

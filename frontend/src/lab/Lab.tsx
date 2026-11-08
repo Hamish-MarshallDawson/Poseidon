@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { lab } from './api'
 import { HOURS, useLab } from './useLab'
 import { Overview } from './Overview'
-import { Improve } from './improve'
+import { Improve } from './improve/Improve'
 import { Live } from './live'
-import { Runs } from './runs'
+import { Runs } from './runs/Runs'
 import type { LabSectionProps } from './sections'
 import { when } from './format'
 import './lab.css'
@@ -26,6 +26,9 @@ export function Lab({ onClose }: { onClose: () => void }) {
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
   }, [onClose])
   const props: LabSectionProps = { ...state, hours: HOURS, api: lab }
+  const loadDetail = useCallback(async (id: string) => (await lab.run(id)).value, [])
+  const summary = state.summary
+  const primaryH = useMemo(() => Object.fromEntries((summary?.models ?? []).map((m) => [m.target, m.offline.primary_h])), [summary])
   return (
     <div className="lab" role="dialog" aria-modal="true" aria-labelledby="lab-title">
       <header className="lab-head">
@@ -44,13 +47,15 @@ export function Lab({ onClose }: { onClose: () => void }) {
       <main className="lab-body">
         <Overview summary={state.summary} />
         <Section id="improve" title="How it improved" lede="Each step is a promotion: a run that beat the champion on the frozen held-out set. Live results on our feed are drawn over it.">
-          <Improve {...props} />
+          {state.summary && state.runs && state.events
+            ? <Improve summary={state.summary} runs={state.runs} events={state.events} metrics={state.metrics} proposals={state.proposals ?? []} />
+            : <Loading />}
         </Section>
         <Section id="live" title="Live track record" lede="Every prediction we serve is graded when its horizon passes. These are those grades, against the baselines.">
           <Live {...props} />
         </Section>
         <Section id="runs" title="Runs and proposals" lede="Every training run with its config, data and evaluation, and why the promotion rule kept or rejected it.">
-          <Runs {...props} />
+          {state.runs ? <Runs runs={state.runs} proposals={state.proposals ?? []} loadDetail={loadDetail} primaryH={primaryH} /> : <Loading />}
         </Section>
       </main>
     </div>
@@ -65,4 +70,8 @@ function Section({ id, title, lede, children }: { id: string; title: string; led
       {children}
     </section>
   )
+}
+
+function Loading() {
+  return <p className="lab-muted" role="status">Loading…</p>
 }

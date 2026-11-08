@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Ctx, useChart, type Axis, type CatAxis, type ChartCtx, type NumAxis, type Tip } from './context'
+import { placeTip } from './geom'
 import { band, linear, niceTicks, numLabel, timeLabel, timeTicks, type BandScale, type Scale } from './scale'
 import './charts.css'
 
@@ -66,11 +67,7 @@ export function Chart({ label, x, y, height = 180, width: fixed, margin, childre
           <g className="lab-chart__marks">{children}</g>
         </Ctx.Provider>
       </svg>
-      {tip && (
-        <div className="lab-chart__tip" role="status" style={{ left: Math.min(Math.max(tip.x, 70), width - 70), top: tip.y }}>
-          {tip.content}
-        </div>
-      )}
+      {tip && <TipBox tip={tip} wrap={wrap} />}
     </div>
   )
 }
@@ -121,5 +118,22 @@ function AxisY({ axis }: { axis: Axis }) {
         <text transform={`translate(10 ${(box.top + box.bottom) / 2}) rotate(-90)`} textAnchor="middle" className="lab-chart__label">{axis.label}</text>
       )}
     </g>
+  )
+}
+
+function TipBox({ tip, wrap }: { tip: NonNullable<Tip>; wrap: RefObject<HTMLDivElement | null> }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    const host = wrap.current
+    if (!el || !host) return
+    const o = host.getBoundingClientRect()
+    setPos(placeTip(tip, { w: el.offsetWidth, h: el.offsetHeight }, { left: o.left, top: o.top }, { w: document.documentElement.clientWidth }))
+  }, [tip, wrap])
+  return (
+    <div ref={ref} className="lab-chart__tip" role="status" style={pos ? { left: pos.left, top: pos.top } : { left: tip.x, top: tip.y, visibility: 'hidden' }}>
+      {tip.content}
+    </div>
   )
 }

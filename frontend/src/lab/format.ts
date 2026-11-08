@@ -55,8 +55,9 @@ export const SOURCE: Record<string, string> = { 'pc-aiden': "Aiden's PC", 'deskt
 export const proposerLabel = (p: Proposer | null | undefined) => (p ? PROPOSER[p] ?? p : 'unknown')
 export const sourceLabel = (s: Source | null | undefined) => (s ? SOURCE[s] ?? s : 'unknown')
 
-/** What each model's skill is measured against. */
-export const BASELINE: Record<string, string> = { route: 'dead reckoning', godark: 'the base rate', godark_gfw: 'the base rate', fishing: 'the base rate' }
+/** What each model's skill is measured against. Fishing's baseline is the historical rate per gear type and flag,
+ * shrunk towards the overall rate where a group is small. */
+export const BASELINE: Record<string, string> = { route: 'dead reckoning', godark: 'the base rate', godark_gfw: 'the base rate', fishing: 'the rate by gear type and flag' }
 export const baselineOf = (target: string) => BASELINE[target] ?? 'the baseline'
 
 /** A calibration value: a percent for coverage-style checks, else three decimals. */

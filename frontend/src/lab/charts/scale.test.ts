@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { band, extent, linear, niceTicks, numLabel, pad, timeLabel, timeTicks } from './scale'
-import { pathOf } from './geom'
+import { pathOf, placeTip } from './geom'
 
 const H = 3_600_000
 const D = 24 * H
@@ -58,5 +58,19 @@ describe('pathOf', () => {
   it('breaks at nulls and draws step-after', () => {
     expect(pathOf([{ px: 0, py: 1 }, { px: 1, py: 2 }, { px: 2, py: null }, { px: 3, py: 4 }])).toBe('M0,1L1,2M3,4')
     expect(pathOf([{ px: 0, py: 1 }, { px: 5, py: 2 }], true)).toBe('M0,1H5V2')
+  })
+})
+
+describe('placeTip', () => {
+  const size = { w: 260, h: 40 }
+  it('centres above the point when there is room', () => {
+    expect(placeTip({ x: 500, y: 100 }, size, { left: 0, top: 200 }, { w: 1440 })).toEqual({ left: 370, top: 50 })
+  })
+  it('stays inside a 390 px viewport at both edges, measured from the chart origin', () => {
+    expect(placeTip({ x: 10, y: 100 }, size, { left: 16, top: 200 }, { w: 390 }).left).toBe(4 - 16)
+    expect(placeTip({ x: 350, y: 100 }, size, { left: 16, top: 200 }, { w: 390 }).left).toBe(390 - 4 - 260 - 16)
+  })
+  it('drops below the point near the top of the viewport', () => {
+    expect(placeTip({ x: 200, y: 20 }, size, { left: 0, top: 10 }, { w: 1440 }).top).toBe(30)
   })
 })

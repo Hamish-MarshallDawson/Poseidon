@@ -76,3 +76,4 @@
 }
 @keyframes lab-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .lab { animation: none; } }
+.lab-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
