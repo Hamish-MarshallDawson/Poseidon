@@ -32,7 +32,7 @@ export function OverviewTab({ model, runs, metrics }: OverviewTabProps) {
 function keyNumbers(target: string, m: NonNullable<OverviewTabProps['model']['summary']>, champ: ReturnType<typeof championRun>, metrics: OverviewTabProps['metrics']) {
   const pct = (x: number | null | undefined) => (x == null ? '–' : x > 0 && x < 0.1 ? `${(x * 100).toFixed(1)}%` : `${Math.round(x * 100)}%`)
   const hv = (unit: string) => (m as RichSummary).headline?.unit === unit ? (m as RichSummary).headline?.value ?? null : null
-  const graded = { label: 'graded live, 24 h', value: m.live ? m.live.n.toLocaleString('en-GB') : '–' }
+  const graded = { label: 'graded live, 24 h', value: (m.live?.n ?? 0).toLocaleString('en-GB') }
   if (target === 'route') {
     const r = routeLive(metrics, m.champion.version)
     return [
@@ -52,7 +52,7 @@ function keyNumbers(target: string, m: NonNullable<OverviewTabProps['model']['su
   const ho = heldOut(champ, m.offline.primary_h)
   return [
     { label: ho.recall != null ? 'fishing weeks spotted' : 'ranked correctly', value: ho.recall != null ? `${Math.round(ho.recall * 10)} in 10` : ho.aucPr != null ? `${Math.round(ho.aucPr * 10)} in 10` : '–' },
-    { label: 'held-out weeks tested', value: ho.n == null ? '–' : ho.n.toLocaleString('en-GB') },
+    { label: 'ship-weeks in the frozen test', value: ho.n == null ? '–' : ho.n.toLocaleString('en-GB') },
     graded,
   ]
 }
@@ -62,13 +62,13 @@ const VS: Record<string, string> = { route: 'a straight-line guess', godark: 'gu
 /** The champion's held-out number over time as steps (higher is better), with the live hourly figure as dots when the
  *  live figure is the same measure at the same horizon (route); never two measures on one axis. */
 function ChampionChart({ target, name, series, metrics, champion, h, sameStat }: { target: string; name: string; series: { t: number; v: number }[]; metrics: OverviewTabProps['metrics']; champion: string; h: number; sameStat: boolean }) {
+  const [now] = useState(() => Date.now())
   if (!series.length) return <p className="lab-empty">No champion history recorded yet.</p>
   const live = sameStat && target === 'route'
     ? metrics.route.filter((r) => r.horizon_s === h && (r.mode ?? 'live') === 'live' && r.n > 0 && (r.model_version === champion || champion.replace(/-cal\d+$/, '') === r.model_version)
         && r.median_err_m != null && r.baseline_median_err_m)
         .map((r) => ({ x: r.t, y: 1 - r.median_err_m! / r.baseline_median_err_m!, n: r.n }))
     : []
-  const [now] = useState(() => Date.now())
   const xs = [...series.map((p) => p.t), ...live.map((p) => p.x), now]
   const xd = pad(extent(xs), 0.04)
   const yd = pad(extent([0, ...series.map((p) => p.v), ...live.map((p) => p.y)]), 0.1)
