@@ -1,52 +1,47 @@
-import { useEffect, useMemo } from 'react'
-import { ui } from '../../store/ui'
-import { Button, Kbd } from '../../ui'
-import { useNow, useVessel } from '../../windows/hooks'
-import { TYPE_LABEL, fmtMmsi, hms } from '../../windows/format'
-import { collab, refreshActivity, listRemove, listSetStatus, selMeId, selMembers, type Entry, type Member } from './core'
+import { useEffect } from 'react'
+import { Button } from '../../ui'
+import { useNow } from '../../windows/hooks'
+import { fmtMmsi } from '../../windows/format'
+import { collab, refreshActivity, listSetStatus, selMeId, selMembers, type Entry, type Member } from './core'
 import { Avatar } from './Avatar'
 import { followUser, presenceUi } from './state'
-import { STATUS_LABEL, STATUS_ORDER, activityText, ago, trackedText, viewerText, type PresenceUser, type Status } from './logic'
+import { STATUS_LABEL, STATUS_ORDER, activityText, ago, trackedText, viewerText, type Status } from './logic'
 import { useHasReport } from './reports'
 
-// The shared tracking list: replaces the personal Review list while in a session (review/ReviewPanel.tsx switches).
-// Reuses the Watchlist panel and row classes. Every row shows who added the ship and when, who is viewing it, and
-// its status: open / reviewed / no action, plus "report generated" once a saved briefing exists (docs agent).
+// Session parts of the one Review list (review/ReviewPanel.tsx): who added each ship, who is viewing it, its status
+// (open / reviewed / no action, plus "report generated" once a saved briefing exists), who is online, the activity log.
 
 const who = (members: Member[], id: string) => members.find((m) => m.id === id)
 
-function Row({ e, members, viewers, onFocus }: { e: Entry; members: Member[]; viewers: PresenceUser[]; onFocus: (mmsi: number) => void }) {
-  const v = useVessel(e.mmsi)
+/** Pieces of a Review row that only exist in a session; review/ReviewPanel.tsx lays them out. */
+export function ReportTag({ mmsi }: { mmsi: number }) {
+  return useHasReport(mmsi) ? <span className="pr-report">{STATUS_LABEL.report}</span> : null
+}
+
+export function AddedBy({ e }: { e: Entry }) {
+  const by = who(collab.use(selMembers), e.added_by)
   const now = useNow()
-  const report = useHasReport(e.mmsi)
-  const noAis = !!v && (v.status === 'gap_open' || v.status === 'silent')
-  const name = v?.name ?? `MMSI ${fmtMmsi(e.mmsi)}`
-  const by = who(members, e.added_by)
   return (
-    <li className={`rv-item ${noAis ? 'is-noais' : ''}`} data-mmsi={e.mmsi}>
-      <div className="wl-body">
-        <span className="wl-head">
-          <span className="wl-name"><b>{name}</b>{v && <span>{TYPE_LABEL[v.type_group]}</span>}</span>
-          {report && <span className="pr-report">{STATUS_LABEL.report}</span>}
-        </span>
-        <span className="wl-note">
-          MMSI {fmtMmsi(e.mmsi)} · {v ? <>{noAis ? 'No AIS' : 'AIS heard'} · <span className="rv-timer">{hms(now - v.last_ts)}</span> since last AIS</> : 'not in view / no data'}
-        </span>
-        <span className="pr-added">
-          {by && <Avatar id={by.id} name={by.name} picture={by.picture} size={18} />}
-          <span>Added {by?.name ? `by ${by.name.split(/\s+/)[0]} ` : ''}{ago(e.added_at, now)}</span>
-        </span>
-        {viewers.length > 0 && <span className="pr-added"><span className="pr-dot" aria-hidden />{viewerText(viewers)}</span>}
-        <span className="rv-actions">
-          <select className="pr-status" aria-label={`Status of ${name}`} value={e.status} data-status={e.status}
-            onChange={(ev) => void listSetStatus(e.mmsi, ev.target.value as Status)}>
-            {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-          </select>
-          <Button className="btn-small" onClick={() => onFocus(e.mmsi)}>Focus on map</Button>
-          <Button className="btn-small" aria-label={`Remove ${name} from the shared list`} onClick={() => void listRemove(e.mmsi)}>Remove</Button>
-        </span>
-      </div>
-    </li>
+    <span className="pr-added">
+      {by && <Avatar id={by.id} name={by.name} picture={by.picture} size={18} />}
+      <span>Added {by?.name ? `by ${by.name.split(/\s+/)[0]} ` : ''}{ago(e.added_at, now)}</span>
+    </span>
+  )
+}
+
+export function Viewing({ mmsi }: { mmsi: number }) {
+  const presence = collab.use((s) => s.presence)
+  const meId = collab.use(selMeId)
+  const viewers = presence.filter((u) => u.id !== meId && u.viewing === mmsi)
+  return viewers.length > 0 ? <span className="pr-added"><span className="pr-dot" aria-hidden />{viewerText(viewers)}</span> : null
+}
+
+export function StatusSelect({ e, name }: { e: Entry; name: string }) {
+  return (
+    <select className="pr-status" aria-label={`Status of ${name}`} value={e.status} data-status={e.status}
+      onChange={(ev) => void listSetStatus(e.mmsi, ev.target.value as Status)}>
+      {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+    </select>
   )
 }
 
@@ -98,46 +93,10 @@ function Online() {
   )
 }
 
-export function SharedPanel({ onCompare, onFocus }: { onCompare: () => void; onFocus: (mmsi: number) => void }) {
-  const list = collab.use((s) => s.list)
-  const members = collab.use(selMembers)
-  const presence = collab.use((s) => s.presence)
-  const meId = collab.use(selMeId)
-  const byShip = useMemo(() => {
-    const m = new Map<number, PresenceUser[]>()
-    for (const u of presence) if (u.id !== meId && u.viewing != null) m.set(u.viewing, [...(m.get(u.viewing) ?? []), u])
-    return m
-  }, [presence, meId])
-  return (
-    <div className="panel watchlist" id="review-panel" role="region" aria-labelledby="rv-title">
-      <div className="wl-header">
-        <div className="wl-titlerow">
-          <h2 id="rv-title">Shared list</h2>
-          <Button className="btn-small" onClick={() => ui.set({ reviewOpen: false })}>Close <Kbd>Esc</Kbd></Button>
-        </div>
-        <p className="wl-explain">Ships the session is tracking. A flag is a prompt to review, not an accusation.</p>
-        <p className="wl-meta">{list.length} {list.length === 1 ? 'ship' : 'ships'} tracked</p>
-      </div>
-      <Online />
-      {list.length === 0 ? (
-        <p className="rv-empty">Nothing yet. Open a ship and choose Add to review: everyone in the session sees it.</p>
-      ) : (
-        <ul className="wl-list rv-list">
-          {list.map((e) => <Row key={e.mmsi} e={e} members={members} viewers={byShip.get(e.mmsi) ?? []} onFocus={onFocus} />)}
-        </ul>
-      )}
-      <Activity />
-      {list.length > 1 && (
-        <div className="wl-brief">
-          <span>{list.length} tracked</span>
-          <span className="wl-brief-actions">
-            <Button className="btn-small" variant="filled" onClick={onCompare}>Compare {list.length} ships</Button>
-          </span>
-        </div>
-      )}
-    </div>
-  )
-}
+/** Who is online, above the list. */
+export const SessionOnline = Online
+/** The session's activity log, below the list. */
+export const SessionActivity = Activity
 
 /** "Aiden and Jake are viewing" and "Tracked by Mano" for a ship window. Nothing when nobody is. */
 export function ShipPresence({ mmsi }: { mmsi: number }) {

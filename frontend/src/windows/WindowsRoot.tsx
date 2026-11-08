@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { ui } from '../store/ui'
 import { StatusLine } from '../panels/StatusLine'
 import { MapControls } from '../panels/MapControls'
-import { Watchlist } from '../panels/Watchlist'
 import { Legend } from '../panels/Legend'
 import { FocusBar } from '../panels/FocusBar'
 import { WindowLayer } from './ShipWindow'
@@ -61,7 +60,6 @@ export function WindowsRoot({ onLogout }: { onLogout?: () => void }) {
       <StatusLine />
       <FocusBar />
       <MapControls onLogout={onLogout} />
-      <Watchlist />
       <Legend />
       <WindowLayer />
     </div>

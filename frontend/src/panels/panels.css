@@ -137,51 +137,14 @@
 .wl-titlerow { display: flex; align-items: center; gap: 8px; }
 .wl-titlerow .dvm-btn { border-color: var(--dvm-text-muted); }
 .wl-titlerow h2 { flex: 1; margin: 0; font-weight: 600; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); }
-.wl-explain { margin: 0; color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
 .wl-meta { margin: 0; color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
 .wl-list { flex: 0 1 432px; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; }
-.wl-spacer { position: relative; }
-.wl-row {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  box-sizing: border-box;
-  display: flex;
-  gap: 8px;
-  padding: 12px;
-  border: 0;
-  border-bottom: 1px solid var(--dvm-border-subtle);
-  background: none;
-  text-align: left;
-}
-.wl-row:hover, .wl-row:focus-visible { background: var(--dvm-bg-raised); box-shadow: inset 3px 0 0 var(--dvm-accent-default); outline: 0; }
-.wl-rank { flex: none; width: 24px; display: flex; flex-direction: column; gap: 2px; white-space: nowrap; font-family: var(--dvm-font-data); }
-.wl-rank b { font-weight: 600; font-size: var(--dvm-size-data); line-height: var(--dvm-line-data); }
-.wl-rank span { color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); line-height: var(--dvm-line-caption); }
 .wl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .wl-item .wl-head { padding-right: 26px; }   /* room for the tick box at the row's top-right corner */
 .wl-head { display: flex; align-items: center; gap: 6px; }
 .wl-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 4px; overflow: hidden; white-space: nowrap; }
 .wl-name b { font-weight: 600; font-size: var(--dvm-size-heading); line-height: var(--dvm-line-heading); }
 .wl-name span { color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
-.wl-decision {
-  flex: none;
-  padding: 1px 6px;
-  border: 1px solid var(--dvm-border-strong);
-  border-radius: 2px;
-  font: 500 var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data);
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-}
-.wl-decision.watch { border-color: var(--dvm-text-muted); color: var(--dvm-text-secondary); }
-.wl-p { display: flex; align-items: center; gap: 8px; }
-.wl-p b { font: 600 var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); white-space: nowrap; }
-.wl-bar { position: relative; flex: none; width: 216px; height: 4px; }
-.wl-bar::before { content: ''; position: absolute; left: 0; right: 0; top: 1.5px; height: 1px; background: var(--dvm-text-muted); }
-/* :where() keeps this default below .risk-N, which colours the fill by band. */
-:where(.wl-bar i) { position: absolute; inset: 0; background: var(--dvm-text-muted); transform-origin: left; }
-.is-noais .wl-p b { color: var(--dvm-text-muted); }
 .wl-note {
   display: -webkit-box;
   min-height: calc(2 * var(--dvm-line-caption));
@@ -191,22 +154,6 @@
   color: var(--dvm-text-secondary);
   font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data);
 }
-/* Fixed slot, so a row whose ship has left the feed keeps the same height (the list is virtualised by row kind). */
-.wl-ev { display: flex; min-height: 34px; }
-.wl-reasons {
-  display: -webkit-box;
-  min-height: calc(2 * var(--dvm-line-label));
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  color: var(--dvm-text-secondary);
-  font-size: var(--dvm-size-label);
-  line-height: var(--dvm-line-label);
-}
-.wl-test { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-top: 1px solid var(--dvm-border-subtle); }
-.wl-test b { font-weight: 600; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
-.wl-test-head { font: 600 var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); }
-.wl-test-note { color: var(--dvm-text-secondary); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
 
 /* Legend toggle (56:3123) and compact panel (56:95) */
 .legend-toggle {
