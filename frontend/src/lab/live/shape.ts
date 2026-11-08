@@ -57,10 +57,12 @@ export function routeView(rows: RouteRow[], horizon: number, mode: Mode): RouteV
   return { versions, series, pooled }
 }
 
-/** The version the headline sentence speaks for: the first running champion with data, else the model with most graded predictions. */
+/** The version the headline sentence speaks for: the first running champion with data (a -calN suffix ignored), else the model with most graded predictions. */
 export function headline(pooled: RoutePooled[], champions: string[]): RoutePooled | undefined {
   const models = pooled.filter((p) => !isBaseline(p.version) && p.n > 0)
-  return champions.map((c) => models.find((p) => p.version === c)).find(Boolean) ?? [...models].sort((a, b) => b.n - a.n)[0]
+  // A recalibrated champion (route-dma90-v2-cal1) predicts under its base version's name.
+  const same = (c: string, v: string) => c === v || c.replace(/-cal\d+$/, '') === v
+  return champions.map((c) => models.find((p) => same(c, p.version))).find(Boolean) ?? [...models].sort((a, b) => b.n - a.n)[0]
 }
 
 export interface DarkSeries { key: string; target: string; version: string; points: { t: number; n: number; positives: number; brier_skill: number }[] }

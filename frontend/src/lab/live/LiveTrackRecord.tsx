@@ -37,19 +37,18 @@ export function LiveTrackRecord({ metrics, champions = [] }: LiveTrackRecordProp
   const horizons = horizonsIn(route)
   const [modePick, setMode] = useState<Mode | null>(null)
   const [hPick, setH] = useState<number | null>(null)
-  if (!metrics) return <section className="ll-sec"><h3>Live track record</h3><p className="ll-muted">Loading…</p></section>
+  if (!metrics) return <section className="ll-sec" aria-label="Live track record"><p className="ll-muted">Loading…</p></section>
   const mode = modePick && modes.includes(modePick) ? modePick : modes[0] ?? 'live'
   const horizon = hPick != null && horizons.includes(hPick) ? hPick : horizons.includes(10800) ? 10800 : horizons[0]
 
   return (
-    <section className="ll-sec" aria-labelledby="ll-live">
-      <header className="ll-head">
-        <h3 id="ll-live">Live track record</h3>
-        <Toggle label="Which predictions" value={mode} options={modes} onChange={setMode} name={(m) => MODE_NAME[m]} />
-      </header>
-      <p className="ll-muted">
+    <section className="ll-sec" aria-label="Live track record">
+      <div className="ll-head">
+        <p className="ll-muted">
         Every prediction is graded once its horizon has passed. {mode === 'live' ? 'Live: predictions made on our own AIS feed as it came in.' : 'Backtest: the same models replayed over past hours of the feed.'} One point per hour; hover a point for its numbers.
-      </p>
+        </p>
+        <Toggle label="Which predictions" value={mode} options={modes} onChange={setMode} name={(m) => MODE_NAME[m]} />
+      </div>
       <div className="ll-grid2">
         {horizon != null
           ? <RouteBlock metrics={metrics} champions={champions} mode={mode} horizon={horizon} horizons={horizons} setH={setH} />

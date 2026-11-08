@@ -35,6 +35,8 @@ describe('route shaping', () => {
     const pooled = [p('a', 5), p('b', 50), p('baseline-dr-v1', 500), p('c', 0)]
     expect(headline(pooled, ['c', 'a'])?.version).toBe('a')
     expect(headline(pooled, [])?.version).toBe('b')
+    expect(headline(pooled, ['a-cal1'])?.version).toBe('a')
+    expect(headline(pooled, ['ab-cal1'])?.version).toBe('b')
     expect(headline([p('baseline-dr-v1', 9)], [])).toBeUndefined()
   })
 })
