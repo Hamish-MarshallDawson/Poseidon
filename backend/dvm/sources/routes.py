@@ -1,4 +1,4 @@
-"""Read-only data routes over Tiger for the map (/observations, /sources) and the model (/model/*).
+"""Read-only data routes over Tiger for the map (/observations, /sources, /track) and the model (/model/*).
 
 Mount with: app.include_router(make_router(get_pool, require_login)), where get_pool() returns the asyncpg pool or
 None (answered 503). Times are epoch ms UTC (06 units). Every answer carries the attribution of the sources in it.
@@ -23,6 +23,8 @@ MAP_DEFAULT_WINDOW_MS = 86_400_000
 MAP_DEFAULT_LIMIT, MAP_MAX_LIMIT = 2000, 5000
 MODEL_DEFAULT_LIMIT, MODEL_MAX_LIMIT = 10_000, 50_000
 MAX_MMSIS = 1000
+MMSI_MIN, MMSI_MAX = 100_000_000, 999_999_999   # a valid MMSI has 9 digits
+TRACK_MAX_HOURS = 24
 KINDS = {"ais_presence", "sar_detection", "gap", "encounter", "loitering", "port_visit", "radar_scene"}
 MAX_MS = 4_102_444_800_000   # year 2100: anything above is a seconds/ms mix-up or junk
 
@@ -118,6 +120,15 @@ def make_router(get_pool: Callable[[], object], require_login: Callable[..., Awa
             _bad("time window is capped at 7 days")
         async with pool().acquire() as con:
             return await query.map_observations(con, kinds_, box, start, end, limit)
+
+    @front.get("/track")
+    async def track(mmsi: int = Query(..., ge=MMSI_MIN, le=MMSI_MAX),
+                    hours: int = Query(TRACK_MAX_HOURS, ge=1, le=TRACK_MAX_HOURS)) -> dict:
+        """One ship's past track from Tiger positions, for Track history beyond the 60-minute live trail."""
+        end = int(time.time() * 1000)
+        async with pool().acquire() as con:
+            points, srcs = await query.track(con, mmsi, end - hours * 3_600_000, end)
+        return {"mmsi": mmsi, "hours": hours, "track": points, "attribution": query.attribution_for(srcs)}
 
     @front.get("/sources")
     async def sources() -> dict:

@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 
 from dvm.sources.common import SOURCES
+from dvm.sources.schema import _dt
 
 MAX_ROWS = 20_000
 MAX_SPAN_MS = 31 * 86_400_000   # longest event a windowed query still finds by overlap
@@ -204,3 +205,15 @@ async def statics_as_of(con, as_of, mmsis, after_mmsi, limit) -> tuple[list[dict
                 d["sources"][f] = r[f + "__src"]
         out.append(d)
     return out[:limit], len(out) > limit
+
+
+# One ship's past track for Track history (GET /track): the latest fix in each minute, oldest first. The mmsi filter and
+# time window use positions_mmsi_time (mmsi, time DESC), so it reads only that ship's rows (a few ms for 24 h).
+TRACK_SQL = ("SELECT DISTINCT ON (bucket) time_bucket('1 minute', time) AS bucket, ts, lon, lat, src FROM positions "
+             "WHERE mmsi = $1 AND time >= $2 AND time <= $3 ORDER BY bucket, time DESC")
+
+
+async def track(con, mmsi: int, start_ms: int, end_ms: int) -> tuple[list[list], set[str]]:
+    """[[ts, lon, lat], ...] with at most one point per minute in [start_ms, end_ms], oldest first; and the sources."""
+    rows = await con.fetch(TRACK_SQL, mmsi, _dt(start_ms), _dt(end_ms))
+    return [[r["ts"], r["lon"], r["lat"]] for r in rows], {r["src"] for r in rows}
