@@ -14,7 +14,7 @@ import { setShow, startShow } from '../show/state'
 
 type LayerKey = keyof UIState['layers']
 const LAYERS: { key: LayerKey; label: string; note: string }[] = [
-  { key: 'density', label: 'Density view', note: 'ships heard per cell; hidden when zoomed in' },
+  { key: 'density', label: 'Heat map (zoomed out)', note: 'traffic density; ships appear as you zoom in' },
   { key: 'coverage', label: 'Coverage gaps', note: 'hatch where no receiver heard anything in 10 min' },
   { key: 'forecast', label: 'Forecast', note: 'rank tags and could-be-in-here regions' },
   { key: 'inland', label: 'Inland vessels', note: 'Rhine, Danube and other inland waterways' },
@@ -52,7 +52,7 @@ function LayersPanel() {
         <span className="kicker">Ships</span>
         <span className="ly-showing">Showing {fmtInt(view.shown)} of {fmtInt(view.inView)} ships in view</span>
         <span className="ly-bar"><i style={{ transform: `scaleX(${view.inView ? view.shown / view.inView : 0})` }} /></span>
-        <span className="ly-note">{fmtInt(hidden)} more counted in density cells and stacks</span>
+        <span className="ly-note">{fmtInt(hidden)} more in the heat map and stacks</span>
       </div>
       <ShowChoice />
       <span className="kicker ly-head">Map</span>

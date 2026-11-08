@@ -6,12 +6,13 @@ import { vessels, type Frame } from '../../store/vessels'
 import { readToken } from '../../theme/tokens'
 import { themeStore } from '../../theme/theme'
 import { rgba } from '../colour'
-import { computeSlots, deadCells, bandOf, type Chip, type View } from '../density'
+import { computeSlots, deadCells, bandOf, HEAT_FADE, type Chip, type View } from '../density'
 import { findNearby, focusGeometry, openGap } from '../focus'
 import { getTrack } from '../../data/track'
 import { headingOf, lonOf, latOf, mercX, mercY, sizeTier, type SizeTier } from '../geo'
 import { isFull, OPACITY, ringOffsets, sortKey, zTier, FAN_RADIUS, type Rank } from '../stacking'
 import { openShipWindow, setFocus } from '../actions'
+import { BASEMAP_FIRST_LABEL_LAYER } from '../../basemap'
 import { Colour, createShipLayer, InstanceBuffer, N_COLOURS, writeMotion, type ShipLayerHooks } from './layer'
 import { buildAtlas, hullKey, LETTER_PX, TIERS, TYPES, type HullType, type Sprite } from './sprites'
 import { CourseLine } from './course'
@@ -24,7 +25,7 @@ import { showFilter } from '../../show/registry'
 setShownClock(shownNow)
 
 // Owns everything ship-shaped on the map: per-ship motion state (typed arrays), the slot pass (caps, priority,
-// separation, hysteresis), the GPU layer, aggregate cells, stack chips, fan-out, focus mode and hit-testing.
+// separation, hysteresis), the GPU layer, heat map, stack chips, fan-out, focus mode and hit-testing.
 // Nothing here runs per ship per frame on the CPU: the vertex shader animates; the CPU rebuilds the (capped) instance
 // list only when a fix arrives for a drawn ship, a slot changes, or the selection changes.
 
@@ -39,11 +40,11 @@ const FOCUS_PASS_MS = 2000
 const PAD = 0.15                        // fraction of the viewport added on each side for culling
 
 const L = {
-  cells: 'dvm-cells', cellLabels: 'dvm-cell-labels', dead: 'dvm-dead', deadEdge: 'dvm-dead-edge',
+  heat: 'dvm-heat', dead: 'dvm-dead', deadEdge: 'dvm-dead-edge',
   ghost: 'dvm-focus-ghost', ghostEdge: 'dvm-focus-ghost-edge', inferred: 'dvm-focus-inferred',
   nTrack: 'dvm-nearby-track', cpaLink: 'dvm-nearby-link', cpa: 'dvm-nearby-cpa', cpaLabel: 'dvm-nearby-label', cross: 'dvm-focus-cross', chips: 'dvm-chips', fan: 'dvm-fan', ships: 'dvm-ships',
 }
-const S = { cells: 'dvm-cells', dead: 'dvm-dead', focus: 'dvm-focus', chips: 'dvm-chips', fan: 'dvm-fan' }
+const S = { heat: 'dvm-heat', dead: 'dvm-dead', focus: 'dvm-focus', chips: 'dvm-chips', fan: 'dvm-fan' }
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
 const FONT = ['Barlow Semi Condensed Medium']   // served from public/basemap/fonts (scripts/basemap/glyphs.py)
 
@@ -131,16 +132,24 @@ export class ShipController {
     this.readColours()
     this.addImages(map)
     const add = (id: string, data = EMPTY) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data }) }
-    add(S.cells); add(S.dead, deadCells(vessels.coverage.values())); add(S.focus); add(S.chips); add(S.fan)
+    add(S.heat); add(S.dead, deadCells(vessels.coverage.values())); add(S.focus); add(S.chips); add(S.fan)
     const ink = readToken('text-primary') || '#eee9dc'
     // Density and no-receiver fills go under the basemap's land, so cells never tint land (dashboard map, layer 2 of 4).
     const underLand = map.getLayer('coast-land') ? 'coast-land' : undefined
-    map.addLayer({ id: L.cells, type: 'fill', source: S.cells, paint: { 'fill-color': ink, 'fill-opacity': ['get', 'tint'], 'fill-antialias': false } }, underLand)
+    // Heat map (zoomed out): ship counts on a screen grid, ramp from the heat/0..4 tokens, faded out across HEAT_FADE as the
+    // ships fade in. Under the place labels so names stay readable; the no-receiver hatch is a different thing (grey pattern, dashed edge).
+    const heat = (i: number, fb: string) => readToken(`heat-${i}`) || fb
     map.addLayer({
-      id: L.cellLabels, type: 'symbol', source: S.cells, filter: ['!=', ['get', 'label'], ''],
-      layout: { 'text-field': ['get', 'label'], 'text-font': FONT, 'text-size': 11, 'text-allow-overlap': true },
-      paint: { 'text-color': readToken('text-secondary') || ink, 'text-halo-color': readToken('bg-app') || '#000', 'text-halo-width': 1 },
-    })
+      id: L.heat, type: 'heatmap', source: S.heat,
+      paint: {
+        'heatmap-weight': ['interpolate', ['linear'], ['get', 'n'], 1, 0.2, 6, 0.5, 40, 1],
+        'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 0.8, 4, 1, 7, 1.3],
+        'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 20, 4, 28, 7, 36],
+        'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'],
+          0, heat(0, '#a9bdf000'), 0.15, heat(1, '#4f6aa873'), 0.4, heat(2, '#7390d2a6'), 0.7, heat(3, '#a4bcf2d1'), 1, heat(4, '#e6eef2f2')],
+        'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], HEAT_FADE[0], 1, HEAT_FADE[1], 0],
+      },
+    }, map.getLayer(BASEMAP_FIRST_LABEL_LAYER) ? BASEMAP_FIRST_LABEL_LAYER : underLand)
     map.addLayer({ id: L.dead, type: 'fill', source: S.dead, paint: { 'fill-pattern': 'dvm-hatch', 'fill-antialias': false } }, underLand)
     map.addLayer({
       id: L.deadEdge, type: 'line', source: S.dead,
@@ -179,6 +188,7 @@ export class ShipController {
     this.applyLayerVisibility(ui.get().layers)
     if (first) {
       map.on('moveend', this.onMoveEnd)
+      map.on('zoom', this.onZoom)
       map.on('movestart', this.onMoveStart)
       map.on('click', this.onClick)
       map.on('mousemove', this.onMouseMove)
@@ -191,7 +201,7 @@ export class ShipController {
   detach(): void {
     const map = this.map
     if (map) {
-      map.off('moveend', this.onMoveEnd); map.off('movestart', this.onMoveStart); map.off('click', this.onClick)
+      map.off('moveend', this.onMoveEnd); map.off('zoom', this.onZoom); map.off('movestart', this.onMoveStart); map.off('click', this.onClick)
       map.off('mousemove', this.onMouseMove); map.off('mouseout', this.onMouseOut)
     }
     this.course.detach()
@@ -280,8 +290,8 @@ export class ShipController {
     const map = this.map
     if (!map) return
     const vis = (ids: string[], on: boolean) => { for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none') }
-    const following = ui.get().follow, filtering = ui.get().show !== 'all'   // a Show filter hides cells and chips like Follow selected
-    vis([L.cells, L.cellLabels], layers.density && !following && !filtering)
+    const following = ui.get().follow, filtering = ui.get().show !== 'all'   // a Show filter hides the heat map and chips like Follow selected
+    vis([L.heat], layers.density && !following && !filtering)
     vis([L.chips], !following && !filtering)
     vis([L.dead, L.deadEdge], layers.coverage)
   }
@@ -316,7 +326,7 @@ export class ShipController {
     const map = this.map!
     this.avoidGhosts(res, map, view)
     this.chips = res.chips
-    ;(map.getSource(S.cells) as GeoJSONSource | undefined)?.setData(res.cells)
+    ;(map.getSource(S.heat) as GeoJSONSource | undefined)?.setData(res.heat)
     ;(map.getSource(S.chips) as GeoJSONSource | undefined)?.setData(this.chipFeatures())
     const b = map.getBounds()
     let dead = 0
@@ -332,7 +342,7 @@ export class ShipController {
   }
 
   // Ghost circles (open could-be-within regions as ForecastOverlay draws them, plus every open gap ship, at least 14 px) in
-  // screen px. A stack chip over a gap's last fix moves off it (max 40 px); a cell count centred inside a ghost is blanked. Runs per slot
+  // screen px. A stack chip over a gap's last fix moves off it (max 40 px). Runs per slot
   // pass (moveend / 1 Hz data), never per frame.
   private avoidGhosts(res: ReturnType<typeof computeSlots>, map: MapLibreMap, view: View): void {
     const s = ui.get(), t = shownNow()
@@ -348,7 +358,6 @@ export class ShipController {
       zones.push({ x: p.x, y: p.y, r: Math.max(14, ghostRadius(g, t) / mpp) })
     }
     if (!zones.length) return
-    const inside = (x: number, y: number, pad: number) => zones.find((z) => Math.hypot(x - z.x, y - z.y) < z.r + pad)
     // Chips stay near their ships: only the gap's last fix (24 px disc) is protected, and a chip moves at most 40 px.
     const disc = (x: number, y: number) => zones.find((z) => Math.hypot(Math.max(Math.abs(x - z.x) - 22, 0), Math.max(Math.abs(y - z.y) - 10, 0)) < 24)
     for (const c of res.chips) {
@@ -357,15 +366,6 @@ export class ShipController {
       const d = Math.hypot(p.x - z.x, p.y - z.y), ux = d < 1 ? 0 : (p.x - z.x) / d, uy = d < 1 ? -1 : (p.y - z.y) / d
       const move = Math.min(40, 48 - d)       // 48: far enough for the chip box to clear the disc along the line
       const a = map.unproject([p.x + ux * move, p.y + uy * move]); c.lon = a.lng; c.lat = a.lat
-    }
-    for (const f of res.cells.features) {
-      const props = f.properties
-      if (!props?.label || f.geometry.type !== 'Polygon') continue
-      const ring = f.geometry.coordinates[0]
-      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
-      for (const [lo, la] of ring) { x0 = Math.min(x0, lo); x1 = Math.max(x1, lo); y0 = Math.min(y0, la); y1 = Math.max(y1, la) }
-      const p = map.project([(x0 + x1) / 2, (y0 + y1) / 2])
-      if (inside(p.x, p.y, 12)) props.label = ''
     }
   }
 
@@ -668,6 +668,15 @@ export class ShipController {
   }
 
   private onMoveStart = (): void => { this.closeFan() }
+  // Zooming through the heat-map handover: re-run the slot pass about 4 times a second so ships spawn in while the
+  // heat map fades (its opacity is a paint property and needs no pass). Outside the band, moveend is enough.
+  private lastZoomPass = 0
+  private onZoom = (): void => {
+    const z = this.map!.getZoom()
+    if (z < HEAT_FADE[0] - 0.5 || z > HEAT_FADE[1] + 0.5 || performance.now() - this.lastZoomPass < 250) return
+    this.lastZoomPass = performance.now()
+    this.slotPass()
+  }
   private onMoveEnd = (): void => { this.slotPass(); if (ui.get().focusMmsi != null) this.focusPass(true) }
 
   // ---- focus ------------------------------------------------------------------------------------------------------
