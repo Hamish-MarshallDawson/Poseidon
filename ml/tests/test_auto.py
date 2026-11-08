@@ -80,3 +80,17 @@ def test_lab_import_into_a_real_database(tmp_path, monkeypatch):
     assert out["rc"] == 0, out
     again = auto.lab_import(tmp_path, log=lambda m: None)   # idempotent
     assert again["rc"] == 0, again
+
+
+def test_every_refresh_writes_under_poseidon_data(tmp_path):
+    """On the server POSEIDON_DATA=/opt/dvm/ml-data: no refresh may fall back to the laptop's data folder."""
+    import os
+    import subprocess
+    import sys
+    code = ("from ml.fishing import fetch, dataset as f; from ml.godark_gfw import tiger as g; "
+            "from ml.godark import tiger as t, replay as r; from ml.route import tiger as rt; "
+            "import ml.godark.dataset as d; print(fetch.DEFAULT_OUT, f.DEFAULT_OUT, g.DEFAULT_OUT, t.DEFAULT_OUT, r.OUT, d.OUT)")
+    env = {k: v for k, v in os.environ.items() if k not in ("FISHING_DATA", "GODARK_GFW_DATA")}
+    out = subprocess.run([sys.executable, "-c", code], env=env | {"POSEIDON_DATA": str(tmp_path)},
+                         capture_output=True, text=True, check=True, cwd=auto.ROOT).stdout.split()
+    assert len(out) == 6 and all(p.startswith(str(tmp_path)) for p in out), out
