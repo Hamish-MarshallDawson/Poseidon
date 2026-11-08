@@ -8,6 +8,8 @@ import { ui } from '../src/store/ui'
 import { vessels } from '../src/store/vessels'
 import { openShipWindow, shipScreenPoint } from '../src/windows/open'
 import { runBriefing } from '../src/briefing/store'
+import { yachts } from '../src/yachts/store'
+import { setShow } from '../src/show/state'
 import { startClock } from '../src/timeline/replay'
 
 // The synthetic feed forces mode 'live' every second; while __hold is set, keep the replay mode a test chose.
@@ -22,6 +24,8 @@ const dev = {
   hold: false,
   ui,
   vessels,
+  yachts,
+  setShow,
   openShipWindow,
   shipScreenPoint,
   runBriefing,

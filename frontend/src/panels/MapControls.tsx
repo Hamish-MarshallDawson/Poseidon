@@ -6,7 +6,8 @@ import { reducedMotion, usePresence } from '../motion'
 import { fmtInt } from '../windows/format'
 import { WatchlistChip } from './Watchlist'
 import { ReviewChip } from '../review/ReviewPanel'
-import { YachtsLayer } from '../yachts/Yachts'
+import { SHOW_FILTERS, showFilter } from '../show/registry'
+import { setShow, startShow } from '../show/state'
 
 // Top-right buttons (watchlist chip, Layers, log out), zoom on the right edge and the scale bar bottom-right
 // (Figma 66:21908). The Layers pop-over follows the density report's layers panel (41:432).
@@ -21,6 +22,26 @@ const LAYERS: { key: LayerKey; label: string; note: string }[] = [
   { key: 'depth', label: 'Depth', note: 'contours only · off by default' },
 ]
 
+// Single choice: which set of ships the map shows. Native radios give the arrow-key behaviour for free.
+function ShowChoice() {
+  const show = ui.use((s) => s.show)
+  const List = showFilter(show).List
+  return (
+    <div className="show-choice">
+      <span className="kicker ly-head" id="show-head">Show</span>
+      <div role="radiogroup" aria-labelledby="show-head" className="show-group">
+        {SHOW_FILTERS.map((f) => (
+          <label key={f.id} className={`show-opt ${show === f.id ? 'on' : ''}`}>
+            <input type="radio" name="show" value={f.id} checked={show === f.id} onChange={() => setShow(f.id)} />
+            <span>{f.label}</span>
+          </label>
+        ))}
+      </div>
+      {List && <div className="show-list"><List /></div>}
+    </div>
+  )
+}
+
 function LayersPanel() {
   const layers = ui.use((s) => s.layers)
   const view = ui.use((s) => s.view)
@@ -33,12 +54,12 @@ function LayersPanel() {
         <span className="ly-bar"><i style={{ transform: `scaleX(${view.inView ? view.shown / view.inView : 0})` }} /></span>
         <span className="ly-note">{fmtInt(hidden)} more counted in density cells and stacks</span>
       </div>
+      <ShowChoice />
       <span className="kicker ly-head">Map</span>
       {LAYERS.map(({ key, label, note }) => (
         <Switch key={key} checked={layers[key]} label={label} hint={note}
           onChange={(on) => ui.set((s) => ({ layers: { ...s.layers, [key]: on } }))} />
       ))}
-      <YachtsLayer />
     </div>
   )
 }
@@ -75,6 +96,8 @@ function ScaleBar() {
 
 export function MapControls({ onLogout }: { onLogout?: () => void }) {
   const map = useMapInstance()
+  // After the app has bound the yachts login (its effect runs after this one), so a restored yachts filter loads with a token.
+  useEffect(() => void queueMicrotask(startShow), [])
   const layersOpen = ui.use((s) => s.layersOpen)
   const { mounted, attach } = usePresence(layersOpen, { y: -8, opacity: 0 })
   const zoom = (by: number) => map?.easeTo({ zoom: map.getZoom() + by, duration: reducedMotion() ? 0 : 250 })

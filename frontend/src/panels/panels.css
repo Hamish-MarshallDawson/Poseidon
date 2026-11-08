@@ -112,6 +112,15 @@
 .ly-note { color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
 .ly-head { display: block; padding: 14px 16px 4px; }
 .layers .dvm-row { padding-inline: 16px; }
+.show-group { display: flex; flex-direction: column; padding: 0 16px 4px; }
+.show-opt { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; font-size: var(--dvm-size-body); line-height: var(--dvm-line-body); color: var(--dvm-text-primary); }
+.show-opt input { margin: 0; accent-color: var(--dvm-accent-default); }
+.show-opt:has(input:focus-visible) { outline: 1px solid var(--dvm-accent-default); outline-offset: 2px; }
+/* The yachts list still brings its own on/off switch (src/yachts): the Show choice replaces it, so hide that row. */
+.show-list { padding-bottom: 6px; border-bottom: 1px solid var(--dvm-border-subtle); }
+.sl-show { display: inline-flex; gap: 8px; align-items: baseline; white-space: nowrap; color: var(--dvm-accent-default); }
+.sl-showall { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
+.sl-showall:focus-visible { outline: 1px solid var(--dvm-accent-default); outline-offset: 2px; }
 
 /* Watchlist drop-in (56:4359): edge text/muted so it separates from the map without a shadow. */
 /* Frame 6 (67:14713): x 1064, y 56, so right 16; it drops in over the zoom buttons. */

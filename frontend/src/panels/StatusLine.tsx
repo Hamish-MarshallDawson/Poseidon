@@ -1,4 +1,7 @@
 import { ui } from '../store/ui'
+import { yachts } from '../yachts/store'
+import { showFilter } from '../show/registry'
+import { matchCount, setShow } from '../show/state'
 import { fmtInt, minutes, utcTime } from '../windows/format'
 
 // Minimal status line, top-left (Figma 66:21909). Live: "● LIVE 14:07:12Z · 100 of 2,184 ships in view · …".
@@ -8,6 +11,8 @@ export function StatusLine() {
   const view = ui.use((s) => s.view)
   const focus = ui.use((s) => s.focusMmsi)
   const related = ui.use((s) => s.focusRelated.length)
+  const show = ui.use((s) => s.show)
+  yachts.use((s) => s.byMmsi)   // the yachts filter counts from this list
   const replay = feed.mode === 'replay'
   const stalled = feed.sources.some((s) => s.state === 'stall' || s.state === 'down')
 
@@ -34,6 +39,12 @@ export function StatusLine() {
         {utcTime(feed.now_ts)}
         {replay && feed.replay && ` · −${minutes(feed.replay.to_ts - feed.now_ts)}`} · {parts.join(' · ')}{replay && feed.paused && ' · paused'}
       </span>
+      {show !== 'all' && (
+        <span className="sl-show">
+          {showFilter(show).chip(matchCount(show))}
+          <button type="button" className="sl-showall" onClick={() => setShow('all')}>Show all</button>
+        </span>
+      )}
       {feed.isMock && <span className="sl-mock">ILLUSTRATIVE DATA</span>}
     </div>
   )

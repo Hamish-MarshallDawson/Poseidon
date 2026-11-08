@@ -18,6 +18,7 @@ import { shownNow } from '../../timeline/replay'
 import { ghostRadius } from '../../forecast/geo'
 import { clock, setShownClock, ShipState } from './state'
 import { yachts, yachtBadge } from '../../yachts/store'
+import { showFilter } from '../../show/registry'
 
 setShownClock(shownNow)
 
@@ -113,7 +114,7 @@ export class ShipController {
     this.unsubs.push(
       vessels.subscribe((changed, removed, frame) => this.onFrame(changed, removed, frame)),
       ui.subscribe((s, p) => this.onUi(s, p)),
-      yachts.subscribe(() => this.gpu.invalidate()),   // yacht badges (#101)
+      yachts.subscribe(() => { this.gpu.invalidate(); if (ui.get().show !== 'all') this.slotPass() }),   // yacht badges (#101); the yachts filter matches on this list
       themeStore.subscribe((s, p) => { this.state.reducedMotion = s.reducedMotion; if (s.classColour !== p.classColour) this.gpu.invalidate() }),
     )
   }
@@ -255,6 +256,7 @@ export class ShipController {
       if (s.focusMmsi == null) this.clearFocusGeometry()
       this.focusPass(true)
     }
+    if (s.show !== p.show) { this.applyLayerVisibility(s.layers); this.selectionChanged = true; this.slotPass() }
     if (s.follow !== p.follow) { this.applyLayerVisibility(s.layers); this.selectionChanged = true; this.gpu.invalidate() }
     if (s.windows !== p.windows || s.focusMmsi !== p.focusMmsi || s.follow !== p.follow) this.track.touch(true)
     if (s.windows !== p.windows || s.focusRelated !== p.focusRelated || s.focusMmsi !== p.focusMmsi) { this.selectionChanged = true; this.slotPass() }
@@ -266,9 +268,9 @@ export class ShipController {
     const map = this.map
     if (!map) return
     const vis = (ids: string[], on: boolean) => { for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none') }
-    const following = ui.get().follow
-    vis([L.cells, L.cellLabels], layers.density && !following)
-    vis([L.chips], !following)
+    const following = ui.get().follow, filtering = ui.get().show !== 'all'   // a Show filter hides cells and chips like Follow selected
+    vis([L.cells, L.cellLabels], layers.density && !following && !filtering)
+    vis([L.chips], !following && !filtering)
     vis([L.dead, L.deadEdge], layers.coverage)
   }
 
@@ -293,7 +295,7 @@ export class ShipController {
     const related = new Set(s.focusRelated.map((r) => r.mmsi))
     const res = computeSlots({
       state: this.state, view, nowMs: vessels.now_ts || Date.now(), now: clock(), pinned, related,
-      ranks: this.ranks, held: this.held, capOverride: this.opts.capOverride, pad: PAD,
+      ranks: this.ranks, held: this.held, capOverride: this.opts.capOverride, pad: PAD, allow: showFilter(s.show).match,
     })
     const drawn = res.drawn.map((slot) => this.state.mmsi[slot])
     const same = drawn.length === this.drawn.length && drawn.every((m) => this.drawnSet.has(m))
