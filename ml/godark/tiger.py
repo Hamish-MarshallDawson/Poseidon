@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_OUT = Path("/home/aiden/data/poseidon/godark/tiger")
+DEFAULT_OUT = (Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "godark/tiger")
 READ_ONLY = {"default_transaction_read_only": "on"}
 
 POS_SQL = """SELECT mmsi, ts, recv_ts, lat, lon, sog_kn, cog_deg, heading_deg, nav_status, cls, src FROM positions

@@ -81,7 +81,7 @@ async def export(out: Path, hours: float | None) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--out", type=Path, default=Path("/home/aiden/data/poseidon/route/tiger"))
+    ap.add_argument("--out", type=Path, default=Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "route/tiger")
     ap.add_argument("--hours", type=float, default=None, help="only the newest N hours")
     a = ap.parse_args()
     print(json.dumps(asyncio.run(export(a.out, a.hours)), indent=2))

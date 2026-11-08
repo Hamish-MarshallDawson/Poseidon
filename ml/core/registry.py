@@ -22,7 +22,7 @@ import pandas as pd
 
 from ml import REPO
 
-DEFAULT_ARTIFACTS = Path(os.getenv("ML_ARTIFACTS", "/home/aiden/data/poseidon/models"))
+DEFAULT_ARTIFACTS = Path(os.getenv("ML_ARTIFACTS") or Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon")) / "models")
 STATUSES = ("candidate", "champion", "rejected", "retired")   # retired: a former champion that was replaced
 PROPOSERS = ("human", "gemini", "default")
 

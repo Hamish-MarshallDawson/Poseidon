@@ -1,0 +1,30 @@
+# The improvement loop on the server (`python -m ml.auto`)
+
+Every 3 hours (`dvm-ml.timer`), one cycle under an exclusive lock (a cycle that finds it held exits):
+1. **Recalibrate from the graded ledger** (`ml.core.recalibrate --apply`): route radius factors per horizon and
+   go-dark logit shifts, fitted on the older half of the graded outcomes of the live champions and kept only if the
+   newer half gets closer to nominal. A kept fit becomes `<version>-calN` in `/opt/dvm/models` and champions.json is
+   rewritten atomically; the predictor reloads it every cycle, no restart. Old folders stay for rollback.
+2. **Retrain** each target (godark, fishing, route): refresh its data from Tiger read-only (and GFW for fishing,
+   5 minutes, polite), then one `ml.core.loop` round: 3 Gemini proposals (the repo's `GEMINI_API_KEY`, capped per
+   day; the fixed list without a key), trained, scored on the frozen held-out set, promoted only by the rule with a
+   second-seed check.
+3. **Deploy retrained champions** only with `ML_DEPLOY_RETRAINED=1` (off: the server registry starts empty, so its
+   champions have only beaten its own earlier runs, not the live models). Fishing is never deployed (no live
+   features yet).
+
+Resources: Nice 19, idle I/O, at most 3 of the 6 vCPUs (`CPUQuota=300%`, `ML_THREADS=3`), 6 GB memory cap, one
+cycle at a time. Status: `/opt/dvm/ml-data/models/reports/auto-status.json` and `auto-history.jsonl`; leaderboards
+in the same folder.
+
+## Install (once, as root, from /opt/dvm with the repo's ml/ present)
+
+```bash
+python3 -m venv /opt/dvm/ml/.venv && /opt/dvm/ml/.venv/bin/pip install -q -r /opt/dvm/ml/requirements.txt
+mkdir -p /opt/dvm/ml-data && chown dvm: /opt/dvm/ml-data && chown -R dvm: /opt/dvm/models
+cp /opt/dvm/ml/deploy/dvm-ml.service /opt/dvm/ml/deploy/dvm-ml.timer /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now dvm-ml.timer
+systemctl start dvm-ml.service          # first cycle now; journalctl -u dvm-ml -f to watch
+```
+The unit needs `/opt/dvm/backend/.env` (TIGER_DATABASE_URL, GEMINI_API_KEY, GFW_API_TOKEN) and the backend
+package next to ml/ (the deploy step loads artifacts with the live loader).
