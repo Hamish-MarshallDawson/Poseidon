@@ -91,14 +91,14 @@ def _by_mode(upper: bool) -> str:
         f"AND r.time = {at} AND {r_time} WHERE o.target = 'route' AND {made} "
         "GROUP BY 1, 2 UNION ALL "
         f"SELECT {t} AS t, s.mode, count(*) AS n FROM outcomes o JOIN scores s ON s.id = o.score_id "
-        f"AND s.time = {at} AND {s_time} WHERE o.target LIKE 'dark\\_%' AND {made} "
+        f"AND s.time = {at} AND {s_time} WHERE (o.target LIKE 'dark\\_%' OR o.target = 'fishing_mpa_7d') AND {made} "
         "GROUP BY 1, 2 UNION ALL "
         f"SELECT {t} AS t, coalesce((SELECT r.mode FROM route_predictions r WHERE r.gap_id = o.event_id "
         f"AND r.model_version = o.model_version AND r.time = {at} AND {r_time} LIMIT 1), 'unknown') "
         f"AS mode, count(*) AS n FROM outcomes o WHERE o.target = 'route_reappear' AND {made} "
         "GROUP BY 1, 2 UNION ALL "
         f"SELECT {t} AS t, 'unknown' AS mode, count(*) AS n FROM outcomes o WHERE o.target NOT IN "
-        f"('route', 'route_reappear') AND o.target NOT LIKE 'dark\\_%' AND {made} GROUP BY 1, 2")
+        f"('route', 'route_reappear', 'fishing_mpa_7d') AND o.target NOT LIKE 'dark\\_%' AND {made} GROUP BY 1, 2")
 
 
 BEFORE_DAYS = 30     # /lab/data's running totals start this long before the window (bounded as the ledger grows)
@@ -131,6 +131,28 @@ LIVE_ROUTE = ("SELECT o.model_version, count(*) AS n, avg(o.in_r80::int) AS cov8
               f"AND {_HORIZON} = $2 GROUP BY 1")
 LIVE_DARK = ("SELECT s.model_version, count(*) AS n, avg(s.p) AS mean_p, avg(o.label::int) AS hit_rate, "
              f"avg((s.p - o.label::int) ^ 2) AS brier {_DARK_FROM}AND s.mode = 'live' AND o.target = $2 GROUP BY 1")
+
+# Fishing in protected areas is scored weekly by `ml.fishing.score` (made_at = the week's Monday) and graded once the
+# week has passed, so it gets its own all-weeks (bounded) counts instead of the 24 h live window.
+FISHING_TARGET = "fishing_mpa_7d"
+FISHING_DAYS = 120
+FISHING = ("SELECT s.made_at AS week, s.model_version, count(*) AS scored, count(o.score_id) AS graded, "
+           "count(*) FILTER (WHERE o.label) AS positives, avg(s.p) AS mean_p, avg(o.label::int) AS hit_rate "
+           "FROM scores s LEFT JOIN outcomes o ON o.score_id = s.id WHERE s.target = 'fishing_mpa_7d' "
+           "AND s.mode = 'live' AND s.time >= to_timestamp($1::bigint / 1000.0) GROUP BY 1, 2 ORDER BY 1, 2")
+
+
+def fishing_live(rows: list[dict]) -> Optional[dict]:
+    """Totals of the weekly live fishing scores: vessels scored (latest week and all), graded, flagged in an MPA."""
+    if not rows:
+        return None
+    last = max(r["week"] for r in rows)
+    graded = sum(r["graded"] for r in rows)
+    pos = sum(r["positives"] for r in rows)
+    return {"latest_week": last, "scored_latest_week": sum(r["scored"] for r in rows if r["week"] == last),
+            "scored": sum(r["scored"] for r in rows), "graded": graded, "positives": pos,
+            "hit_rate": pos / graded if graded else None,
+            "model_version": max((r for r in rows if r["week"] == last), key=lambda r: r["scored"])["model_version"]}
 
 
 def _num(v):
@@ -392,7 +414,8 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
             godark = _oldest_first([godark_row(x) for x in await _fetch(con, GODARK, since, b)], "target")
             rel = await _fetch(con, RELIABILITY, since, P_EDGES)
             lf = await _fetch(con, LIFT, since, TOP_SHARE)
-        return {"bucket": b, "hours": hours, "route": route, "godark": godark,
+            fishing = [_row(x) for x in await _fetch(con, FISHING, int(now - FISHING_DAYS * 24 * H_MS))]
+        return {"fishing": fishing, "bucket": b, "hours": hours, "route": route, "godark": godark,
                 "truncated": len(route) >= MAX_ROWS or len(godark) >= MAX_ROWS,
                 "reliability": reliability(rel, dark_champion), "lift": lift(lf, dark_champion)}
 
@@ -449,6 +472,7 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
             proposals = await _optional(con, OPTIONAL_COUNT.format("ml_proposals"), default=0)
             sources = {x["run_id"]: x["source"] for x in await _optional(con, RUN_SOURCES, default=[], rows=True)}
             events = await _optional(con, EVENTS, default=[], rows=True)
+            fish = fishing_live([_row(x) for x in await _fetch(con, FISHING, int(now - FISHING_DAYS * 24 * H_MS))])
         for x in runs:
             x["metrics"] = _json(x["metrics"])
         models = []
@@ -470,8 +494,14 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                 live = route_live(rows, version, m) if key == "route" else dark_live(rows, version, dark_target, m)
                 if live is None and rows:
                     other = pick_version({x["model_version"]: x["n"] for x in rows}, version)
-            models.append({"target": key, "label": LABELS[key], "champion": champion, "offline": offline,
-                           "live": live, "deployed": deployed, "note": note(live, deployed, other)})
+            card = {"target": key, "label": LABELS[key], "champion": champion, "offline": offline,
+                    "live": live, "deployed": deployed, "note": note(live, deployed, other)}
+            if key == "fishing":
+                card["fishing_live"] = fish
+                if fish:
+                    card["note"] = (f"scored {fish['scored_latest_week']} vessels this week; "
+                                    f"{fish['graded']} weekly predictions graded so far")
+            models.append(card)
         last = max([x["created_at"] for x in runs] + [e["ts"] for e in events
                                                        if e["kind"] in ("trained", "recalibrated")], default=None)
         return {"generated_at": now, "models": models, "cycle": {"state": "manual", "last": last, "next": None},

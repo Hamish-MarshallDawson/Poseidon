@@ -160,6 +160,13 @@ async def _seed(con):
         scores.append((sid, 100 + i, "dark_1h", T + H, 3600, p, "godark-x", "f1", "{}", None, "live"))
         outs.append((sid, 100 + i, "dark_1h", T + H, 3600, T + 2 * H + 1800_000, i == 0, None, None, None, None, None,
                      None, None, None, None, None, None, None))
+    # 2 live weekly fishing scores 40 days back (outside /lab/data's window), one graded: fished in an MPA
+    W = T - 40 * 24 * H
+    for i, p in enumerate((0.7, 0.1)):
+        sid = f"fishing_mpa_7d:{300 + i}:{W}"
+        scores.append((sid, 300 + i, "fishing_mpa_7d", W, 604800, p, "fishing-x", "fishing-v1", "{}", None, "live"))
+    outs.append((f"fishing_mpa_7d:300:{W}", 300, "fishing_mpa_7d", W, 604800, W + 9 * 24 * H, True, None, "ev1",
+                 3600, None, None, None, None, None, None, None, None, None))
     await con.executemany(schema.ROUTE_INSERT, routes)
     await con.executemany(schema.SCORE_INSERT, scores)
     await con.executemany(schema.OUTCOME_INSERT, outs)
@@ -237,7 +244,14 @@ async def _db_flow():
     assert godark["live"]["target"] == "dark_1h"   # no 6 h grades yet: the 1 h card
     assert godark["live"]["n"] == 10 and godark["champion"]["run_id"] is None
     assert fishing["deployed"] is False and fishing["live"] is None
-    assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 17, "graded_outcomes_estimated": False,
+    W = T - 40 * 24 * H
+    assert fishing["fishing_live"] == {"latest_week": W, "scored_latest_week": 2, "scored": 2, "graded": 1,
+                                       "positives": 1, "hit_rate": 1.0, "model_version": "fishing-x"}
+    assert fishing["note"] == "scored 2 vessels this week; 1 weekly predictions graded so far"
+    (fw,) = m["fishing"]
+    assert (fw["week"], fw["scored"], fw["graded"], fw["positives"]) == (W, 2, 1, 1)
+    assert fw["mean_p"] == pytest.approx(0.4) and fw["hit_rate"] == 1.0
+    assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 18, "graded_outcomes_estimated": False,
                            "graded_last_hour": 0}
     assert d["counted_from"] == T - 4 * H - 30 * 24 * H and d["truncated"] is False and m["truncated"] is False
     assert s["cycle"] == {"state": "manual", "last": T - H / 2, "next": None}
@@ -284,6 +298,15 @@ CREATE TABLE IF NOT EXISTS ml_proposals (id text PRIMARY KEY);
 @needs_db
 def test_routes_on_local_db():
     asyncio.run(_db_flow())
+
+
+def test_fishing_live_totals():
+    assert M.fishing_live([]) is None
+    rows = [{"week": 1, "model_version": "a", "scored": 5, "graded": 5, "positives": 2},
+            {"week": 2, "model_version": "b", "scored": 3, "graded": 0, "positives": 0}]
+    f = M.fishing_live(rows)
+    assert (f["latest_week"], f["scored_latest_week"], f["scored"], f["graded"], f["hit_rate"],
+            f["model_version"]) == (2, 3, 8, 5, 0.4, "b")
 
 
 def test_truncation_keeps_the_newest_buckets():
