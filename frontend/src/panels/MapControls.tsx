@@ -78,7 +78,7 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
   const zoom = (by: number) => map?.easeTo({ zoom: map.getZoom() + by, duration: reducedMotion() ? 0 : 250 })
   return (
     <>
-      <div className="top-right">
+      <div className="top-right" data-zone>
         <WatchlistChip />
         <ReviewChip />
         <button type="button" className={`chip ${layersOpen ? 'on' : ''}`} aria-expanded={layersOpen} aria-controls="layers-panel"
@@ -87,8 +87,8 @@ export function MapControls({ onLogout }: { onLogout?: () => void }) {
         </button>
         {onLogout && <button type="button" className="chip chip-quiet" onClick={onLogout}>Log out</button>}
       </div>
-      {mounted && <div className="layers-wrap" ref={attach}><LayersPanel /></div>}
-      <div className="zoom" role="group" aria-label="Zoom">
+      {mounted && <div className="layers-wrap" data-zone ref={attach}><LayersPanel /></div>}
+      <div className="zoom" data-zone role="group" aria-label="Zoom">
         <button type="button" aria-label="Zoom in" onClick={() => zoom(1)}>+</button>
         <button type="button" aria-label="Zoom out" onClick={() => zoom(-1)}>−</button>
       </div>

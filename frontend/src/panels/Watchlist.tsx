@@ -196,5 +196,5 @@ function WatchlistPanel() {
 export function Watchlist() {
   const open = ui.use((s) => s.watchlistOpen)
   const { mounted, attach } = usePresence(open, { y: -12, opacity: 0 })
-  return mounted ? <div className="watchlist-wrap" ref={attach}><WatchlistPanel /></div> : null
+  return mounted ? <div className="watchlist-wrap" data-zone ref={attach}><WatchlistPanel /></div> : null
 }

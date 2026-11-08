@@ -12,7 +12,7 @@ export function BriefingPanel() {
   if (!s.open) return null
   const r = s.result
   return (
-    <div className="panel briefing" role="dialog" aria-labelledby="br-title" aria-busy={s.status === 'loading'}>
+    <div className="panel briefing" data-zone role="dialog" aria-labelledby="br-title" aria-busy={s.status === 'loading'}>
       <div className="br-head">
         <h2 id="br-title">AI briefing{s.requested.length > 1 ? ` · ${s.requested.length} ships` : ''}</h2>
         <Button className="btn-small" onClick={closeBriefing}>Close</Button>

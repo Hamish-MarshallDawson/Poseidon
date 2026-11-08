@@ -48,7 +48,7 @@ export default function App() {
 }
 
 // The map-first screen: the map is everything; windows, panels, the scrub bar and the forecast drop in over it.
-function Monitor({ getToken, onLogout }: { getToken: () => Promise<string | undefined>; onLogout: () => void }) {
+export function Monitor({ getToken, onLogout }: { getToken: () => Promise<string | undefined>; onLogout: () => void }) {
   useFeed(getToken)
   useFollowState()
   useEffect(() => {

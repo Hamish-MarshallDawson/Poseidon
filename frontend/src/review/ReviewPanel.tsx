@@ -100,7 +100,7 @@ export function Review() {
   const { mounted, attach } = usePresence(open, { y: -12, opacity: 0 })
   return (
     <>
-      {mounted && <div className="watchlist-wrap" ref={attach}><ReviewPanel onCompare={() => setComparing(true)} /></div>}
+      {mounted && <div className="watchlist-wrap" data-zone ref={attach}><ReviewPanel onCompare={() => setComparing(true)} /></div>}
       {/* Outside the wrap: its presence transform would make a fixed child position against the wrap. */}
       {comparing && list.length >= 2 && <Compare mmsis={list} onClose={() => setComparing(false)} onOpenShip={openShipWindow} />}
     </>

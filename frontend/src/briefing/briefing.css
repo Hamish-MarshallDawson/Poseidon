@@ -1,6 +1,6 @@
-/* AI briefing panel and the Watchlist multi-select. Tokens only; follows the panels in panels.css. */
+/* AI briefing panel (bottom-left column, src/layout.ts) and the Watchlist multi-select. Tokens only; follows the panels in panels.css. */
 .briefing {
-  position: fixed; left: 16px; bottom: 64px; z-index: 3; width: 400px; max-width: calc(100vw - 32px); max-height: calc(100vh - 140px);
+  position: fixed; left: 16px; bottom: 64px; z-index: 3; width: 400px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px - 104px);   /* under the focus bar; the body scrolls, Close stays in the header */
   display: flex; flex-direction: column; box-shadow: 0 6px 20px var(--dvm-shadow-lift);
 }
 .br-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-bottom: 1px solid var(--dvm-border-subtle); }
@@ -35,3 +35,4 @@
 .wl-brief { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--dvm-border-subtle); background: var(--dvm-bg-raised); }
 .wl-brief span { color: var(--dvm-text-secondary); }
 .wl-brief-actions { display: flex; gap: 8px; }
+@media (max-width: 720px) { .briefing { bottom: 118px; max-height: calc(100vh - 118px - 170px); } }

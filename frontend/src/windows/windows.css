@@ -31,6 +31,7 @@
   /* No background on the promoted layer itself: an opaque one made Chromium's occlusion culling drop a column of the
      map canvas around the window (blank water stripe). The bar and the card paint the fills instead. */
   border: 1px solid var(--dvm-border-default);
+  max-height: calc(100vh - var(--lay-top) - var(--lay-bottom));   /* the card scrolls inside; never reaches the scrub bar */
   pointer-events: auto;
   will-change: transform, opacity;
   contain: layout paint;
@@ -90,7 +91,8 @@
 .sw-btn:hover { color: var(--dvm-text-primary); }
 
 /* Ship card (R2/Forecast/Ship card 56:4598): 320 wide, bg/panel, no border of its own. */
-.sc { width: 320px; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--dvm-bg-panel); }
+.sc { width: 320px; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: var(--dvm-bg-panel); }
+.sc > * { flex-shrink: 0; }
 .sc-head { display: flex; align-items: center; gap: 8px; }
 .sc-name { flex: 1; margin: 0; min-width: 0; font-weight: 600; font-size: var(--dvm-size-title); line-height: var(--dvm-line-title); overflow-wrap: anywhere; }
 .sc-chip {

@@ -35,7 +35,7 @@ export function FocusBar() {
   for (const r of related) counts.set(r.reason, (counts.get(r.reason) ?? 0) + 1)
 
   return (
-    <div className="panel focus-bar" role="region" aria-label="Focus">
+    <div className="panel focus-bar" data-zone role="region" aria-label="Focus">
       <span className="kicker">Focus</span>
       {trail.path.map((m) => (
         <span key={m} className="fb-step"><Crumb mmsi={m} onClick={() => ui.set({ focusMmsi: m })} /><span aria-hidden>›</span></span>
