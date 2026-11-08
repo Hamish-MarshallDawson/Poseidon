@@ -1,21 +1,21 @@
 """Route models: the dead-reckoning baseline and a LightGBM corrector per horizon, both with split-conformal radii.
 
-Interface (ml-architecture.md): `fit(train_df, cfg) -> self`, `predict(df) -> DataFrame`, `save(dir)`, `load(dir)`,
-`name`, `target`. Input rows are examples (see examples.py): features at as_of plus `horizon_s`. Output per row:
-`pred_lat, pred_lon, radius_m_80, radius_m_95` (plus `base_lat, base_lon`).
+Interface: `ml.core.registry.Model` (`fit(train_df, cfg)`, `predict(df)` long, `save(dir) -> dict`, `load(dir)`).
+Input is the wide examples frame from examples.py. Output: one row per case and horizon with `case_id, horizon_s,
+pred_lat, pred_lon, radius_m_80, radius_m_95, base_lat, base_lon`.
 
-Every prediction starts from the ship's last fix: the effective horizon is `age_s + horizon_s`, so a live
-prediction for a ship silent for an hour, asked for +3 h, uses the 4 h correction. Horizons between the trained ones
-are interpolated linearly (no correction and no radius at 0 h); beyond the longest one the correction is held and
-the radius grows in proportion to time.
+The artifact is what `backend/dvm/predict/artifact.py` loads, with no ml/ import: per horizon a pair of LightGBM text
+dumps for the east and north offset (metres) of the ship from `features.baseline_point(fix, h)`, and conformal
+radii per speed band (`{"sog_edges_kn": [5, 12], "r": [3 values]}`). Predictions start from the last fix: horizon h
+means fix time + h, as in the backend.
 
-LightGBM predicts the offset of the truth from the baseline point in the baseline's own frame (along and across
-the last course), so a turn to port looks the same on any heading; offsets are rotated back to east and north.
+Option `frame: "track"` learns the offset along and across the last course instead (a turn to port looks the same
+on any heading). It scores better (see ml/route/README.md) but the backend loader reads only east/north heads, so a
+track-frame artifact writes `along`/`cross` heads that the current backend refuses (it then falls back to its
+baseline, never mis-applies them). The default is `enu` until the backend supports the frame.
 
-Radii are Mondrian split-conformal per horizon and speed bucket on a calibration slice that comes after the
-fitting slice in time (with an embargo of the horizon), so they hold for the next stretch of time, not the past.
-
-Artifact: `model.json` plus one LightGBM text dump per horizon and component. No pickles.
+Radii are Mondrian split-conformal per horizon and speed band on a calibration slice that comes after the fitting
+slice in time (embargo = the horizon), so they are honest for the next stretch of time.
 """
 from __future__ import annotations
 
@@ -26,256 +26,263 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ml.route import TRAIN_HORIZONS_S
-from ml.route.features import FEATURE_GROUPS, FEATURE_VERSION, baseline_course, baseline_position, feature_names
-from ml.route.geo import apply_enu_offset, enu_offset_m
+from ml.core.registry import Model
+from ml.route import HORIZONS_S, TRAIN_HORIZONS_S
+from ml.route.examples import SPEED_EDGES_KN
+from ml.route.geo import apply_enu_offset, enu_offset_m, haversine_m
 
-SPEED_BUCKETS_KN = (5.0, 12.0)            # < 5, 5 to 12, >= 12 kn at the last fix
-MIN_BUCKET_N = 50                         # smaller buckets use the horizon's pooled quantile
+from dvm.predict import features as F  # noqa: E402
+
+MIN_BAND_N = 50                           # smaller speed bands use the horizon's pooled quantile
 MIN_FIT_N = 500                           # fewer fitting rows: the horizon is not trained
+_W = lambda w: [n for n in F.FEATURE_NAMES if n.startswith(f"w{w}_")]   # noqa: E731
+FEATURE_GROUPS = {
+    "kinematics": ["sog_kn", "cog_sin", "cog_cos", "ve_kn", "vn_kn", "heading_cog_diff_deg", "nav_status",
+                   "anchored", "is_class_a"],
+    "position": ["lat", "lon"],
+    "history_30m": _W("30m"), "history_2h": _W("2h"), "history_6h": _W("6h"),
+    "static": ["ship_type", "length_m", "draught_m"],
+    "time": ["hour_sin", "hour_cos"],
+}
+# age_s is never a feature: training cases start at a fix (age 0); live predictions start from the last fix too
 DEFAULT_CFG = {
-    "model": "lgbm",                      # lgbm | baseline
-    "horizons_s": list(TRAIN_HORIZONS_S),  # the contract's 1/3/6/24 h plus in-between ones for interpolation
+    "model": "lgbm", "seed": 0,
+    "horizons_s": list(TRAIN_HORIZONS_S),     # the contract's 1/3/6/24 h plus 30 min, 2 h, 12 h for gap lengths
     "feature_groups": list(FEATURE_GROUPS),
-    "objective": "l1",                    # l1 | l2 | huber
+    "frame": "enu",                           # enu (backend format) | track
+    "objective": "l1",                        # l1 | l2 | huber
     "num_leaves": 63, "learning_rate": 0.05, "n_estimators": 400, "min_child_samples": 50,
     "feature_fraction": 0.8, "bagging_fraction": 0.8, "lambda_l2": 1.0,
-    "calib_frac": 0.2,                    # newest share of the training time span kept for conformal radii
-    "real_gap_weight": 1.0,               # sample weight for real dark-ship cases relative to track cases
-    "seed": 0, "num_threads": 4,
+    "calib_frac": 0.2,                        # newest share of each horizon's training span kept for the radii
+    "real_gap_weight": 1.0,                   # sample weight of real dark-ship cases relative to track cases
+    "sample_weight": "none",                  # none | recent
+    "num_threads": 4,
 }
 
 
-def speed_bucket(sog) -> np.ndarray:
-    s = np.nan_to_num(np.asarray(sog, float), nan=0.0)
-    return np.digitize(s, SPEED_BUCKETS_KN)          # 0, 1, 2
+def band(sog) -> np.ndarray:
+    return np.digitize(np.nan_to_num(np.asarray(sog, float), nan=0.0), SPEED_EDGES_KN)
 
 
 def conformal_q(scores: np.ndarray, level: float) -> float:
-    """Split-conformal quantile with the finite-sample correction: ceil((n+1) level)-th smallest score."""
+    """Split-conformal quantile with the finite-sample correction: the ceil((n+1) level)-th smallest score."""
     n = len(scores)
     if n == 0:
         return float("nan")
     k = int(np.ceil((n + 1) * level))
-    return float(np.sort(scores)[min(k, n) - 1]) if k <= n else float(np.max(scores))
+    return float(np.sort(scores)[min(k, n) - 1])
 
 
-def data_hash(df: pd.DataFrame) -> str:
-    h = hashlib.sha256()
-    for col in ("case_id", "horizon_s"):
-        h.update(pd.util.hash_pandas_object(df[col], index=False).to_numpy().tobytes())
-    return h.hexdigest()[:16]
+def course_rad(df: pd.DataFrame) -> np.ndarray:
+    """The baseline's course (cog, else heading; 0 for a stopped ship), as features.baseline_point uses it."""
+    cog, hdg = df["fix_cog"].to_numpy(float), df["fix_hdg"].to_numpy(float)
+    ok_c = (cog >= 0) & (cog < 360)
+    c = np.where(ok_c, cog, np.where((hdg >= 0) & (hdg < 360), hdg, 0.0))
+    return np.radians(np.where(df["stopped"].to_numpy(bool), 0.0, c))
 
 
-class RouteModel:
+def fix_dict(r) -> dict:
+    nan = lambda v: None if v is None or (isinstance(v, float) and np.isnan(v)) else v   # noqa: E731
+    return {"lat": r.fix_lat, "lon": r.fix_lon, "sog_kn": nan(r.fix_sog), "cog_deg": nan(r.fix_cog),
+            "heading_deg": nan(r.fix_hdg), "nav_status": None if nan(r.fix_nav) is None else int(r.fix_nav)}
+
+
+class _Route(Model):
     target = "route"
+    name = ""
 
-    def __init__(self, cfg: dict | None = None):
-        self.cfg = {**DEFAULT_CFG, **(cfg or {})}
-        self.name = "route_baseline" if self.cfg["model"] == "baseline" else "route_lgbm"
-        self.features = [f for g in self.cfg["feature_groups"] for f in FEATURE_GROUPS[g]]
-        self.features = [f for f in feature_names() if f in self.features]         # canonical order
-        self.horizons = sorted(int(h) for h in self.cfg["horizons_s"])
+    def __init__(self):
+        self.cfg: dict = dict(DEFAULT_CFG)
+        self.features: list[str] = []
+        self.horizons: list[int] = []
         self.boosters: dict[int, tuple] = {}
-        self.radius: dict[int, dict] = {}
+        self.radius: dict[int, dict] = {}       # h -> {"r80": [per band], "r95": [...], "n": [...]}
         self.meta: dict = {}
 
-    # ---- geometry -------------------------------------------------------------------------------------------
-    @staticmethod
-    def _frame(df):
-        brg, _, _ = baseline_course(df)
-        return np.radians(brg)
+    # ---- frames ------------------------------------------------------------------------------------------------
+    def _to_frame(self, df, east, north):
+        if self.cfg["frame"] != "track":
+            return east, north
+        th = course_rad(df)
+        return east * np.sin(th) + north * np.cos(th), east * np.cos(th) - north * np.sin(th)
 
-    def _offsets_to_frame(self, df, east, north):
-        th = self._frame(df)
-        along = east * np.sin(th) + north * np.cos(th)
-        cross = east * np.cos(th) - north * np.sin(th)              # positive = to starboard
-        return along, cross
+    def _from_frame(self, df, a, b):
+        if self.cfg["frame"] != "track":
+            return a, b
+        th = course_rad(df)
+        return a * np.sin(th) + b * np.cos(th), a * np.cos(th) - b * np.sin(th)
 
-    def _frame_to_offsets(self, df, along, cross):
-        th = self._frame(df)
-        return along * np.sin(th) + cross * np.cos(th), along * np.cos(th) - cross * np.sin(th)
-
-    # ---- fit --------------------------------------------------------------------------------------------------
-    def fit(self, train_df: pd.DataFrame, cfg: dict | None = None) -> "RouteModel":
-        if cfg:
-            self.__init__({**self.cfg, **cfg})
-        df = train_df[train_df["truth"] == "fixed"] if "truth" in train_df else train_df
-        df = df[df["horizon_s"].isin(self.horizons)]
-        t_lo, t_hi = int(df["as_of"].min()), int(df["as_of"].max())
-        self.meta = {"train_from": t_lo, "train_to": t_hi, "calib_start": {}, "data_hash": data_hash(df),
-                     "n_fit": {}, "n_calib": {}}
-        for h in self.horizons:
-            d = df[df["horizon_s"] == h]
+    # ---- fit ---------------------------------------------------------------------------------------------------
+    def fit(self, train_df: pd.DataFrame, cfg: dict) -> "_Route":
+        self.cfg = {**DEFAULT_CFG, **(cfg or {})}
+        self.horizons, self.boosters, self.radius = [], {}, {}
+        self.features = [f for f in F.FEATURE_NAMES if any(f in FEATURE_GROUPS[g] for g in self.cfg["feature_groups"])]
+        self.meta = {"n_fit": {}, "n_calib": {}, "calib_start": {}, "train_from": int(train_df["as_of"].min()),
+                     "train_to": int(train_df["as_of"].max())}
+        for h in sorted(int(x) for x in self.cfg["horizons_s"]):
+            if f"truth_lat_{h}" not in train_df:
+                continue
+            d = train_df[train_df[f"truth_lat_{h}"].notna()]
             if d.empty:
-                self.meta["n_fit"][h] = self.meta["n_calib"][h] = 0
                 continue
             lo, hi = int(d["as_of"].min()), int(d["as_of"].max())
-            calib_start = hi - int((hi - lo) * self.cfg["calib_frac"])   # per horizon: its own newest slice
-            self.meta["calib_start"][h] = calib_start
-            fit = d[d["as_of"] + h * 1000 <= calib_start]                 # embargo: truth before calibration
-            cal = d[d["as_of"] >= calib_start]
-            self.meta["n_fit"][h], self.meta["n_calib"][h] = len(fit), len(cal)
-            if len(cal) < MIN_BUCKET_N or (self.cfg["model"] == "lgbm" and len(fit) < MIN_FIT_N):
-                continue                                                  # the data can't support this horizon
-            if self.cfg["model"] == "lgbm":
+            cut = hi - int((hi - lo) * self.cfg["calib_frac"])
+            fit = d[d["as_of"] + h * 1000 <= cut]               # embargo: no fitting truth inside the calib slice
+            cal = d[d["as_of"] >= cut]
+            self.meta["n_fit"][h], self.meta["n_calib"][h], self.meta["calib_start"][h] = len(fit), len(cal), cut
+            if len(cal) < MIN_BAND_N or (self.trains and len(fit) < MIN_FIT_N):
+                continue
+            if self.trains:
                 self.boosters[h] = self._fit_h(fit, h)
+            self.horizons.append(h)
             self.radius[h] = self._calibrate(cal, h)
-        self.meta["horizons_dropped"] = [h for h in self.horizons if h not in self.radius]
-        self.horizons = [h for h in self.horizons if h in self.radius]
         if not self.horizons:
-            raise ValueError(f"no horizon has enough data: fit {self.meta['n_fit']}, calib {self.meta['n_calib']}")
+            raise ValueError(f"no horizon has enough data: {self.meta}")
         return self
+
+    trains = True
+
+    def _weights(self, d):
+        w = np.where(d["kind"].to_numpy() == "real_gap", float(self.cfg["real_gap_weight"]), 1.0)
+        if self.cfg.get("sample_weight") == "recent":
+            t = d["as_of"].to_numpy(float)
+            w = w * (0.5 + (t - t.min()) / max(1.0, t.max() - t.min()))
+        return w
 
     def _fit_h(self, d: pd.DataFrame, h: int):
         import lightgbm as lgb
-        blat, blon = baseline_position(d, h)
-        east, north = enu_offset_m(blat, blon, d["true_lat"].to_numpy(float), d["true_lon"].to_numpy(float))
-        along, cross = self._offsets_to_frame(d, east, north)
-        w = np.where(d["kind"].to_numpy() == "real_gap", self.cfg["real_gap_weight"], 1.0)
-        params = {"objective": self.cfg["objective"], "num_leaves": self.cfg["num_leaves"],
-                  "learning_rate": self.cfg["learning_rate"], "min_child_samples": self.cfg["min_child_samples"],
-                  "feature_fraction": self.cfg["feature_fraction"], "bagging_fraction": self.cfg["bagging_fraction"],
-                  "bagging_freq": 1, "lambda_l2": self.cfg["lambda_l2"], "seed": self.cfg["seed"],
-                  "verbose": -1, "num_threads": self.cfg["num_threads"], "deterministic": True,
-                  "force_col_wise": True}
+        east, north = enu_offset_m(d[f"base_lat_{h}"].to_numpy(float), d[f"base_lon_{h}"].to_numpy(float),
+                                   d[f"truth_lat_{h}"].to_numpy(float), d[f"truth_lon_{h}"].to_numpy(float))
+        ya, yb = self._to_frame(d, east, north)
+        params = {"objective": self.cfg["objective"], "num_leaves": int(self.cfg["num_leaves"]),
+                  "learning_rate": float(self.cfg["learning_rate"]),
+                  "min_child_samples": int(self.cfg["min_child_samples"]),
+                  "feature_fraction": float(self.cfg["feature_fraction"]),
+                  "bagging_fraction": float(self.cfg["bagging_fraction"]), "bagging_freq": 1,
+                  "lambda_l2": float(self.cfg["lambda_l2"]), "seed": int(self.cfg["seed"]), "verbose": -1,
+                  "num_threads": int(self.cfg["num_threads"]), "deterministic": True, "force_col_wise": True}
         if self.cfg["objective"] == "huber":
-            params["alpha"] = float(np.quantile(np.hypot(along, cross), 0.9)) or 1.0
+            params["alpha"] = float(np.quantile(np.hypot(ya, yb), 0.9)) or 1.0
         X = d[self.features].to_numpy(np.float64)
-        out = []
-        for y in (along, cross):
-            out.append(lgb.train(params, lgb.Dataset(X, y, weight=w, feature_name=self.features,
-                                                     free_raw_data=True), self.cfg["n_estimators"]))
-        return tuple(out)
+        w = self._weights(d)
+        return tuple(lgb.train(params, lgb.Dataset(X, y, weight=w, feature_name=self.features, free_raw_data=True),
+                               int(self.cfg["n_estimators"])) for y in (ya, yb))
 
     def _calibrate(self, cal: pd.DataFrame, h: int) -> dict:
-        if cal.empty:
-            return {"pooled": {"q80": float("nan"), "q95": float("nan"), "n": 0}}
-        lat, lon = self._point(cal, np.full(len(cal), h, float), only=h)
-        err = _dist(lat, lon, cal)
-        b = speed_bucket(cal["last_sog"])
-        r = {"pooled": {"q80": conformal_q(err, 0.8), "q95": conformal_q(err, 0.95), "n": int(len(err))}}
-        for k in range(len(SPEED_BUCKETS_KN) + 1):
+        lat, lon = self._point(cal, h)
+        err = haversine_m(lat, lon, cal[f"truth_lat_{h}"].to_numpy(float), cal[f"truth_lon_{h}"].to_numpy(float))
+        b = band(cal["fix_sog"])
+        pooled = (conformal_q(err, 0.8), conformal_q(err, 0.95))
+        r = {"r80": [], "r95": [], "n": [], "pooled": list(pooled), "n_pooled": int(len(err))}
+        for k in range(len(SPEED_EDGES_KN) + 1):
             e = err[b == k]
-            if len(e) >= MIN_BUCKET_N:
-                r[str(k)] = {"q80": conformal_q(e, 0.8), "q95": conformal_q(e, 0.95), "n": int(len(e))}
+            ok = len(e) >= MIN_BAND_N
+            r["r80"].append(round(conformal_q(e, 0.8) if ok else pooled[0], 1))    # 0.1 m: as saved
+            r["r95"].append(round(conformal_q(e, 0.95) if ok else pooled[1], 1))
+            r["n"].append(int(len(e)))
         return r
 
-    # ---- predict ----------------------------------------------------------------------------------------------
-    def _correction(self, df: pd.DataFrame, h: int):
+    # ---- predict -----------------------------------------------------------------------------------------------
+    def _offset(self, df, h):
         if h not in self.boosters:
             z = np.zeros(len(df))
             return z, z
         X = df[self.features].to_numpy(np.float64)
-        a, c = self.boosters[h]
-        return a.predict(X), c.predict(X)
+        a, b = (bst.predict(X) for bst in self.boosters[h])
+        return self._from_frame(df, a, b)
 
-    def _point(self, df, eff_h, only: int | None = None):
-        """Predicted point at effective horizon eff_h seconds after the last fix."""
-        blat, blon = baseline_position(df.assign(age_s=0.0), eff_h)
-        along, cross = self._interp(df, eff_h, only)
-        east, north = self._frame_to_offsets(df, along, cross)
-        return apply_enu_offset(blat, blon, east, north)
-
-    def _interp(self, df, eff_h, only=None):
-        hs = [only] if only is not None else self.horizons
-        corr = {h: self._correction(df, h) for h in hs}
-        if only is not None:
-            return corr[only]
-        grid = np.array([0, *hs], float)
-        along = np.zeros(len(df))
-        cross = np.zeros(len(df))
-        e = np.minimum(eff_h, grid[-1])
-        k = np.clip(np.searchsorted(grid, e, side="right") - 1, 0, len(grid) - 2)
-        w = (e - grid[k]) / (grid[k + 1] - grid[k])
-        for idx in range(len(grid) - 1):
-            m = k == idx
-            if not m.any():
-                continue
-            a0, c0 = (np.zeros(m.sum()), np.zeros(m.sum())) if idx == 0 else (corr[hs[idx - 1]][0][m], corr[hs[idx - 1]][1][m])
-            a1, c1 = corr[hs[idx]][0][m], corr[hs[idx]][1][m]
-            along[m] = a0 + w[m] * (a1 - a0)
-            cross[m] = c0 + w[m] * (c1 - c0)
-        return along, cross
-
-    def _radii(self, df, eff_h):
-        b = speed_bucket(df["last_sog"])
-        grid = np.array([0, *self.horizons], float)
-        out = {}
-        for lvl in ("q80", "q95"):
-            tab = np.zeros((len(self.horizons) + 1, len(SPEED_BUCKETS_KN) + 1))
-            for hi, h in enumerate(self.horizons, start=1):
-                r = self.radius.get(h, {})
-                for k in range(tab.shape[1]):
-                    tab[hi, k] = r.get(str(k), r.get("pooled", {})).get(lvl, np.nan)
-            e = np.asarray(eff_h, float)
-            k = np.clip(np.searchsorted(grid, np.minimum(e, grid[-1]), side="right") - 1, 0, len(grid) - 2)
-            w = (np.minimum(e, grid[-1]) - grid[k]) / (grid[k + 1] - grid[k])
-            r0, r1 = tab[k, b], tab[k + 1, b]
-            rad = np.where(w <= 0, r0, np.where(w >= 1, r1, r0 + w * (r1 - r0)))
-            out[lvl] = np.where(e > grid[-1], tab[-1, b] * e / grid[-1], rad)
-        return out["q80"], out["q95"]
+    def _point(self, df, h):
+        east, north = self._offset(df, h)
+        return apply_enu_offset(df[f"base_lat_{h}"].to_numpy(float), df[f"base_lon_{h}"].to_numpy(float), east, north)
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
-        eff = df["horizon_s"].to_numpy(float) + df["age_s"].to_numpy(float)
-        lat, lon = self._point(df, eff)
-        blat, blon = baseline_position(df.assign(age_s=0.0), eff)
-        r80, r95 = self._radii(df, eff)
-        return pd.DataFrame({"pred_lat": lat, "pred_lon": lon, "radius_m_80": r80, "radius_m_95": r95,
-                             "base_lat": blat, "base_lon": blon}, index=df.index)
+        out = []
+        b = band(df["fix_sog"])
+        for h in self.horizons:
+            lat, lon = self._point(df, h)
+            out.append(pd.DataFrame({"case_id": df["case_id"].to_numpy(), "horizon_s": h, "pred_lat": lat,
+                                     "pred_lon": lon, "radius_m_80": np.asarray(self.radius[h]["r80"])[b],
+                                     "radius_m_95": np.asarray(self.radius[h]["r95"])[b],
+                                     "base_lat": df[f"base_lat_{h}"].to_numpy(float),
+                                     "base_lon": df[f"base_lon_{h}"].to_numpy(float)}))
+        return pd.concat(out, ignore_index=True)
 
-    # ---- artifact ---------------------------------------------------------------------------------------------
-    def save(self, d) -> Path:
-        d = Path(d)
-        d.mkdir(parents=True, exist_ok=True)
-        files = {}
-        for h, (a, c) in self.boosters.items():
-            files[str(h)] = {"along": f"h{h}_along.txt", "cross": f"h{h}_cross.txt"}
-            a.save_model(str(d / files[str(h)]["along"]))
-            c.save_model(str(d / files[str(h)]["cross"]))
-        spec = {"target": self.target, "model": self.name, "version": self.version, "feature_version": FEATURE_VERSION,
-                "features": self.features, "horizons_s": self.horizons, "cfg": self.cfg,
-                "data_hash": self.meta.get("data_hash"), "train_from": self.meta.get("train_from"),
-                "train_to": self.meta.get("train_to"), "meta": self.meta, "metrics": self.meta.get("metrics", {}),
-                "speed_buckets_kn": list(SPEED_BUCKETS_KN), "radius": {str(h): r for h, r in self.radius.items()},
-                "boosters": files,
-                "how_to_predict": ("baseline = dead reckoning from the last fix (features.baseline_position, age 0) at "
-                                   "eff = age_s + horizon_s; correction (along, cross) in metres in the baseline "
-                                   "course frame from the booster pair per horizon, interpolated linearly in eff "
-                                   "between 0 and the trained horizons and held beyond the last; radius per speed "
-                                   "bucket, interpolated the same way and scaled by eff / last horizon beyond it.")}
-        (d / "model.json").write_text(json.dumps(spec, indent=1, default=_json))
-        return d
+    def predict_at(self, df: pd.DataFrame, secs) -> pd.DataFrame:
+        """Prediction at any time after the last fix (a gap's length): the offset and radii are interpolated
+        linearly between 0 and the trained horizons and held beyond the longest (the radius grows in proportion).
+        Used for reappearance grading; the backend predicts only at the artifact's horizons."""
+        secs = np.asarray(secs, float)
+        grid = np.array([0.0, *self.horizons])
+        e = np.minimum(secs, grid[-1])
+        k = np.clip(np.searchsorted(grid, e, side="right") - 1, 0, len(grid) - 2)
+        w = (e - grid[k]) / (grid[k + 1] - grid[k])
+        offs = [(np.zeros(len(df)), np.zeros(len(df)))] + [self._offset(df, h) for h in self.horizons]
+        east = np.choose(k, [o[0] for o in offs]) * (1 - w) + np.choose(k + 1, [o[0] for o in offs]) * w
+        north = np.choose(k, [o[1] for o in offs]) * (1 - w) + np.choose(k + 1, [o[1] for o in offs]) * w
+        b = band(df["fix_sog"])
+        rad = {}
+        for lvl in ("r80", "r95"):
+            tab = np.vstack([np.zeros(len(SPEED_EDGES_KN) + 1)] + [np.asarray(self.radius[h][lvl]) for h in self.horizons])
+            r = tab[k, b] * (1 - w) + tab[k + 1, b] * w
+            rad[lvl] = np.where(secs > grid[-1], tab[-1, b] * secs / grid[-1], r)
+        base = np.array([F.baseline_point(fix_dict(r), s) for r, s in zip(df.itertuples(index=False), secs)])
+        lat, lon = apply_enu_offset(base[:, 0], base[:, 1], east, north)
+        return pd.DataFrame({"case_id": df["case_id"].to_numpy(), "secs": secs, "pred_lat": lat, "pred_lon": lon,
+                             "radius_m_80": rad["r80"], "radius_m_95": rad["r95"], "base_lat": base[:, 0],
+                             "base_lon": base[:, 1]})
 
-    @property
-    def version(self) -> str:
-        blob = json.dumps({"cfg": self.cfg, "data": self.meta.get("data_hash")}, sort_keys=True, default=_json)
-        return f"{self.name}-{hashlib.sha256(blob.encode()).hexdigest()[:10]}"
+    # ---- artifact ----------------------------------------------------------------------------------------------
+    def _radius_spec(self, h, lvl):
+        return {"sog_edges_kn": list(SPEED_EDGES_KN), "r": [round(float(x), 1) for x in self.radius[h][lvl]]}
+
+    def save(self, dir: Path) -> dict:
+        dir = Path(dir)
+        heads = {}
+        for h in self.horizons:
+            spec = {"radius_m_80": self._radius_spec(h, "r80"), "radius_m_95": self._radius_spec(h, "r95"),
+                    "radius_n": self.radius[h]["n"]}
+            if h in self.boosters:
+                a, b = ("east", "north") if self.cfg["frame"] != "track" else ("along", "cross")
+                for key, bst in zip((a, b), self.boosters[h]):
+                    spec[key] = f"h{h}_{key}.txt"
+                    bst.save_model(str(dir / spec[key]))
+            heads[str(h)] = spec
+        live = [h for h in self.horizons if h in HORIZONS_S]
+        return {"kind": "lightgbm" if self.trains else "baseline", "feature_version": F.FEATURE_VERSION,
+                "features": self.features, "horizons_s": live, "heads": {str(h): heads[str(h)] for h in live},
+                "all_heads": heads, "all_horizons_s": self.horizons, "frame": self.cfg["frame"],
+                "route_cfg": self.cfg, "fit_meta": self.meta,
+                "about": "east/north offset (m) from features.baseline_point(fix, h); radii are split-conformal "
+                         "per speed band on a later calibration slice"}
 
     @classmethod
-    def load(cls, d) -> "RouteModel":
+    def load(cls, dir: Path) -> "_Route":
         import lightgbm as lgb
-        d = Path(d)
-        spec = json.loads((d / "model.json").read_text())
-        m = cls(spec["cfg"])
+        dir = Path(dir)
+        spec = json.loads((dir / "model.json").read_text())
+        m = cls()
+        m.cfg = {**DEFAULT_CFG, **spec.get("route_cfg", {})}
         m.features = spec["features"]
-        m.horizons = [int(h) for h in spec["horizons_s"]]
-        m.radius = {int(h): r for h, r in spec["radius"].items()}
-        m.meta = spec.get("meta", {})
-        for h, f in spec["boosters"].items():
-            m.boosters[int(h)] = (lgb.Booster(model_file=str(d / f["along"])),
-                                  lgb.Booster(model_file=str(d / f["cross"])))
+        m.horizons = [int(h) for h in spec.get("all_horizons_s", spec["horizons_s"])]
+        m.meta = spec.get("fit_meta", {})
+        a, b = ("east", "north") if m.cfg["frame"] != "track" else ("along", "cross")
+        for h, s in spec.get("all_heads", spec["heads"]).items():
+            m.radius[int(h)] = {"r80": s["radius_m_80"]["r"], "r95": s["radius_m_95"]["r"]}
+            if a in s:
+                m.boosters[int(h)] = (lgb.Booster(model_file=str(dir / s[a])), lgb.Booster(model_file=str(dir / s[b])))
         return m
 
 
-def _dist(lat, lon, df):
-    from ml.route.geo import haversine_m
-    return haversine_m(lat, lon, df["true_lat"].to_numpy(float), df["true_lon"].to_numpy(float))
+class RouteLGBM(_Route):
+    name = "lgbm"
 
 
-def _json(o):
-    if isinstance(o, (np.integer,)):
-        return int(o)
-    if isinstance(o, (np.floating,)):
-        return float(o)
-    raise TypeError(type(o))
+class RouteBaseline(_Route):
+    """Dead reckoning (features.baseline_point) with conformal radii fitted the same way as the model's."""
+    name = "baseline"
+    trains = False
+
+
+def examples_hash(df: pd.DataFrame) -> str:
+    h = hashlib.sha256(pd.util.hash_pandas_object(df["case_id"], index=False).to_numpy().tobytes())
+    return h.hexdigest()[:16]

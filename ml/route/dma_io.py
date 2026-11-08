@@ -41,5 +41,5 @@ def load(d: Path, days: int | None = None, thinned: bool = True, day_list: list[
     tr = tr.sort_values(["mmsi", "ts"], kind="stable").drop_duplicates(["mmsi", "ts"]).reset_index(drop=True)
     idt = pd.concat([_read(d / "identity" / f"{x}.parquet").assign(_day=x) for x in sel], ignore_index=True)
     idt = idt.sort_values(["mmsi", "_day"]).drop_duplicates("mmsi", keep="last")
-    st = idt[["mmsi", "type_group", "ship_type", "length"]].astype({"mmsi": "int64"})
+    st = idt[["mmsi", "type_group", "ship_type", "length", "draught"]].astype({"mmsi": "int64"})
     return tr, st
