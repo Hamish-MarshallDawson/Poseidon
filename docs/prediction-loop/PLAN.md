@@ -156,3 +156,24 @@ Briefs are in `docs/handoffs/`. Research reports land in `docs/prediction-loop/r
 2. Hamish's 90-day route results: compare with `dma14-v1`; promote through the loop if better.
 3. GFW-history go-dark rerun at about 08:30 for the learning curve.
 4. Presentation: the training report, the learning curve, and live graded predictions.
+
+## 08:30 status: the loop's first live correction
+
+The backtest (07:54 to 08:03, 11 h of our own feed, champions route-dma90-v2 and godark-lgbm-20261108T051156; 47,592
+route rows, 35,789 outcomes) showed what the offline held-out set could not:
+- Route, moving ships: skill 0.14 (1 h), 0.40 (3 h), 0.52 (6 h) over dead reckoning, below the Danish holdout
+  (0.37, 0.62, 0.72). Circles under-covered: 80% held 0.58 to 0.64, 95% held 0.87 to 0.89. After a gap: -0.29 at
+  1 h, 0.16 to 0.24 from 3 h.
+- Go-dark: about 2x over-prediction (dark_1h mean p 0.022 against a 0.0097 hit rate), Brier skill below the base
+  rate; ranking weak (AUC 0.59 at 1 h, 0.63 at 6 h; the top 10% go dark about 2x the average at 6 h).
+
+Correction from the graded ledger (draft release models-recal-v1, installed without a restart):
+- `route-dma90-v2-cal1`: radii times 1.61 to 1.71 (80%) and 1.33 to 1.41 (95%) per horizon. Fitted on the first half
+  of the backtest, the later half gives 0.79 to 0.82 and 0.95 to 0.97.
+- `godark-lgbm-20261108T051156-cal1`: logit shift -0.87 (1 h) and -0.79 (6 h) of the isotonic map, so mean p equals
+  the hit rate. Show go-dark as a ranking with reasons, not a percentage claim.
+
+Not automated yet: no scheduled loop (every run so far was started by a person or an agent, and the Gemini proposer
+has not run a real cycle), route training does not use our own ledger, the run registry is not mirrored to Tiger
+`model_runs`, and promotion is a manual `champions.json` edit. Next: recalibrate from the ledger on a schedule, then
+retrain on it.
