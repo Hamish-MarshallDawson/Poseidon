@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ALL, calibrationOk, changeLine, configDiff, decisionLine, filterRuns, fmtPct, horizonLabel, primarySkill, weakestStrata, type RunRecord,
+  ALL, calibrationOk, changeLine, configDiff, decisionLine, filterRuns, fmtPct, horizonLabel, primarySkill, skillRows, weakestStrata, type RunRecord,
 } from './shape'
 
 const run = (over: Partial<RunRecord> & { run_id: string }): RunRecord => ({
@@ -92,18 +92,29 @@ describe('filterRuns', () => {
 })
 
 describe('weakestStrata and calibrationOk', () => {
-  it('ranks strata by relative loss increase', () => {
+  it('ranks strata by excess loss, difference times cases', () => {
     const r = run({ run_id: 's', metrics: { decision: { promote: false, against: 'x', strata_worse: [
-      { stratum: 'region', value: 'a', horizon_s: 1, n: 10, cand: 1.1, ref: 1 },
-      { stratum: 'region', value: 'b', horizon_s: 1, n: 10, cand: 3, ref: 1 },
+      { stratum: 'region', value: 'tiny', horizon_s: 1, n: 100, cand: 0.006, ref: 0.002 },
+      { stratum: 'region', value: 'big', horizon_s: 1, n: 3000, cand: 0.48, ref: 0.40 },
+      { stratum: 'region', value: 'few', horizon_s: 1, n: 10, cand: 3, ref: 1 },
     ] } } })
-    expect(weakestStrata(r).map((s) => s.value)).toEqual(['b', 'a'])
-    expect(weakestStrata(r)[0].rel).toBeCloseTo(2)
+    expect(weakestStrata(r).map((s) => s.value)).toEqual(['big', 'few', 'tiny'])
+    expect(weakestStrata(r)[0].diff).toBeCloseTo(0.08)
   })
   it('derives ok from tolerance when not stored', () => {
     expect(calibrationOk({ name: 'ece', horizon_s: 1, value: 0.02, nominal: 0, tol: 0.05 })).toBe(true)
     expect(calibrationOk({ name: 'cov80', horizon_s: 1, value: 0.6, nominal: 0.8, tol: 0.05 })).toBe(false)
     expect(calibrationOk({ name: 'cov80', horizon_s: 1, value: 0.6, nominal: 0.8, tol: 0.05, ok: true })).toBe(true)
     expect(calibrationOk({ name: 'x', horizon_s: 1, value: null, nominal: 0.8 })).toBeNull()
+  })
+})
+
+describe('skillRows', () => {
+  const sk = (v: number) => ({ n: 1, stat: 1, baseline_stat: 1, skill: v, skill_lo: v - 0.1, skill_hi: v + 0.1 })
+  it('pairs the run with the champion per horizon, flagging a different holdout', () => {
+    const r = run({ run_id: 'r', metrics: { holdout: { hash: 'a' }, skill: { '604800': sk(0.1) } } })
+    const c = run({ run_id: 'c', metrics: { holdout: { hash: 'b' }, skill: { '604800': sk(0.3) } } })
+    expect(skillRows(r, c).map((x) => [x.key, x.v, x.sameHoldout])).toEqual([['7 d · this run', 0.1, true], ['7 d · champion', 0.3, false]])
+    expect(skillRows(r).length).toBe(1)
   })
 })

@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ALL, STATUS_LABEL, calibrationChecks, calibrationOk, changeLine, configDiff, decisionLine, distinct, filterRuns, fmtCount, fmtMonth,
-  fmtPct, fmtStat, fmtWhen, horizonLabel, horizonRows, lossLabel, primarySkill, proposerLabel, targetLabel, weakestStrata,
-  type Proposal, type RunDetail, type RunFilters, type RunRecord,
+  fmtPct, fmtStat, fmtWhen, horizonLabel, horizonRows, lossLabel, primarySkill, proposerLabel, skillRows, targetLabel, weakestStrata,
+  type RunFilters, type RunRecord, type SkillRow,
 } from './shape'
+import { Chart, RefLine, Ranges, extent, pad } from '../charts'
+import type { Proposal, Run, RunDetail } from '../types'
 import './runs.css'
-
-export type { Proposal, RunDetail, RunRecord } from './shape'
 
 /** Props for the runs section of the Model Lab. */
 export interface RunsProps {
   /** GET /lab/runs, newest first (strata dropped). */
-  runs: RunRecord[]
+  runs: Run[]
   /** GET /lab/proposals, newest first. */
   proposals: Proposal[]
   /** GET /lab/runs/{run_id}; resolve null when it can't be loaded (the table row is shown instead). */
@@ -27,6 +27,7 @@ export function Runs({ runs, proposals, loadDetail, primaryH }: RunsProps) {
   const byId = useMemo(() => new Map(runs.map((r) => [r.run_id, r])), [runs])
   const [selected, setSelected] = useState<string | null>(null)
   const current = selected ?? shown[0]?.run_id ?? null
+  const champions = useMemo(() => new Map(runs.filter((r) => r.status === 'champion').map((r) => [r.target, r])), [runs])
 
   const select = (id: string) => {
     setSelected(id)
@@ -84,7 +85,7 @@ export function Runs({ runs, proposals, loadDetail, primaryH }: RunsProps) {
             </table>
           )}
         </div>
-        {current && <RunDetailView key={current} run={byId.get(current)!} byId={byId} loadDetail={loadDetail} proposals={proposals} />}
+        {current && <RunDetailView key={current} run={byId.get(current)!} byId={byId} loadDetail={loadDetail} proposals={proposals} champion={champions.get(byId.get(current)!.target)} />}
       </div>
       <ProposalLog proposals={proposals} runs={byId} onOpen={select} />
     </div>
@@ -97,7 +98,7 @@ function StatusTag({ status }: { status: string }) {
 
 const show = (v: unknown) => (v == null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v))
 
-function RunDetailView({ run, byId, loadDetail, proposals }: { run: RunRecord; byId: Map<string, RunRecord>; loadDetail: RunsProps['loadDetail']; proposals: Proposal[] }) {
+function RunDetailView({ run, byId, loadDetail, proposals, champion }: { run: RunRecord; byId: Map<string, RunRecord>; loadDetail: RunsProps['loadDetail']; proposals: Proposal[]; champion?: RunRecord }) {
   const [detail, setDetail] = useState<RunDetail | null | undefined>(undefined)
   useEffect(() => {
     let live = true
@@ -158,6 +159,7 @@ function RunDetailView({ run, byId, loadDetail, proposals }: { run: RunRecord; b
             Skill = how much lower the {loss} is than the baseline (0 % = no better); interval is 95 %.
             {vsChampion ? ` Against the champion: ${loss} difference, below 0 is better.` : ''}
           </p>
+          <SkillChart rows={skillRows(r, champion && champion.run_id !== r.run_id ? champion : null)} />
           <div className="lr-scroll"><table className="lr-mini">
             <thead><tr><th>Horizon</th><th>Skill vs baseline</th><th>{loss}</th><th>{vsChampion ? 'vs champion' : 'vs baseline'}</th></tr></thead>
             <tbody>
@@ -165,7 +167,7 @@ function RunDetailView({ run, byId, loadDetail, proposals }: { run: RunRecord; b
                 <tr key={h}>
                   <td>{horizonLabel(h)}</td>
                   <td>
-                    <span className="lr-nowrap"><SkillBar lo={skill?.skill_lo ?? null} hi={skill?.skill_hi ?? null} v={skill?.skill ?? null} />{fmtPct(skill?.skill)}</span> <span className="lr-sub">[{fmtPct(skill?.skill_lo)}, {fmtPct(skill?.skill_hi)}]</span>
+                    <span className="lr-nowrap">{fmtPct(skill?.skill)}</span> <span className="lr-sub">[{fmtPct(skill?.skill_lo)}, {fmtPct(skill?.skill_hi)}]</span>
                   </td>
                   <td>{fmtStat(skill?.stat, unit)} <span className="lr-sub">baseline {fmtStat(skill?.baseline_stat, unit)}</span></td>
                   <td>
@@ -225,7 +227,7 @@ function RunDetailView({ run, byId, loadDetail, proposals }: { run: RunRecord; b
                   <td>{s.value.replace(/_/g, ' ').toLowerCase()} <span className="lr-sub">{s.stratum.replace(/_/g, ' ')}, {horizonLabel(s.horizon_s)}</span></td>
                   <td>{fmtCount(s.n)}</td>
                   <td>{fmtStat(s.cand, unit)} <span className="lr-sub">vs {fmtStat(s.ref, unit)}</span></td>
-                  <td>{Math.round(s.rel * 100)} %</td>
+                  <td>+{fmtStat(s.diff, unit)}</td>
                 </tr>
               ))}
             </tbody>
@@ -236,16 +238,32 @@ function RunDetailView({ run, byId, loadDetail, proposals }: { run: RunRecord; b
   )
 }
 
-/** Skill and its interval on a fixed −50…+50 % axis with 0 marked. */
-function SkillBar({ v, lo, hi }: { v: number | null; lo: number | null; hi: number | null }) {
-  if (v == null) return null
-  const W = 96, x = (s: number) => Math.max(0, Math.min(W, W / 2 + s * W))
+/** Skill over the baseline with its 95 % interval, this run against the champion, per horizon; 0 = no better than the baseline. */
+function SkillChart({ rows }: { rows: SkillRow[] }) {
+  if (!rows.length) return null
+  const domain = pad(extent([0, ...rows.flatMap((r) => [r.lo ?? r.v, r.hi ?? r.v])]), 0.1)
+  const dot = (domain[1] - domain[0]) / 300
+  const tip = (r: SkillRow) => (
+    <>
+      <b>{r.who === 'run' ? 'This run' : 'Champion'}, {horizonLabel(r.h)}</b><br />
+      {fmtPct(r.v)} skill over the baseline{r.lo != null ? ` [${fmtPct(r.lo)}, ${fmtPct(r.hi)}]` : ''}
+      {!r.sameHoldout && <><br />scored on a different held-out set</>}
+    </>
+  )
+  const intervals = rows.filter((r) => r.lo != null && r.hi != null).map((r) => ({ ...r, y: r.key, x0: r.lo!, x1: r.hi!, tone: r.who === 'run' ? 'accent' as const : 'muted' as const }))
+  const points = rows.map((r) => ({ ...r, y: r.key, x0: r.v - dot, x1: r.v + dot, tone: 'ink' as const }))
   return (
-    <svg className="lr-bar" width={W} height={10} viewBox={`0 0 ${W} 10`} aria-hidden>
-      <line x1={W / 2} x2={W / 2} y1={0} y2={10} className="lr-bar-zero" />
-      {lo != null && hi != null && <rect x={x(lo)} y={3} width={Math.max(1, x(hi) - x(lo))} height={4} className="lr-bar-band" />}
-      <rect x={x(v) - 1} y={1} width={2} height={8} className="lr-bar-dot" />
-    </svg>
+    <Chart
+      label="Skill over the baseline per horizon, this run against the champion, with 95 % intervals"
+      x={{ domain, percent: true, ticks: 5 }}
+      y={{ type: 'band', domain: rows.map((r) => r.key) }}
+      height={24 + rows.length * 26}
+      className="lr-chart"
+    >
+      <RefLine x={0} label="baseline" />
+      <Ranges data={intervals} tip={tip} label="95 % interval" />
+      <Ranges data={points} tip={tip} label="skill" />
+    </Chart>
   )
 }
 

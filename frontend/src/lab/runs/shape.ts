@@ -2,7 +2,7 @@
 // The record shapes follow the Model Lab contract (docs/handoffs/lab.md); only the fields used here are typed.
 
 export interface SkillH { n: number; stat: number | null; baseline_stat: number | null; skill: number | null; skill_lo: number | null; skill_hi: number | null; win_rate?: number | null }
-export interface CalCheck { name: string; horizon_s: number; value: number | null; nominal: number | null; tol?: number | null; ok?: boolean | null }
+export interface CalCheck { name: string; horizon_s: number | null; value: number | null; nominal: number | null; tol?: number | null; ok?: boolean | null }
 export interface DecisionH { n?: number; cand: number | null; ref: number | null; diff: number | null; lo: number | null; hi: number | null; win: boolean | null }
 export interface Stratum { stratum: string; value: string; horizon_s: number; n: number; cand: number; ref: number }
 export interface Decision {
@@ -85,7 +85,8 @@ const LOSS_LABEL: Record<string, string> = { log_loss: 'log loss', brier: 'Brier
 export const lossLabel = (m: RunMetrics | null | undefined) => (m?.loss_name ? LOSS_LABEL[m.loss_name] ?? m.loss_name.replace(/_/g, ' ') : 'loss')
 
 /** A horizon in seconds as plain words: "3 h", "7 d" (with a non-breaking space). */
-export function horizonLabel(s: number | string): string {
+export function horizonLabel(s: number | string | null | undefined): string {
+  if (s == null || s === '') return 'all horizons'
   const v = Number(s)
   if (!Number.isFinite(v)) return String(s)
   if (v < 3600) return `${Math.round(v / 60)}\u00a0min`
@@ -197,11 +198,12 @@ export function filterRuns(runs: RunRecord[], f: RunFilters): RunRecord[] {
 /** Distinct values of a field, for the filter menus. */
 export const distinct = <T,>(xs: T[], f: (x: T) => string | null | undefined) => [...new Set(xs.map(f).filter((v): v is string => !!v))].sort()
 
-/** Strata where the candidate did worst against the reference, by relative loss increase. */
-export function weakestStrata(run: Pick<RunRecord, 'metrics'>, k = 5): (Stratum & { rel: number })[] {
+/** Strata where the candidate lost most against the reference: by total excess loss (difference × cases), so a big
+ *  relative change on a near-zero loss in a small group doesn't top the list. */
+export function weakestStrata(run: Pick<RunRecord, 'metrics'>, k = 5): (Stratum & { diff: number })[] {
   return (run.metrics?.decision?.strata_worse ?? [])
-    .map((s) => ({ ...s, rel: s.ref ? (s.cand - s.ref) / Math.abs(s.ref) : 0 }))
-    .sort((a, b) => b.rel - a.rel || b.n - a.n)
+    .map((s) => ({ ...s, diff: s.cand - s.ref }))
+    .sort((a, b) => b.diff * b.n - a.diff * a.n)
     .slice(0, k)
 }
 
@@ -220,4 +222,18 @@ export function calibrationOk(c: CalCheck): boolean | null {
   if (c.ok != null) return c.ok
   if (c.value == null || c.nominal == null || c.tol == null) return null
   return Math.abs(c.value - c.nominal) <= c.tol
+}
+
+/** Rows for the skill chart: per horizon, this run's skill over the baseline and, when given, the champion's on the same horizon. */
+export interface SkillRow { key: string; h: number; who: 'run' | 'champion'; v: number; lo: number | null; hi: number | null; sameHoldout: boolean }
+export function skillRows(run: Pick<RunRecord, 'metrics'>, champion?: Pick<RunRecord, 'metrics'> | null): SkillRow[] {
+  const same = !!champion && champion.metrics?.holdout?.hash != null && champion.metrics.holdout.hash === run.metrics?.holdout?.hash
+  return horizons(run).flatMap((h) => {
+    const out: SkillRow[] = []
+    const s = run.metrics?.skill?.[String(h)]
+    if (s?.skill != null) out.push({ key: `${horizonLabel(h)} · this run`, h, who: 'run', v: s.skill, lo: s.skill_lo, hi: s.skill_hi, sameHoldout: true })
+    const c = champion?.metrics?.skill?.[String(h)]
+    if (c?.skill != null) out.push({ key: `${horizonLabel(h)} · champion`, h, who: 'champion', v: c.skill, lo: c.skill_lo, hi: c.skill_hi, sameHoldout: same })
+    return out
+  })
 }

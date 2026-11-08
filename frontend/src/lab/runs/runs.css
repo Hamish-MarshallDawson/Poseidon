@@ -63,10 +63,6 @@
 .lr-mini { width: 100%; border-collapse: collapse; font: var(--dvm-size-data) / var(--dvm-line-data) var(--dvm-font-data); }
 .lr-mini th { padding: 2px 6px 2px 0; text-align: left; color: var(--dvm-text-muted); font-size: var(--dvm-size-caption); font-weight: 500; border-bottom: 1px solid var(--dvm-border-subtle); }
 .lr-mini td { padding: 3px 6px 3px 0; vertical-align: top; border-bottom: 1px solid var(--dvm-border-subtle); }
-.lr-bar { display: inline-block; margin-right: 6px; vertical-align: middle; }
-.lr-bar-zero { stroke: var(--dvm-text-muted); stroke-width: 1; }
-.lr-bar-band { fill: var(--dvm-accent-default); opacity: 0.35; }
-.lr-bar-dot { fill: var(--dvm-text-primary); }
 
 .lr-quote { margin: 0; padding: 4px 0 4px 10px; border-left: 3px solid var(--dvm-accent-default); color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); }
 .lr-dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
@@ -84,6 +80,5 @@
   .lr-props .lr-table th:nth-child(3), .lr-props .lr-table td:nth-child(3) { display: none; }
   .lr-table td, .lr-table th { padding-inline: 4px; }
   .lr-count { margin-left: 0; }
-  .lr-bar { display: none; }
   .lr-filter select { min-width: 110px; }
 }
