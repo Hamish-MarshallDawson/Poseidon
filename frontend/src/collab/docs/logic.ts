@@ -45,5 +45,9 @@ export function reportedShips(docs: Doc[]): Set<number> {
 /** The newest summary, pinned at the top of the channel. */
 export const pinnedSummary = (docs: Doc[]): Doc | undefined => docs.findLast((d) => d.kind === 'summary')
 
+// A summary needs something to summarise: a note, a saved briefing or a tracked ship. An earlier summary doesn't count.
+export const canSummarise = (docs: Doc[], trackedShips: number): boolean =>
+  trackedShips > 0 || docs.some((d) => d.kind !== 'summary')
+
 export const initials = (name: string | null): string =>
   (name ?? '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'

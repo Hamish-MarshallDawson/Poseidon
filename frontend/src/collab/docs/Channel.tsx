@@ -9,7 +9,7 @@ import { useVessel } from '../../windows/hooks'
 import { fmtMmsi, utcTime } from '../../windows/format'
 import { collab } from '../store'
 import type { Doc, Member } from '../client'
-import { NOTE_MAX, initials, pinnedSummary, tokenize } from './logic'
+import { NOTE_MAX, canSummarise, initials, pinnedSummary, tokenize } from './logic'
 import { channel, closeChannel, openChannel, sendNote, summariseSession } from './store'
 import './channel.css'
 
@@ -132,6 +132,8 @@ function Composer() {
 function ChannelPanel() {
   const session = collab.use((s) => s.session)
   const docs = collab.use((s) => s.documents)
+  const tracked = collab.use((s) => s.list.length)
+  const hasContent = canSummarise(docs, tracked)
   const { summary, summaryError, offer } = channel.use((s) => s)
   const feed = useRef<HTMLUListElement>(null)
   const pinned = pinnedSummary(docs)
@@ -149,13 +151,14 @@ function ChannelPanel() {
         </div>
         <p className="wl-meta">{docs.length} {docs.length === 1 ? 'item' : 'items'}</p>
         <span className="ch-summarise">
-          <Button className="btn-small" disabled={summary === 'busy'} onClick={() => void summariseSession()}>
+          <Button className="btn-small" disabled={summary === 'busy' || !hasContent}
+            title={hasContent ? undefined : 'Add a note, a ship or a briefing first'} onClick={() => void summariseSession()}>
             {summary === 'busy' ? 'Summarising…' : 'Summarise session'}
           </Button>
           {summary === 'error' && <span className="ch-err" role="alert">{summaryError}</span>}
         </span>
       </div>
-      {offer && (
+      {offer && hasContent && (
         <div className="ch-offer" role="status">
           <span>Everyone else has left. Summarise this session?</span>
           <Button className="btn-small" variant="filled" onClick={() => void summariseSession()}>Summarise</Button>

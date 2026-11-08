@@ -263,6 +263,8 @@ def make_router() -> APIRouter:
         docs = [{"id": d["id"], "kind": d["kind"], "author": names.get(d["author_id"], "A member"), "ship": d["mmsi"],
                  "ships": d["mmsis"], "at": d["created_at"], "text": d["body"]}
                 for d in detail["documents"] if d["kind"] != "summary"]
+        if not docs and not detail["list"]:   # nothing to summarise, so no Gemini call
+            raise HTTPException(409, "Nothing to summarise yet: add a note, a ship or a briefing first.")
         facts = {"session": detail["title"], "members": list(names.values()), "documents": docs,
                  "tracked_ships": [{"mmsi": e["mmsi"], "status": e["status"],
                                     "added_by": names.get(e["added_by"], "A member")} for e in detail["list"]]}

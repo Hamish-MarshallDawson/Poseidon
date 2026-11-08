@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { briefingText, initials, pinnedSummary, reportedShips, tokenize } from './logic'
+import { briefingText, canSummarise, initials, pinnedSummary, reportedShips, tokenize } from './logic'
 import type { Doc } from '../client'
 import type { Briefing } from '../../briefing/store'
 
@@ -11,6 +11,14 @@ test('tokenize turns 9-digit MMSIs and doc#n into references and leaves the rest
   ])
   expect(tokenize('<b>plain</b>')).toEqual([{ text: '<b>plain</b>' }])
   expect(tokenize('1234567890')).toEqual([{ text: '1234567890' }])   // ten digits is not an MMSI
+})
+
+test('canSummarise needs a note, a briefing or a tracked ship', () => {
+  expect(canSummarise([], 0)).toBe(false)
+  expect(canSummarise([doc(1, 'summary')], 0)).toBe(false)
+  expect(canSummarise([doc(1, 'note')], 0)).toBe(true)
+  expect(canSummarise([doc(1, 'briefing', [5])], 0)).toBe(true)
+  expect(canSummarise([], 1)).toBe(true)
 })
 
 test('reportedShips and pinnedSummary read the documents', () => {
