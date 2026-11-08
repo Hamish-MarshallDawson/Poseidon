@@ -150,6 +150,29 @@ def _work(job):
     return rows
 
 
+def _init_files(d: str, statics: dict, horizons: list[int]) -> None:
+    """Spawned workers (Windows, macOS): read the track and cases as memory-mapped .npy files, not pickled copies."""
+    _SHARED.update(track={c: np.load(os.path.join(d, f"t_{c}.npy"), mmap_mode="r") for c in TRACK_COLS},
+                   cases={c: np.load(os.path.join(d, f"c_{c}.npy"), mmap_mode="r") for c in ("mmsi", "as_of")},
+                   statics=statics, horizons=horizons)
+
+
+def _pool_map(jobs, workers: int):
+    method = os.environ.get("ROUTE_START_METHOD") or ("fork" if "fork" in mp.get_all_start_methods() else "spawn")
+    if method == "fork":
+        with mp.get_context("fork").Pool(workers) as pool:
+            return pool.map(_work, jobs, chunksize=1)
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="route-feat-") as d:
+        for c, v in _SHARED["track"].items():
+            np.save(os.path.join(d, f"t_{c}.npy"), v.astype("<U1") if c == "cls" else v)
+        for c, v in _SHARED["cases"].items():
+            np.save(os.path.join(d, f"c_{c}.npy"), v)
+        with mp.get_context(method).Pool(workers, initializer=_init_files,
+                                         initargs=(d, _SHARED["statics"], _SHARED["horizons"])) as pool:
+            return pool.map(_work, jobs, chunksize=1)
+
+
 def compute_features(track: pd.DataFrame, cases: pd.DataFrame, statics: pd.DataFrame | None,
                      horizons=TRAIN_HORIZONS_S, workers: int | None = None) -> pd.DataFrame:
     """features_at + last fix + baseline points for every (mmsi, as_of) case, in parallel by ship."""
@@ -159,7 +182,8 @@ def compute_features(track: pd.DataFrame, cases: pd.DataFrame, statics: pd.DataF
     stat = {int(m): {"ship_type": None if pd.isna(t) else float(t), "length_m": None if pd.isna(ln) else float(ln),
                      "draught_m": None if pd.isna(d) else float(d)}
             for m, t, ln, d in zip(st["mmsi"], st["ship_type"], st["length_m"], st["draught_m"])}
-    _SHARED.update(track={c: tr[c].to_numpy() for c in TRACK_COLS},
+    _SHARED.update(track={c: (tr[c].astype(str).to_numpy("<U1") if c == "cls" else tr[c].to_numpy())
+                          for c in TRACK_COLS},
                    cases={c: cs[c].to_numpy(np.int64) for c in ("mmsi", "as_of")}, statics=stat,
                    horizons=[int(h) for h in horizons])
     # jobs: contiguous ship ranges of the track, with the matching contiguous case ranges
@@ -178,8 +202,7 @@ def compute_features(track: pd.DataFrame, cases: pd.DataFrame, statics: pd.DataF
     workers = workers or int(os.environ.get("ROUTE_WORKERS", "6"))
     try:
         if workers > 1 and len(jobs) > 1:
-            with mp.get_context("fork").Pool(workers) as pool:
-                parts = pool.map(_work, jobs, chunksize=1)
+            parts = _pool_map(jobs, workers)
         else:
             parts = [_work(j) for j in jobs]
     finally:

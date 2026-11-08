@@ -79,6 +79,16 @@ def test_features_are_the_backends():
         assert (got["base_lat_3600"], got["base_lon_3600"]) == pytest.approx(bl, abs=1e-12)
 
 
+def test_spawned_workers_match_fork(monkeypatch):
+    """Windows has no fork: the spawn path (memory-mapped .npy files) must give the same rows."""
+    tr, st = fleet(4, 4)
+    cases = examples.grid_cases(tr, 30)
+    fork = examples.compute_features(tr, cases, st, HS, workers=2)
+    monkeypatch.setenv("ROUTE_START_METHOD", "spawn")
+    spawn = examples.compute_features(tr, cases, st, HS, workers=2)
+    pd.testing.assert_frame_equal(fork, spawn)
+
+
 def test_features_use_only_history():
     tr = ship_track(211_000_000, 55, 10, 90, 10, 6)
     a = int(tr["ts"].iloc[120])

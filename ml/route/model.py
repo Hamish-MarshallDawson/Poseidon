@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -56,7 +57,7 @@ DEFAULT_CFG = {
     "calib_frac": 0.2,                        # newest share of each horizon's training span kept for the radii
     "real_gap_weight": 1.0,                   # sample weight of real dark-ship cases relative to track cases
     "sample_weight": "none",                  # none | recent
-    "num_threads": 4,
+    "num_threads": int(os.environ.get("ROUTE_THREADS", "8")),   # all-core OpenMP on a busy machine is 100x slower
 }
 
 

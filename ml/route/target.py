@@ -27,27 +27,43 @@ DATA = Path(os.environ.get("POSEIDON_DATA", "/home/aiden/data/poseidon"))
 BUILD = {"step_min": 30, "min_sog_kn": 1.0, "n_synthetic": 5000, "seed": 0, "version": 2}
 
 
+def source_dir(source: str) -> tuple[str, Path]:
+    """("dma" | "tiger", directory): a name with the default directory, or a directory (kind from its files)."""
+    if source in ("dma", "tiger"):
+        return source, DATA / ("dma" if source == "dma" else "route/tiger")
+    d = Path(source).expanduser()
+    if (d / "tracks_1m").is_dir():
+        return "dma", d
+    if (d / "positions.parquet").exists():
+        return "tiger", d
+    raise ValueError(f"{source!r} is neither dma, tiger, nor a directory with tracks_1m/ or positions.parquet")
+
+
 def _build(source: str, days: int | None) -> pd.DataFrame:
-    if source == "dma":
+    kind, d = source_dir(source)
+    kw = {k: v for k, v in BUILD.items() if k != "version"}
+    if kind == "dma":
         from ml.route import dma_io
-        tr, st = dma_io.load(DATA / "dma", days=days)
-        return examples.build(tr, st, None, source="dma", gate=True, **{k: v for k, v in BUILD.items() if k != "version"})
-    if source == "tiger":
-        d = DATA / "route" / "tiger"
+        tr, st = dma_io.load(d, days=days)
+        return examples.build(tr, st, None, source="dma", gate=True, **kw)
+    if kind == "tiger":
         tr, st, gp = (pd.read_parquet(d / f) for f in ("positions.parquet", "statics.parquet", "gaps.parquet"))
-        return examples.build(tr, st, gp, source="tiger", gate=True, **{k: v for k, v in BUILD.items() if k != "version"})
+        return examples.build(tr, st, gp, source="tiger", gate=True, **kw)
     raise ValueError(f"unknown route data source {source!r}")
 
 
 def _manifest_key(source: str, days: int | None) -> str:
-    f = DATA / ("dma" if source == "dma" else "route/tiger") / "manifest.json"
+    kind, d = source_dir(source)
+    f = d / "manifest.json"
     man = f.read_text() if f.exists() else ""
-    blob = json.dumps({"src": source, "days": days, "build": BUILD, "man": hashlib.sha256(man.encode()).hexdigest()})
+    blob = json.dumps({"src": kind, "days": days, "build": BUILD, "man": hashlib.sha256(man.encode()).hexdigest()})
     return hashlib.sha256(blob.encode()).hexdigest()[:12]
 
 
 def load_source(source: str, days: int | None = None) -> pd.DataFrame:
-    cache = DATA / "route" / "cache" / f"{source}{'-' + str(days) if days else ''}-{_manifest_key(source, days)}.parquet"
+    kind, d = source_dir(source)
+    root = Path(os.environ["ROUTE_CACHE"]) if os.environ.get("ROUTE_CACHE") else d.parent / "route" / "cache"
+    cache = root / f"{kind}{'-' + str(days) if days else ''}-{_manifest_key(source, days)}.parquet"
     if cache.exists():
         return pd.read_parquet(cache)
     df = _build(source, days)
@@ -120,7 +136,7 @@ class RouteTarget(TargetSpec):
             return pd.read_parquet(data)
         parts = []
         for src in data.split("+"):
-            name, _, days = src.partition(":")
+            name, _, days = src.rpartition(":") if src.rsplit(":", 1)[-1].isdigit() else (src, "", "")
             parts.append(load_source(name, int(days) if days else None))
         df = pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
         return df.sort_values(["as_of", "case_id"], kind="stable").reset_index(drop=True)

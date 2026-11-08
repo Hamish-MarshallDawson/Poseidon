@@ -1,5 +1,8 @@
 """Route prediction: where a ship (dark or not) will be in 1, 3, 6 and 24 h, with an uncertainty radius."""
+import os
 from pathlib import Path
+
+os.environ.setdefault("OMP_NUM_THREADS", os.environ.get("ROUTE_THREADS", "8"))   # before lightgbm loads
 
 REPO = Path(__file__).resolve().parents[2]
 HORIZONS_S = (3600, 3 * 3600, 6 * 3600, 24 * 3600)
