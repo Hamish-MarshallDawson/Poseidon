@@ -78,3 +78,30 @@ access to that machine. So `ml-route` must ship a self-contained entry point tha
    build (sm_120) and pin the version.
 5. Outputs come back to us as a small artifact (model text files and metrics) that we attach to a draft GitHub
    release; never commit model files.
+
+## Addendum 05:15 UTC for `be-predict`: replace every remaining mock in the frontend's live mode
+Aiden wants the site off mock data entirely. The frontend (Hamish's FrontEndLead) already has the go-dark forecast UI,
+built against mock data in the 06 data model. Live mode (`frontend/src/data/live.ts`) still returns "not implemented by
+backend" for exactly three adapter calls (`frontend/src/data/adapter.ts`). Serve them **in the frontend's existing
+types** (`frontend/src/types.ts`), so the frontend change is only pointing those calls at our routes:
+1. `GET /scores?as_of=<ms>` -> `RiskScore[]` (`id, mmsi, made_at, as_of, horizon_s, target, p, rank, mode,
+   features, contrib, model_version`): the newest score set at or before `as_of`, ranked. The UI's primary target is
+   `"dark_6h"` (horizon 21600); name the 1 h and 24 h targets `dark_1h` and `dark_24h`. From the `scores` table.
+2. `GET /outcomes?from_ts=<ms>&to_ts=<ms>` -> `Outcome[]` (`score_id, mmsi, made_at, resolved_at, label: hit|miss,
+   censored: coverage_gap|own_stall|data_end|already_dark|null, lead_s`). From the `outcomes` table.
+3. `GET /timeline?from_ts=<ms>&to_ts=<ms>` -> `TimelineEvent[]`: `gap` events (latest version per gap id from the
+   `gaps` table overlapping the window), `outcome` events (`label` hit, miss or censored), `freeze` events for any
+   frozen forecast, and `coverage` spans (`data` for stored history, `own_stall` for `dvm.gaps.KNOWN_STALLS` and other
+   known outages). `spoof` and `meeting` only when a detector exists (none yet; return none, never invent them).
+4. Live frames: set `VesselView.risk_p` and `risk_rank` from the newest go-dark scores, and fill the snapshot's
+   `watchlist` (`{snapshot_ts, entries: WatchlistRow[]}`: `rank, mmsi, name, p, decision, prev_rank, reason_codes,
+   evidence`), sending a `watchlist` in deltas when it changes. Decisions and reason codes from the model's top
+   contributions; evidence links to the score and any open gap.
+5. Route predictions for the ghost circle: for each open gap, add to the gap object sent in frames the newest route
+   prediction (`pred_lat, pred_lon, pred_r80_m, pred_r95_m, pred_horizon_s, pred_made_at, pred_model`), and add a
+   `route_prediction` block (all horizons) to the `detail` reply. The frontend now draws a dead-reckoning line and a
+   placeholder radius; these fields let it draw the model instead. Keep them optional (absent when no prediction).
+6. `GET /model/report`: serve the newest training report HTML written by `ml.core.report` from a configured
+   directory (404 when none), same login as `/coverage`.
+Same login as `/coverage` for all routes. Add tests for each shape against the TypeScript types, and post the exact
+paths and fields in your PR so be-integrate can hand them to the frontend.
