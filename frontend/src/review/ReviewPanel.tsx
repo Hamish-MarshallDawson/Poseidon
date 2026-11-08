@@ -8,6 +8,8 @@ import { openShipWindow } from '../windows/open'
 import { useNow, useVessel } from '../windows/hooks'
 import { TYPE_LABEL, fmtMmsi, hms } from '../windows/format'
 import { review, removeReview, clearReview } from './store'
+import { collab, useInSession } from '../collab/presence/core'
+import { SharedPanel } from '../collab/presence/SharedList'
 import { Compare } from './Compare'
 import './review.css'
 
@@ -18,13 +20,15 @@ const PANEL_W = 360
 
 export function ReviewChip() {
   const open = ui.use((s) => s.reviewOpen)
+  const inSession = useInSession()
   const n = review.use((s) => s.list.length)
+  const shared = collab.use((s) => s.list.length)
   return (
     <button type="button" className={`chip ${open ? 'on' : ''}`} aria-expanded={open} aria-controls="review-panel"
       onClick={() => ui.set((s) => ({ reviewOpen: !s.reviewOpen, watchlistOpen: false, layersOpen: false }))}>
       <span className="lamp" aria-hidden />
-      Review list
-      <span className="chip-count">{n}</span>
+      {inSession ? 'Shared list' : 'Review list'}
+      <span className="chip-count">{inSession ? shared : n}</span>
     </button>
   )
 }
@@ -65,6 +69,7 @@ function Row({ mmsi }: { mmsi: number }) {
 
 function ReviewPanel({ onCompare }: { onCompare: () => void }) {
   const list = review.use((s) => s.list)
+  if (useInSession()) return <SharedPanel onCompare={onCompare} onFocus={focusOnMap} />
   return (
       <div className="panel watchlist" id="review-panel" role="region" aria-labelledby="rv-title">
         <div className="wl-header">
@@ -95,7 +100,9 @@ function ReviewPanel({ onCompare }: { onCompare: () => void }) {
 
 export function Review() {
   const open = ui.use((s) => s.reviewOpen)
-  const list = review.use((s) => s.list)
+  const mine = review.use((s) => s.list)
+  const shared = collab.use((s) => s.list)
+  const list = useInSession() ? shared.map((e) => e.mmsi) : mine
   const [comparing, setComparing] = useState(false)
   const { mounted, attach } = usePresence(open, { y: -12, opacity: 0 })
   return (

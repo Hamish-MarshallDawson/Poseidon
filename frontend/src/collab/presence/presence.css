@@ -1,0 +1,47 @@
+/* Presence: avatars with a coloured ring, ship-window lines, the shared list's additions, the follow bar. */
+.pr-av {
+  --pr-ring: #4f86c6;
+  position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none;
+  border-radius: 50%; overflow: hidden; background: var(--dvm-bg-raised); color: var(--dvm-text-primary);
+  font: 600 10px/1 var(--dvm-font-data); vertical-align: middle;
+}
+.pr-av.ring { box-shadow: 0 0 0 2px var(--pr-ring); margin: 2px; }
+.pr-av[data-ring='0'] { --pr-ring: #d9822b; }
+.pr-av[data-ring='1'] { --pr-ring: #3b9c8f; }
+.pr-av[data-ring='2'] { --pr-ring: #8a63d2; }
+.pr-av[data-ring='3'] { --pr-ring: #d1495b; }
+.pr-av[data-ring='4'] { --pr-ring: #4f86c6; }
+.pr-av[data-ring='5'] { --pr-ring: #7aa63a; }
+.pr-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* On the map: a maplibre marker; no pointer events so ship hit-testing underneath is untouched. */
+.pr-pin { pointer-events: none; z-index: 2; }
+.pr-pin-av { width: 26px; height: 26px; margin: 0; box-shadow: 0 0 0 2px var(--pr-ring), 0 1px 4px var(--dvm-shadow-lift); }
+
+.pr-ship { margin: 0; display: flex; flex-direction: column; gap: 2px; color: var(--dvm-text-secondary); font-size: var(--dvm-size-label); line-height: var(--dvm-line-label); }
+.pr-ship .pr-av { margin: 0 1px; }
+
+.pr-added { display: flex; align-items: center; gap: 6px; color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
+.pr-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dvm-accent-default); }
+.pr-report { flex: none; padding: 1px 6px; border: 1px solid var(--dvm-text-muted); border-radius: 2px; color: var(--dvm-text-secondary); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
+.pr-status {
+  height: 28px; padding: 0 6px; border: 1px solid var(--dvm-text-muted); border-radius: 4px;
+  background: var(--dvm-bg-panel); color: var(--dvm-text-primary); font: inherit; font-size: var(--dvm-size-label);
+}
+.pr-status:focus-visible { outline: 2px solid var(--dvm-accent-default); outline-offset: 1px; }
+
+.pr-online { margin: 0; padding: 4px 12px 8px; list-style: none; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--dvm-border-subtle); }
+.pr-online li { display: flex; align-items: center; gap: 8px; }
+.pr-online li > span:not(.pr-av) { flex: 1; }
+.pr-activity { padding: 8px 12px; border-top: 1px solid var(--dvm-border-subtle); font-size: var(--dvm-size-label); }
+.pr-activity summary { cursor: pointer; color: var(--dvm-text-secondary); }
+.pr-activity ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.pr-activity li { display: flex; align-items: center; gap: 6px; }
+.pr-activity li > span:not(.pr-av) { flex: 1; min-width: 0; }
+.pr-activity time { color: var(--dvm-text-muted); font: var(--dvm-size-caption) / var(--dvm-line-caption) var(--dvm-font-data); }
+
+/* Follow bar: above the scrub bar, centred (a data-zone, so ship windows avoid it). */
+.pr-follow {
+  position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%); z-index: 35;
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px; white-space: nowrap;
+}
