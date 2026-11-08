@@ -10,6 +10,8 @@ export interface LiveTrackRecordProps {
   metrics: Metrics | null
   /** Model versions running now (from /lab/summary champions); the headline sentence speaks for the first one present. */
   champions?: string[]
+  /** Show one model's block only (the model page's details). */
+  only?: 'route' | 'godark'
 }
 
 const TONES: Tone[] = ['accent', 'warn', 'dark', 'bad']
@@ -31,7 +33,7 @@ function Toggle<T extends string | number>({ label, value, options, onChange, na
   )
 }
 
-export function LiveTrackRecord({ metrics, champions = [] }: LiveTrackRecordProps) {
+export function LiveTrackRecord({ metrics, champions = [], only }: LiveTrackRecordProps) {
   const route = metrics?.route ?? []
   const modes = modesIn([...route, ...(metrics?.godark ?? [])])
   const horizons = horizonsIn(route)
@@ -51,10 +53,10 @@ export function LiveTrackRecord({ metrics, champions = [] }: LiveTrackRecordProp
         <Toggle label="Which predictions" value={mode} options={modes} onChange={setMode} name={(m) => MODE_NAME[m]} />
       </div>
       <div className="ll-grid2">
-        {horizon != null
+        {only === 'godark' ? null : horizon != null
           ? <RouteBlock metrics={metrics} champions={champions} mode={mode} horizon={horizon} horizons={horizons} setH={setH} />
           : <div className="ll-card"><h4>Where ships went · route</h4><p className="ll-muted">No graded route predictions in this window.</p></div>}
-        <DarkBlock metrics={metrics} mode={mode} />
+        {only !== 'route' && <DarkBlock metrics={metrics} mode={mode} />}
       </div>
     </section>
   )
@@ -69,7 +71,7 @@ function RouteBlock({ metrics, champions, mode, horizon, horizons, setH }: { met
   const models = v.series.filter((s) => !isBaseline(s.version))
   const baseSeries = v.series.find((s) => isBaseline(s.version)) ?? models[0]
   const covKeys: LegendItem[] = [...v.series.map((s) => ({ label: s.version, tone: toneOf(v.versions, s.version) })), { label: '80% circle', tone: 'ink' }, { label: '95% circle', tone: 'ink', kind: 'dashed' }]
-  const errKeys: LegendItem[] = [...models.map((s) => ({ label: s.version, tone: toneOf(v.versions, s.version) })), { label: 'dead reckoning', tone: 'muted', kind: 'dashed' }]
+  const errKeys: LegendItem[] = [...models.map((s) => ({ label: s.version, tone: toneOf(v.versions, s.version) })), { label: 'straight-line guess', tone: 'muted', kind: 'dashed' }]
   return (
     <div className="ll-card">
       <header className="ll-head">
@@ -81,7 +83,7 @@ function RouteBlock({ metrics, champions, mode, horizon, horizons, setH }: { met
           {head && (
             <p className="ll-say">
               At {hLabel(horizon)}, <b>{head.version}</b>'s 80% circle held the ship <b>{pct(head.cov80)}</b> of the time (target 80%), its 95% circle <b>{pct(head.cov95)}</b> (target 95%).
-              {' '}Median miss <b>{km(head.err)}</b> against <b>{km(head.base)}</b> for dead reckoning: <b>{pct(head.skill)}</b> skill over dead reckoning ({head.n.toLocaleString('en-GB')} graded).
+              {' '}Median miss <b>{km(head.err)}</b> against <b>{km(head.base)}</b> for a straight-line guess (<b>{pct(head.skill)}</b> shorter) ({head.n.toLocaleString('en-GB')} graded).
             </p>
           )}
           <h5>Circle coverage against its target</h5>
@@ -98,13 +100,13 @@ function RouteBlock({ metrics, champions, mode, horizon, horizons, setH }: { met
             ))}
           </Chart>
           <Legend items={covKeys} />
-          <h5>Median miss distance against dead reckoning</h5>
+          <h5>Median miss distance against a straight-line guess</h5>
           <Chart label={`Route median error per hour at ${hLabel(horizon)}`} x={{ type: 'time', domain: x }} y={{ domain: [0, errMax * 1.05], format: (y) => `${Math.round(y)} km`, ticks: 4 }} height={170}>
-            {baseSeries && <Line label="dead reckoning" tone="muted" dashed data={baseSeries.points.map((p) => ({ ...p, x: p.t, y: p.base == null ? null : p.base / 1000 }))}
-              tip={(p) => <><b>Dead reckoning</b> · {when(p.t)}<br />median miss {km(p.base)}</>} />}
+            {baseSeries && <Line label="straight-line guess" tone="muted" dashed data={baseSeries.points.map((p) => ({ ...p, x: p.t, y: p.base == null ? null : p.base / 1000 }))}
+              tip={(p) => <><b>Straight-line guess</b> · {when(p.t)}<br />median miss {km(p.base)}</>} />}
             {models.map((s) => (
               <Line key={s.version} label={s.version} tone={toneOf(v.versions, s.version)} dots data={s.points.map((p) => ({ ...p, x: p.t, y: p.err == null ? null : p.err / 1000 }))}
-                tip={(p) => <><b>{s.version}</b> · {when(p.t)}<br />median miss {km(p.err)} against {km(p.base)} dead reckoning, {p.n} graded</>} />
+                tip={(p) => <><b>{s.version}</b> · {when(p.t)}<br />median miss {km(p.err)} against {km(p.base)} straight-line guess, {p.n} graded</>} />
             ))}
           </Chart>
           <Legend items={errKeys} />

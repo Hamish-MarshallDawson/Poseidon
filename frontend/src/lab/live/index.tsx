@@ -13,3 +13,8 @@ export function Live({ metrics, data, summary }: LabSectionProps) {
     </>
   )
 }
+
+export { LiveTab, StatusDot } from './LiveTab'
+export { LEVEL_NAME, livePlain } from './plain'
+export type { Level, ModelRef } from './plain'
+export type { LiveTabProps } from './LiveTab'
