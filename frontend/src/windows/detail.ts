@@ -1,4 +1,5 @@
 import { createStore } from '../store/store'
+import { vessels } from '../store/vessels'
 import type { ClientMsg, ServerMsg } from '../types'
 
 // The `detail` reply per ship (statics, gap history, sanction, full RiskScore), for the ship card.
@@ -20,5 +21,6 @@ export function requestDetail(mmsi: number): void {
 }
 
 export function receiveDetail(msg: DetailMsg): void {
+  if (msg.trail?.length) vessels.setTrail(msg.mmsi, msg.trail)
   details.set((s) => ({ byMmsi: { ...s.byMmsi, [msg.mmsi]: msg } }))
 }

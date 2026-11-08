@@ -85,7 +85,8 @@ export type ServerMsg =
               sources: SourceStatus[]; replay?: { from_ts: number; to_ts: number } })
   | (Base & { type: "ping"; now_ts: number })
   | (Base & { type: "detail"; mmsi: number; vessel: VesselView; statics: StaticDetail[]; gaps: GapEvent[];
-              spoofs: SpoofEvent[]; sanction: unknown | null; score: RiskScore | null });
+              spoofs: SpoofEvent[]; sanction: unknown | null; score: RiskScore | null;
+              trail?: [number, number, number][] });   // last 60 min [ts, lon, lat], oldest first
 
 export type ClientMsg =
   | { type: "subscribe"; bbox: [[number, number], [number, number]]; min_status?: Status }

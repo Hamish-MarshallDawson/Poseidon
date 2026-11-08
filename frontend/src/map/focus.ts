@@ -1,5 +1,6 @@
 import type { FocusRelation } from '../store/ui'
 import type { GapEvent, VesselView } from '../types'
+import { TRAIL_MS } from '../store/vessels'
 import { haversineM, NMI_M } from './geo'
 
 // Focus mode relation rules from R1-AGENT3-DENSITY.md (same owner needs a data source: not built).
@@ -7,7 +8,6 @@ const NEARBY_M = 10 * NMI_M, NEARBY_MOORED_M = 2 * NMI_M
 const RDV_M = 0.5 * NMI_M, RDV_MIN_MS = 30 * 60000, RDV_SOG = 3
 const DARK_M = 30 * NMI_M, DARK_WINDOW_MS = 60 * 60000
 const MAX = { nearby: 8, rendezvous: 3, also_dark: 3, same_flag: 5 }
-export const TRAIL_MS = 6 * 3600_000
 
 type Trail = [number, number, number][]   // [ts, lon, lat]
 
