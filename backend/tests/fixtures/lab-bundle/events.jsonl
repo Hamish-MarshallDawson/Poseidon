@@ -1,0 +1,4 @@
+{"ts": 1794122362000, "target": "fishing", "kind": "trained", "run_id": "fishing-20261108T071922-e2db5c", "version": "fishing-20261108T071922-e2db5c", "label": "fishing lgbm trained", "detail": {}}
+{"ts": 1794122362000, "target": "fishing", "kind": "promoted", "run_id": "fishing-20261108T071922-e2db5c", "version": "fishing-20261108T071922-e2db5c", "label": "first fishing champion", "detail": {"against": "baseline"}}
+{"ts": 1794128400000, "target": "fishing", "kind": "promoted", "run_id": "fishing-20261108T090000-aaaaaa", "version": "fishing-20261108T090000-aaaaaa", "label": "gemini proposal promoted", "detail": {}}
+{"ts": 1794114000000, "target": "route", "kind": "deployed", "run_id": null, "version": "dma14-v2", "label": "route champion live", "detail": {}}
