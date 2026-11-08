@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { ui } from '../../store/ui'
 import { Avatar } from '../Avatar'
 import { api, CollabError } from '../client'
-import type { IncomingInvite, OutgoingInvite } from '../client'
-import { acceptInviteId, collab, createSession, declineInvite, leaveSession, openSession, refreshInvites, revokeInvite } from '../store'
-import { entry, linkFor, openPanel, saveLink, savedLinks, say, showJoined } from './state'
+import type { IncomingInvite } from '../client'
+import { acceptInviteId, acceptInviteToken, collab, createSession, declineInvite, leaveSession, openSession, refreshInvites, refreshSessions, revokeInvite } from '../store'
+import { entry, inviteeName, linkFor, openPanel, saveLink, savedLinks, say, showJoined, tokenFrom } from './state'
 import './entry.css'
 
 // The session bar sits in the toolbar: the session title with members' faces (a switcher), Invite / Join with a red
@@ -29,9 +29,13 @@ export function SessionBar({ onLogout }: { onLogout?: () => void }) {
   const incoming = collab.use((s) => s.invites.incoming.length)
   const panel = entry.use((s) => s.panel)
   const reconnecting = collab.use((s) => s.reconnecting)
+  const inSession = collab.use((s) => s.session !== null)
+  const connected = ui.use((s) => s.feed.connected)
+  const dropped = inSession && !connected
   if (!me) return reconnecting ? <span className="chip chip-quiet" role="status">Reconnecting…</span> : null
   return (
     <div className="session-bar">
+      {dropped && <span className="chip chip-quiet session-bar__offline" role="status">Reconnecting…</span>}
       <SessionSwitcher />
       <button type="button" className={`chip invite-btn ${panel ? 'on' : ''}`} aria-expanded={panel} aria-controls="invite-panel"
         aria-label={incoming ? `Invite / Join, ${incoming} waiting` : 'Invite / Join'} onClick={() => { openPanel(!panel); void refreshInvites() }}>
@@ -44,6 +48,7 @@ export function SessionBar({ onLogout }: { onLogout?: () => void }) {
 }
 
 const DEFAULT_TITLE = 'Baltic dark ships'
+const MAX_FACES = 4
 
 function SessionSwitcher() {
   const session = collab.use((s) => s.session)
@@ -54,10 +59,13 @@ function SessionSwitcher() {
   const close = () => entry.set({ menu: null })
   const ref = useDismiss(open, close)
   const online = collab.use((s) => s.presence)
-  const faces = session ? session.members.slice(0, 4) : []
+  const here = (id: string) => online.some((u) => u.id === id)
+  const members = session ? [...session.members].sort((a, b) => Number(here(b.id)) - Number(here(a.id))) : []   // who is here first
+  const faces = members.slice(0, MAX_FACES)
   // Keyboard: the menu opens on its first row, or with no sessions yet on the title field (selected).
   useEffect(() => {
     if (!open) return
+    void refreshSessions()                             // counts and who is in them change while the menu is shut
     const first = ref.current?.querySelector<HTMLElement>('[role=menuitem], input')
     first?.focus(); if (first instanceof HTMLInputElement) first.select()
   }, [open, ref])
@@ -74,7 +82,12 @@ function SessionSwitcher() {
     <div className="session-bar__wrap" ref={ref}>
       <button type="button" className={`chip session-bar__title ${open ? 'on' : ''}`} aria-haspopup="menu" aria-expanded={open}
         onClick={() => entry.set({ menu: open ? null : 'switch' })}>
-        {session && <span className="session-bar__faces">{faces.map((m) => <Avatar key={m.id} user={m} size={18} online={online.some((u) => u.id === m.id)} />)}</span>}
+        {session && (
+          <span className="session-bar__faces">
+            {faces.map((m) => <Avatar key={m.id} user={m} size={18} online={here(m.id)} />)}
+            {members.length > MAX_FACES && <span className="session-bar__more" title={`${members.length} people in this session`}>+{members.length - MAX_FACES}</span>}
+          </span>
+        )}
         <span>{label}</span>
       </button>
       {open && (
@@ -82,6 +95,7 @@ function SessionSwitcher() {
           {sessions.map((s) => (
             <button key={s.id} type="button" role="menuitem" onClick={() => go(s.id)} aria-current={s.id === session?.id}>
               <span className="invite-row__text">{s.title}</span>
+              {s.online.length > 0 && <span className="session-bar__faces">{s.online.slice(0, 3).map((u) => <Avatar key={u.id} user={u} size={16} online />)}</span>}
               <span className="muted">{s.id === session?.id ? 'open' : s.members > 1 ? `${s.members} people` : 'just you'}</span>
             </button>
           ))}
@@ -144,7 +158,10 @@ export function InvitePanel() {
   const session = collab.use((s) => s.session)
   const role = collab.use((s) => s.role)
   const { incoming, outgoing } = collab.use((s) => s.invites)
+  const meId = collab.use((s) => s.me?.id)
+  const online = collab.use((s) => s.presence)
   const [to, setTo] = useState('')
+  const [paste, setPaste] = useState('')
   const [links, setLinks] = useState(savedLinks)
   const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -166,13 +183,22 @@ export function InvitePanel() {
     e.preventDefault()
     const addr = to.trim()
     if (!addr) return
-    try { await make(addr); setTo(''); setNote({ text: `Invited ${addr}. They see it on their Invite / Join badge.`, bad: false }) }
-    catch (err) { setNote({ text: whyNot(err, addr), bad: true }) }
+    try {
+      await make(addr); setTo(''); setNote({ text: `Invited ${addr}. They see it on their Invite / Join badge.`, bad: false })
+      window.setTimeout(() => setNote(null), 4000)
+    } catch (err) { setNote({ text: whyNot(err, addr), bad: true }) }
+  }
+  const joinPasted = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const token = tokenFrom(paste)
+    if (!token) { setNote({ text: 'That is not an invite link.', bad: true }); return }
+    const s = await acceptInviteToken(token)
+    if (s) { setPaste(''); openPanel(false); showJoined(s) }
   }
   const copy = async (id: string) => {
     try { await navigator.clipboard.writeText(linkFor(links[id])); flash(id) } catch { setNote({ text: 'Copy failed. Allow clipboard access.', bad: true }) }
   }
-  const who = (o: OutgoingInvite) => (o.to === null ? 'Invite link' : 'email' in o.to ? o.to.email : o.to.name ?? 'Someone')
+  const owner = session?.members.find((m) => m.role === 'owner')
   // Accepted invites are the member faces already; pending and declined ones need an action.
   const mine = session ? outgoing.filter((o) => o.session_id === session.id && o.status !== 'accepted') : []
 
@@ -198,23 +224,47 @@ export function InvitePanel() {
             <button type="button" className="chip on invite-copy" onClick={copyNew} data-first={incoming.length ? undefined : ''}>
               {copied === 'new' ? 'Link copied' : 'Copy invite link'}
             </button>
+            <p className="muted">Each link works for one person and lasts 7 days.</p>
             <form className="invite-create" onSubmit={send}>
               <input type="email" value={to} maxLength={254} placeholder="or invite by email" aria-label="Invite by email" onChange={(e) => { setTo(e.target.value); setNote(null) }} />
               <button type="submit" className="chip" disabled={!to.trim()}>Send</button>
             </form>
           </>
         )}
-        {session && role !== 'owner' && <p className="muted">Only the session owner can invite.</p>}
-        {!session && incoming.length === 0 && <p className="muted">Start a session to invite people.</p>}
+        {!session && (
+          <>
+            {incoming.length === 0 && <p className="muted">Start a session from the session menu to invite people, or join with a link.</p>}
+            <form className="invite-create" onSubmit={joinPasted}>
+              <input type="text" value={paste} placeholder="Paste an invite link" aria-label="Paste an invite link" data-first={incoming.length ? undefined : ''} onChange={(e) => { setPaste(e.target.value); setNote(null) }} />
+              <button type="submit" className="chip" disabled={!paste.trim()}>Join</button>
+            </form>
+          </>
+        )}
         {note && <p className={`muted ${note.bad ? 'bad' : ''}`} role={note.bad ? 'alert' : 'status'}>{note.text}</p>}
         {mine.map((o) => (
           <div className="invite-row" key={o.id}>
-            <span className="invite-row__text">{who(o)} · {o.status === 'declined' ? 'declined' : 'waiting'}</span>
+            <span className="invite-row__text">{inviteeName(o)} · {o.status === 'declined' ? 'declined' : 'waiting'}</span>
             {o.status === 'pending' && links[o.id] && <button type="button" className="chip" onClick={() => copy(o.id)}>{copied === o.id ? 'Copied' : 'Copy'}</button>}
             <button type="button" className="chip" onClick={() => revokeInvite(o.id)}>{o.status === 'declined' ? 'Remove' : 'Revoke'}</button>
           </div>
         ))}
       </section>
+      {session && (
+        <section aria-label="In this session">
+          <h2>In this session · {session.members.length}</h2>
+          {session.members.map((m) => {
+            const here = online.some((u) => u.id === m.id)
+            return (
+              <div className="invite-row member-row" key={m.id}>
+                <Avatar user={m} size={20} online={here} />
+                <span className="invite-row__text">{m.name ?? 'Someone'}</span>
+                <span className="muted">{[m.role === 'owner' && 'Owner', m.id === meId ? 'You' : here ? 'Online' : 'Away'].filter(Boolean).join(' · ')}</span>
+              </div>
+            )
+          })}
+          {role !== 'owner' && <p className="muted">{owner?.name ?? 'The session owner'} can invite more people.</p>}
+        </section>
+      )}
     </div>
   )
 }

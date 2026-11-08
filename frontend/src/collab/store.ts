@@ -1,7 +1,7 @@
 import { createStore } from '../store/store'
 import { api } from './client'
 import type { ActivityRow, Doc, Entry, IncomingInvite, LastSession, Member, OutgoingInvite, Session, SessionRow, User } from './client'
-import { joinSocket, leaveSocket } from './socket'
+import { joinSocket, leaveSocket, rejoinSoon, resendPresence } from './socket'
 import type { CollabMsg, PresenceUser } from './socket'
 
 // Collaboration state: me, the current session (members, list, documents), presence, activity. UI state only; ship
@@ -133,8 +133,19 @@ async function refetch(id: string) {
 const known = (id: string) => s().session?.members.some((m) => m.id === id)
 
 function applyMessage(m: CollabMsg) {
-  if (m.type === 'error') { if (m.for === 'session_join') collab.set({ error: 'Could not join the session', session: null }); return }
-  if (m.type === 'session_joined') { adopt(m.session, m.role); return }
+  if (m.type === 'error') {
+    if (m.for !== 'session_join' || (m.session_id && m.session_id !== s().session?.id)) return
+    if (m.code === 'unavailable') rejoinSoon()
+    else { leaveSession(); collab.set({ error: 'Could not join the session' }) }
+    return
+  }
+  if (m.type === 'session_joined') {
+    if (m.session_id !== s().session?.id) return         // late answer for a session we already left or switched from
+    adopt(m.session, m.role)
+    void refreshActivity()                               // adopt just cleared what openSession may already have fetched
+    resendPresence()
+    return
+  }
   if (m.type === 'invite' || m.type === 'invites_changed') { void refreshInvites(); return }
   if (m.session_id !== s().session?.id) return           // late message from a session we left
   switch (m.type) {
