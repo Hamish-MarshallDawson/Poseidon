@@ -11,6 +11,7 @@ import { WindowsRoot } from './windows/WindowsRoot'
 import { bindDetailSender, receiveDetail } from './windows/detail'
 import { BriefingPanel } from './briefing/BriefingPanel'
 import { bindBriefingAuth } from './briefing/store'
+import { Review } from './review/ReviewPanel'
 
 const TokensDemo = lazy(() => import('./tokens/TokensDemo'))
 const WindowsDemo = lazy(() => import('./windows/demo/WindowsDemo'))
@@ -61,6 +62,7 @@ function Monitor({ getToken, onLogout }: { getToken: () => Promise<string | unde
       <ForecastOverlay />
       <WindowsRoot onLogout={onLogout} />
       <BriefingPanel />
+      <Review />
       <ReplayChrome />
       <ScrubBar />
       <ThemeMenu />

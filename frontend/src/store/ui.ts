@@ -28,6 +28,7 @@ export interface UIState {
   // drop-ins
   legendOpen: boolean
   watchlistOpen: boolean
+  reviewOpen: boolean
   layersOpen: boolean
   layers: { density: boolean; coverage: boolean; inland: boolean; labels: boolean; depth: boolean; forecast: boolean }
   // what the map is showing right now (map/ writes; the status line reads)
@@ -52,6 +53,7 @@ export const ui = createStore<UIState>({
   stack: null,
   legendOpen: false,
   watchlistOpen: false,
+  reviewOpen: false,
   layersOpen: false,
   layers: { density: true, coverage: true, inland: false, labels: true, depth: false, forecast: true },
   view: { inView: 0, shown: 0, stacked: 0, inCells: 0, noCoverageCells: 0, zoom: 0 },
