@@ -10,7 +10,8 @@ and two read-only routes. Training lives in `ml/` and reaches the backend only t
 | `predictor.py` | Every `PREDICT_INTERVAL_S`: predict, write the ledger, then grade. |
 | `grader.py` | Fast grading from our own AIS and gap detector into `outcomes`. |
 | `schema.py` | `route_predictions`, `model_runs`, extra nullable `outcomes` columns. Additive, append-only. |
-| `routes.py` | `GET /predictions?mmsi=`, `GET /model/leaderboard`. |
+| `routes.py` | `GET /predictions`, `/model/leaderboard`, `/scores`, `/outcomes`, `/timeline`, `/model/report`. |
+| `forecast.py` | The newest forecasts in memory for the WebSocket frames: risk, watchlist, gap ghost circles, detail. |
 
 ## Run
 
@@ -21,7 +22,10 @@ Off by default. `PREDICT=1` in the environment starts it in the backend's lifesp
 | `PREDICT` | `0` | `1` runs the predictor and graders. The routes are always mounted; they answer 503 until the tables exist. |
 | `PREDICT_MODEL_DIR` | `backend/data/models` | Where `champions.json`, the artifact directories and `runs.jsonl` live. |
 | `PREDICT_INTERVAL_S` | `300` | Seconds between cycles. |
-| `PREDICT_SAMPLE` | `150` | Active ships per cycle (route and go-dark). |
+| `PREDICT_SAMPLE` | `150` | Active ships with a route prediction per cycle. |
+| `PREDICT_SCORE_SAMPLE` | `300` | Ships with a go-dark score per cycle, those scored longest ago first (covers every moving ship in about an hour). |
+| `PREDICT_P_ALERT` | `0.2` | `dark_6h` p for `HIGH_FORECAST` and the `inspect` decision. |
+| `PREDICT_REPORT_DIR` | `<PREDICT_MODEL_DIR>/reports` | Where `ml.core.report` writes its HTML; `/model/report` serves the newest. |
 
 `lightgbm` and `numpy` (in `requirements.txt`) are imported only when a LightGBM champion is loaded; the baselines need
 neither. `/health` has a `predict` block: cycles, rows written, rows graded, last cycle time and error, the models
@@ -97,8 +101,13 @@ east, north = enu_offset(blat, blon, true_lat, true_lon)   # the route target: o
     10 min and not in a gap, `as_of` = now. Moving only: gaps open only for moving ships, and moored ships would
     swamp the live metrics.
   - `base_lat, base_lon` is the baseline for the same time, so every grade also grades the baseline.
-- Go-dark scores go to `scores`: id `score-{mmsi}-dark_{h}h-{made_at}`, target `dark_1h | dark_6h | dark_24h`
-  (06 naming), `mode = live`. The feature snapshot is on the 1 h row; the others hold `{"same_as": <1 h id>}`.
+- Go-dark: each cycle scores `PREDICT_SCORE_SAMPLE` moving ships (in memory, for the map). **On each full hour**
+  the predictor commits a frozen set to `scores`: every ship's newest score of the hour before, re-issued with
+  `made_at` = the hour (id `score-{mmsi}-dark_{h}h-{hour}`, target `dark_1h | dark_6h | dark_24h`, 06 naming,
+  `mode = live`), plus the feature `scored_age_s` (how old the data was at the hour). The label window starts at the
+  hour. These sets are what gets graded and what `/scores` serves (the frontend's forecast check works on hourly
+  sets). The feature snapshot is on the dark_6h row; the others hold `{"same_as": <6 h id>}`. `contrib` holds the
+  model's top 5 SHAP contributions per horizon (raw log-odds units; empty for the baseline).
 - Baselines when no champion: `baseline-dr-v1` (dead reckoning; radii 500 m + 0.9 x the distance run for 80% and
   1 km + 1.35 x for 95%, fitted to 8 h of our live AIS: dead-reckoning errors are heavy-tailed) and `baseline-rate-v1` (deliberate-candidate gaps per moving Class A ship-hour over
   the last 6 h before the detector's 30 min delay, the same p for every ship; re-measured every 30 min).
@@ -123,7 +132,38 @@ Our own detector makes the go-dark labels; GFW gap events (#112) are the indepen
   model_version, horizon_s, n, positives, brier, mean_p, base_rate, base_rate_brier, brier_skill}]}`.
   `route_reappear` rows are banded by lead time into the next horizon up.
 
+## Frontend contract (frontend/src/types.ts, addendum 05:15)
+
+All routes take the same login as `/coverage`.
+
+| Path | Returns |
+|---|---|
+| `GET /scores?as_of=<ms>&target=dark_6h` | `RiskScore[]`: the newest hourly frozen set at or before `as_of` (default now, at most 2 h back), ranked by p (`rank` 1 = highest). `as_of` = `made_at` = the hour. `features` numeric only. `target` may be `dark_1h`, `dark_6h` (default), `dark_24h`. |
+| `GET /outcomes?from_ts=<ms>&to_ts=<ms>&target=dark_6h` | `Outcome[]` of frozen scores whose window closed in the range: `made_at + horizon + 30 min` (the frontend's RESOLVE_LAG_MS) in `[from_ts, to_ts]`. `label` hit/miss; a censored row keeps miss and says why (`coverage_gap`, incl. our `unknown`; `own_stall`). `lead_s` only on hits. |
+| `GET /timeline?from_ts=<ms>&to_ts=<ms>[&mmsi=<n>]` | `TimelineEvent[]`: `gap` (latest version, overlapping, newest 5,000), `freeze` (one per hourly set, id `freeze-<ms>`), `outcome` (dark_6h, `ts` = resolved_at, `label` hit/miss/censored), `coverage` (`data` over stored history, `own_stall` for `dvm.gaps.KNOWN_STALLS`). No `spoof` or `meeting`: no detector yet. |
+| `GET /model/report` | The newest `*.html` under `PREDICT_REPORT_DIR` (text/html, header `X-Report-File`), 404 when none. |
+
+WebSocket frames (only with `PREDICT=1`; otherwise exactly as before):
+
+- `VesselView.risk_p`, `risk_rank`: newest `dark_6h` p of the last hour and its rank among all scored ships; null
+  when unscored. Ships whose risk or rank changed are in the next `delta.vessels`.
+- `snapshot.watchlist`, `delta.watchlist` (only when the ranks, decisions or codes change, else null): `{snapshot_ts,
+  entries: WatchlistRow[]}`, top 50. Reason codes are 06's fixed set, from evidence: `HIGH_FORECAST` (p >=
+  PREDICT_P_ALERT), `OPEN_GAP`, `RECENT_GAP` (gap in the last 24 h), `DRAUGHT_JUMP` (>= 1 m across a recent gap),
+  `BLANK_DESTINATION`. `decision`: `inspect` = rank <= 10 and p >= p_alert; `watch` = p >= p_alert or OPEN_GAP or
+  RECENT_GAP; else `none`. `evidence`: the score (`kind: score`, id = score id) and any open or recent gap.
+- Open `GapEvent`s in `snapshot.gaps`, `delta.gaps` and `detail.gaps` gain optional `pred_lat, pred_lon, pred_r80_m,
+  pred_r95_m, pred_horizon_s, pred_made_at, pred_model`: the gap's newest route prediction at the first horizon not
+  yet passed since the last fix (so the circle grows with the gap; re-sent when that changes). Absent without one.
+- `detail` gains `route_prediction` (absent without one): `{as_of, made_at, model_version, gap_id, points:
+  [{horizon_s, lat, lon, radius_m_80, radius_m_95, base_lat, base_lon}]}` for 1, 3, 6 and 24 h; and `detail.score`
+  is the ship's newest `dark_6h` RiskScore (null when unscored).
+
+With the baseline go-dark model every ship has the same p, so the ranking and the watchlist order carry no
+information until a LightGBM champion is promoted (decisions are then all `none` unless a gap raises them to watch).
+
 ## Tests
 
-`pytest tests/test_predict_features.py tests/test_predict.py`. The database test needs a local TimescaleDB in
+`pytest tests/test_predict_features.py tests/test_predict.py tests/test_predict_frames.py`. The frame and route
+shapes are checked against the interfaces parsed from `frontend/src/types.ts`. The database test needs a local TimescaleDB in
 `SOURCES_TEST_DATABASE_URL` (it truncates the ledger tables, so never point it at a database you care about).

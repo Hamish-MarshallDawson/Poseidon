@@ -24,7 +24,7 @@ from dvm.predict.routes import make_router
 URL = os.getenv("SOURCES_TEST_DATABASE_URL", "")
 needs_db = pytest.mark.skipif(not URL or "tsdb.cloud" in URL or "timescale.com" in URL,
                               reason="set SOURCES_TEST_DATABASE_URL to a local TimescaleDB")
-T = 1_700_000_000_000 - (1_700_000_000_000 % 60_000)   # 2023-11-14: away from anything live
+T = 1_700_000_000_000 - (1_700_000_000_000 % 3_600_000)   # 2023-11-14, on the hour: away from anything live
 MIN, H = 60_000, 3_600_000
 A, B = 211_000_001, 211_000_002
 
@@ -136,7 +136,7 @@ def test_baseline_rows_and_ids():
     s = P.godark_rows(artifact.GodarkBaseline(0.01), A, t, T + 30 * MIN, None, "live")
     assert [x["target"] for x in s] == ["dark_1h", "dark_6h", "dark_24h"]
     assert s[0]["p"] == pytest.approx(1 - math.exp(-0.01)) and s[0]["p"] < s[1]["p"] < s[2]["p"]
-    assert "sog_kn" in s[0]["features"] and s[1]["features"] == {"same_as": s[0]["id"]}
+    assert "sog_kn" in s[1]["features"] and s[0]["features"] == {"same_as": s[1]["id"]} and s[0]["contrib"] == {}
     json.dumps(s[0]["features"])   # JSON-safe
 
 
@@ -186,7 +186,7 @@ def _gap(mmsi, start, state, version, flag="deliberate_candidate", end=None, nxt
 async def _positions(con, rows):
     await con.copy_records_to_table("positions", columns=["time", *store_sql.POS_COLS], records=[
         (datetime.fromtimestamp(r["ts"] / 1000, timezone.utc), r["mmsi"], r["ts"], r["ts"],
-         r["lat"], r["lon"], r["sog_kn"], r["cog_deg"], r["heading_deg"], r["nav_status"], "A", 1, "ok", "aisstream", [])
+         r["lat"], r["lon"], r["sog_kn"], r["cog_deg"], r["heading_deg"], r["nav_status"], "A", 1, "source", "aisstream", [])
         for r in rows])
 
 
@@ -218,9 +218,10 @@ async def _db_flow(tmp_path):
         await p.connect()
         try:
             c1 = await p.cycle()
-            assert c1 == {"gaps": 1, "active": 1, "route_rows": 8, "score_rows": 3,
-                          "graded": {"route": 0, "route_reappear": 0, "dark": 0}}
-            assert (await p.cycle())["gaps"] == 0   # a gap is predicted once per model version
+            assert c1 == {"gaps": 1, "active": 1, "route_sample": 1, "route_rows": 8, "scored": 3, "score_rows": 3,
+                          "graded": {"route": 0, "route_reappear": 0, "dark": 0}}   # T is on the hour: frozen set
+            again = await p.cycle()
+            assert again["gaps"] == 0 and again["score_rows"] == 0   # once per gap and model; one freeze an hour
             assert p.status["rate_per_h"] == pytest.approx(1 / 12)   # 1 deliberate gap, 2 moving ships, 6 h
 
             # Time passes: the rest of both tracks arrives, B's gap closes when it comes back, A goes dark at T+90m.
@@ -265,10 +266,49 @@ async def _db_flow(tmp_path):
             assert await con.fetchval("SELECT count(*) FROM model_runs") == 2
 
             app = FastAPI()
-            app.include_router(make_router(lambda: p.pool, p.health, lambda: None, clock=lambda: clock["now"]))
+            reports = tmp_path / "reports"
+            app.include_router(make_router(lambda: p.pool, p.health, lambda: None, clock=lambda: clock["now"],
+                                           report_dir=reports, stalls=lambda: [(T - 30 * MIN, T - 20 * MIN)]))
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as http:
                 r = (await http.get("/predictions", params={"mmsi": B, "hours": 72})).json()
                 lb = (await http.get("/model/leaderboard", params={"hours": 168})).json()
+                sc = (await http.get("/scores", params={"as_of": T + 30 * MIN})).json()
+                sc_before = (await http.get("/scores", params={"as_of": T - MIN})).json()
+                sc1 = (await http.get("/scores", params={"as_of": T, "target": "dark_1h"})).json()
+                due = T + H + 30 * MIN   # dark_1h of the T set: the window closes at T + 1 h, + 30 min
+                outs = (await http.get("/outcomes", params={"from_ts": due, "to_ts": due, "target": "dark_1h"})).json()
+                none6 = (await http.get("/outcomes", params={"from_ts": T, "to_ts": T + 3 * H})).json()
+                tl = (await http.get("/timeline", params={"from_ts": T - 3 * H, "to_ts": T + 3 * H})).json()
+                tl_b = (await http.get("/timeline", params={"from_ts": T - 3 * H, "to_ts": T + 3 * H, "mmsi": B})).json()
+                no_report = await http.get("/model/report")
+                reports.mkdir()
+                (reports / "old.html").write_text("<p>old</p>")
+                os.utime(reports / "old.html", (1, 1))
+                (reports / "round-3.html").write_text("<h1>Leaderboard</h1>")
+                rep = await http.get("/model/report")
+                bad = await http.get("/scores", params={"target": "dark_2h"})
+            from test_predict_frames import assert_shape, ts_union
+            assert [x["mmsi"] for x in sc] == [A] and sc[0]["rank"] == 1 and sc[0]["made_at"] == T
+            assert sc[0]["target"] == "dark_6h" and sc[0]["horizon_s"] == 21600 and sc[0]["as_of"] == T
+            assert_shape(sc[0], "RiskScore")
+            assert sc[0]["features"]["scored_age_s"] == 0 and all(isinstance(v, (int, float)) for v in sc[0]["features"].values())
+            assert sc_before == [] and sc1[0]["target"] == "dark_1h"
+            assert len(outs) == 1 and outs[0]["label"] == "miss" and outs[0]["censored"] is None
+            assert_shape(outs[0], "Outcome")
+            assert none6 == []   # the 6 h window has not closed by T + 3 h
+            kinds = ts_union("TimelineEvent")
+            for e in tl:
+                assert set(e) == kinds[e["kind"]], e
+            got_kinds = sorted({e["kind"] for e in tl})
+            assert got_kinds == ["coverage", "freeze", "gap"], got_kinds
+            assert {e["id"] for e in tl if e["kind"] == "gap"} == {f"gap-{B}-{b_gap_start}", f"gap-{A}-{T + 90 * MIN}"}
+            assert [e["ts"] for e in tl if e["kind"] == "freeze"] == [T]
+            cov = [(e["start_ts"] - T, e["end_ts"] - T, e["state"]) for e in tl if e["kind"] == "coverage"]
+            assert cov == [(-2 * H, -30 * MIN, "data"), (-30 * MIN, -20 * MIN, "own_stall"),
+                           (-20 * MIN, 2 * H + 10 * MIN, "data")]
+            assert {e["id"] for e in tl_b if e["kind"] == "gap"} == {f"gap-{B}-{b_gap_start}"}
+            assert no_report.status_code == 404 and rep.status_code == 200 and "Leaderboard" in rep.text
+            assert bad.status_code == 422
             gapset = next(s for s in r["route"] if s["gap_id"])
             assert len(gapset["points"]) == 4 and gapset["points"][0]["grade"]["censored"] == "no_truth"
             assert r["reappear"][0]["lead_s"] == 5400
