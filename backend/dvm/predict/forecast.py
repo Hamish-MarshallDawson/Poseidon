@@ -6,8 +6,9 @@ The predictor updates one Forecast after every cycle; the Hub reads it to fill, 
   scored ships (the go-dark sample rotates, so an hour covers every moving Class A ship heard).
 - `GapEvent.pred_*` on open gaps: the newest route prediction for the gap, at the first horizon not yet passed
   (the ghost circle grows as the gap ages): `pred_lat, pred_lon, pred_r80_m, pred_r95_m, pred_horizon_s,
-  pred_made_at, pred_model`. Absent when the gap has no prediction.
-- `detail.route_prediction`: the ship's newest prediction set, every horizon; `detail.score`: its newest dark_6h
+  pred_made_at, pred_model`, and the zone incursion of that circle (#157): `pred_mpa_ids, pred_mpa_share_80,
+  pred_foreign_eez, pred_foreign_share_80` (null when zones are not loaded). Absent when the gap has no prediction.
+- `detail.route_prediction`: the ship's newest prediction set, every horizon (each point with the incursion fields); `detail.score`: its newest dark_6h
   RiskScore.
 - `snapshot.watchlist` / `delta.watchlist`: the top WATCH_N ships by p (06 section 2.8). Reason codes come from the
   evidence (06 section 5), never from the model: HIGH_FORECAST (p >= p_alert), OPEN_GAP, RECENT_GAP (a gap of ours in
@@ -27,6 +28,7 @@ PRIMARY = "dark_6h"
 WATCH_N = 50
 INSPECT_K = 10
 DRAUGHT_JUMP_M = 1.0
+INCURSION = ("mpa_ids", "mpa_share_80", "foreign_eez", "foreign_share_80")   # dvm/zones/incursion.py (#157)
 
 
 def _hhmm(ms: int) -> str:
@@ -124,7 +126,7 @@ class Forecast:
         r = next((x for x in rows if x["horizon_s"] >= age_s), rows[-1])
         return {"pred_lat": r["lat"], "pred_lon": r["lon"], "pred_r80_m": r["radius_m_80"],
                 "pred_r95_m": r["radius_m_95"], "pred_horizon_s": r["horizon_s"], "pred_made_at": r["made_at"],
-                "pred_model": r["model_version"]}
+                "pred_model": r["model_version"], **{f"pred_{k}": r.get(k) for k in INCURSION}}
 
     def route_block(self, mmsi: int) -> Optional[dict]:
         rows = self.ship_route.get(mmsi)
@@ -135,7 +137,8 @@ class Forecast:
                 "gap_id": r0.get("gap_id"),
                 "points": [{"horizon_s": r["horizon_s"], "lat": r["lat"], "lon": r["lon"],
                             "radius_m_80": r["radius_m_80"], "radius_m_95": r["radius_m_95"],
-                            "base_lat": r["base_lat"], "base_lon": r["base_lon"]} for r in rows]}
+                            "base_lat": r["base_lat"], "base_lon": r["base_lon"],
+                            **{k: r.get(k) for k in INCURSION}} for r in rows]}
 
     def watchlist(self, live, now: int, prev_rank: dict[int, int]) -> dict:
         """06 WatchlistEntry rows for the top WATCH_N. `live` is dvm.live.Live (names, statics, gaps)."""

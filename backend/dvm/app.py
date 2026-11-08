@@ -27,6 +27,8 @@ from dvm.sources import digitraffic, schema as sources_schema
 from dvm.sources.routes import make_router as sources_router
 from dvm.store import Store
 from dvm.yachts.routes import make_router as yachts_router
+from dvm.zones import lookup as zones
+from dvm.zones.routes import make_router as zones_router
 
 log = logging.getLogger("dvm")
 BAD_LOG_EVERY_S = 10
@@ -391,6 +393,7 @@ async def lifespan(app: FastAPI):
     else:
         log.warning("TIGER_DATABASE_URL is not set: positions go to the JSONL log only")
     tasks.append(asyncio.create_task(collab.hub.run(hub.store)))   # sessions and presence fan-out (dvm/collab)
+    tasks.append(asyncio.create_task(asyncio.to_thread(zones.get)))   # EEZ and protected-area layers (#157), ~1 s
     if not auth.ENABLED:
         log.warning("AUTH0_DOMAIN / AUTH0_AUDIENCE not set: /ws is open to anyone (local dev only)")
     yield
@@ -417,6 +420,7 @@ def health() -> dict:
                             if (dt := hub.digitraffic) else {"enabled": False}),
             "merger": hub.merger.stats, "sources_schema": hub.sources_schema,
             "predict": predict.health() if config.PREDICT else {"enabled": False},
+            "zones": zones.health(),
             "gaps": {**hub.gaps.stats, "open": len(hub.gaps.open), "warm": hub.gaps_warm,
                      "written": store.gaps_written if store else 0},
             "stats": hub.stats(), "clients": len(hub.clients),
@@ -513,6 +517,7 @@ app.include_router(sources_router(lambda: hub.store.pool if hub.store else None,
 app.include_router(yachts_router(lambda: hub.store.pool if hub.store else None, lambda: hub.live, require_login))   # GET /yachts (#101)
 app.include_router(predict_router(lambda: hub.store.pool if hub.store else None, predict.health, require_login,
                                  report_dir=config.PREDICT_REPORT_DIR))   # GET /predictions, /model/leaderboard (#121)
+app.include_router(zones_router(require_login))   # GET /zones (#157)
 app.include_router(collab.make_router())   # /me, /sessions, /invites (dvm/collab/README.md)
 
 
