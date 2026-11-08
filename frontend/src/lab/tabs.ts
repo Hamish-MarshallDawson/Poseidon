@@ -6,6 +6,8 @@ import type { LabData, LabEvent, Metrics, ModelSummary, Proposal, Run, RunDetail
 // when /lab/summary has no row for the model (nothing trained or graded yet): show an honest empty state.
 // Slots: champions/ChampionsTab.tsx (lab2-champions), live/LiveTab.tsx and data/DataTab.tsx (lab2-live),
 // OverviewTab.tsx (lab2-nav). Replace the stubs in place; keep the export names and these props.
+// Escape: Lab.tsx returns home on Escape unless the event is defaultPrevented, so a side panel that closes on Escape
+// should call e.preventDefault() (listen on window in the capture phase, or on the panel).
 
 export interface TabModel {
   /** 'route' | 'godark' | 'fishing' */
