@@ -11,7 +11,8 @@ export interface ShipWindow {
   z: number               // stacking order; the highest is the front window
 }
 
-export interface FocusRelation { mmsi: number; reason: 'nearby' | 'rendezvous' | 'also_dark' | 'same_flag' }
+// A ship that came within 5 km of the focused ship's track: closest approach (metres, time) and whether both lay slow within 500 m.
+export interface FocusRelation { mmsi: number; cpaM: number; cpaTs: number; met: boolean }
 
 export type TimeRange = '1h' | '6h' | '24h' | { from_ts: number; to_ts: number }
 
@@ -23,6 +24,7 @@ export interface UIState {
   // focus mode (windows/ sets focusMmsi; map/ computes related and dims the rest)
   focusMmsi: number | null
   focusRelated: FocusRelation[]
+  focusLoading: boolean         // the nearby search is running
   // stack list (map/ writes when a chip of 9+ ships is clicked; windows/ may render it, map/ has a fallback popover)
   stack: { mmsis: number[]; x: number; y: number } | null   // mmsis in z-order; x/y = chip centre in CSS px
   // drop-ins
@@ -54,6 +56,7 @@ export const ui = createStore<UIState>({
   hoverMmsi: null,
   focusMmsi: null,
   focusRelated: [],
+  focusLoading: false,
   stack: null,
   legendOpen: false,
   watchlistOpen: false,

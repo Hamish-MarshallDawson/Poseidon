@@ -24,7 +24,7 @@ function onKey(e: KeyboardEvent) {
   else if (s.watchlistOpen) ui.set({ watchlistOpen: false })
   else if (s.reviewOpen) ui.set({ reviewOpen: false })
   else if (s.legendOpen) ui.set({ legendOpen: false })
-  else if (s.focusMmsi !== null) ui.set({ focusMmsi: null, focusRelated: [] })
+  else if (s.focusMmsi !== null) ui.set({ focusMmsi: null, focusRelated: [], focusLoading: false })
   else if (s.frontMmsi !== null) closeShipWindow(s.frontMmsi)
   else return
   e.preventDefault()

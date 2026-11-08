@@ -20,7 +20,7 @@ export function StatusLine() {
 
   const parts = [
     focus !== null
-      ? `focus · ${related} related shown · ${fmtInt(Math.max(0, view.inView - related - 1))} hidden`
+      ? `Nearby ships · ${related} shown`
       : `${fmtInt(view.shown)} of ${fmtInt(view.inView)} ${replay ? 'then' : 'ships in view'}`,   // replay wording per 68:16538
   ]
   if (focus === null && view.stacked) parts.push(`${fmtInt(view.stacked)} in stacks`)
