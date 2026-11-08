@@ -263,7 +263,26 @@ def test_briefing_documents_and_session_summary(api, monkeypatch):
 def test_session_summary_without_a_gemini_key_is_503(api, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     sid = api.post("/sessions", json={"title": "x"}, headers=as_("hamish")).json()["id"]
+    api.post(f"/sessions/{sid}/documents", json={"body": "a note"}, headers=as_("hamish"))
     assert api.post(f"/sessions/{sid}/summary", headers=as_("hamish")).status_code == 503
+
+
+def test_empty_session_is_not_summarised_and_gemini_is_not_called(api, monkeypatch):
+    from dvm.briefing import gemini
+    calls = []
+
+    async def fake(facts, key=None):
+        calls.append(facts)
+        return "Summary."
+    monkeypatch.setattr(gemini, "summarise_session", fake)
+    ham = as_("hamish")
+    sid = api.post("/sessions", json={"title": "empty"}, headers=ham).json()["id"]
+    assert api.post(f"/sessions/{sid}/summary", headers=ham).status_code == 409
+    assert calls == []
+    # a tracked ship alone is content
+    api.post(f"/sessions/{sid}/list", json={"mmsi": SHIP}, headers=ham)
+    assert api.post(f"/sessions/{sid}/summary", headers=ham).status_code == 201
+    assert len(calls) == 1
 
 
 def test_summarise_session_parses_the_model_answer_and_retries_once(monkeypatch):

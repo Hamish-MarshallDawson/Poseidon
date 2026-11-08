@@ -49,6 +49,7 @@ export async function saveBriefing(b: Briefing): Promise<void> {
 }
 
 const SUMMARY_ERRORS: Record<number, string> = {
+  409: 'Nothing to summarise yet. Add a note, a ship or a briefing first.',
   503: 'The summary is not set up on the server yet (no Gemini key).',
   502: 'The AI summary failed. Try again in a moment.',
 }
