@@ -247,20 +247,19 @@
 .g-tag i { width: 3px; }
 .g-stack {
   position: absolute;
-  left: 1px;
-  top: 9px;
-  height: 20px;
+  left: 11px;
+  top: 7px;
+  width: 26px;
+  height: 26px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 6px 0 4px;
+  justify-content: center;
   background: var(--dvm-bg-panel);
-  border: 1px solid var(--dvm-border-strong);
-  border-radius: 2px;
-  font: 600 var(--dvm-size-label) / 1 var(--dvm-font-data);
+  border: 1px solid var(--dvm-border-default);
+  border-radius: 50%;
+  font: 400 10px / 1 var(--dvm-font-data);
 }
-.g-stack-glyph { position: relative; width: 14px; height: 14px; }
 .replay-chip { display: inline-block; }
 
 .reason-chip {

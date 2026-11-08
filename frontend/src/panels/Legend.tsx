@@ -16,8 +16,6 @@ import hatch from './glyphs/hatch.svg'
 import lastCourse from './glyphs/last-course.svg'
 import hullGhost from './glyphs/hull-ghost.svg'
 import cross from './glyphs/cross.svg'
-import hullBack from './glyphs/hull-back.svg'
-import hullFront from './glyphs/hull-front.svg'
 import noReceiver from './glyphs/no-receiver.svg'
 
 // Legend toggle (R2/Legend/Toggle 56:3123) and the compact panel (R2/Legend/Panel 56:95), opening upward
@@ -89,19 +87,11 @@ function LegendPanel() {
         <Entry label="Last heard"><Tile><G src={cross} color="--dvm-ship-dark" s={{ left: 17.3, top: 13.3, width: 11.4, height: 11.4 }} /></Tile></Entry>
         <Entry label="Estimated position"><Tile><i className="g-est" /></Tile></Entry>
         <Entry label="Reception hole"><Tile><i className="g-hole" /></Tile></Entry>
-        <Entry label={'Chance, next 6\u00a0h'}>
+        <Entry label={'Rank, 6\u00a0h estimate'}>
           <Tile><span className="g-tag"><i className="risk-3" />3</span></Tile>
         </Entry>
         <Entry label="Stacked ships">
-          <Tile>
-            <span className="g-stack">
-              <span className="g-stack-glyph">
-                <G src={hullBack} color="--dvm-ship-normal" s={{ left: 7, top: 0, width: 5.6, height: 11.2 }} />
-                <G src={hullFront} color="--dvm-ship-normal" s={{ left: 1.7, top: 1.1, width: 5.6, height: 11.2 }} />
-              </span>
-              12
-            </span>
-          </Tile>
+          <Tile><span className="g-stack">12</span></Tile>
         </Entry>
         <Entry label="No receiver here">
           <Tile><G src={noReceiver} color="--dvm-text-muted" s={{ left: 5, top: 5, width: 36, height: 28 }} /></Tile>
