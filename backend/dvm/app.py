@@ -6,17 +6,19 @@ import json
 import logging
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
+import asyncpg
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from dvm import auth, config, coverage, limits, replay
+from dvm import auth, config, coverage, gaps, limits, replay, store as store_sql
 from dvm.briefing.routes import make_router as briefing_router
 from dvm.ingest import Feed, now_ms, run_aisstream
-from dvm.live import Live
+from dvm.live import GAP_KEEP_MS as LIVE_GAP_KEEP_MS, Live
 from dvm.merge import FeedMerger
-from dvm.models import Envelope
+from dvm.models import Envelope, PositionReport, VesselStatic
 from dvm.normalise import normalise
 from dvm.rawlog import RawLog
 from dvm.sources import digitraffic, schema as sources_schema
@@ -25,6 +27,14 @@ from dvm.store import Store
 
 log = logging.getLogger("dvm")
 BAD_LOG_EVERY_S = 10
+GAP_TICK_S = 5                 # the gap detector's clock (dvm/gaps.py)
+WARM_FULL_S = 2 * 3600         # warm start: every Class A fix of the last 2 h (neighbours and rhythms) ...
+WARM_LAST_S = 6 * 3600         # ... and each Class A ship's last fix of the last 6 h (ships already silent)
+WARM_BATCH = 5000
+
+
+def _dt(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, timezone.utc)
 
 
 class Client:
@@ -53,6 +63,12 @@ class Hub:
         self.merger = FeedMerger()     # every feed's records pass through here before the map and the store
         self.digitraffic = digitraffic.Stats() if config.DIGITRAFFIC else None
         self.sources_schema: str = "pending"   # observations tables: pending | ready | failed: <error>
+        self.started_ms = now_ms()
+        self.gaps = gaps.GapDetector(draught_of=lambda m: self.live.static.get(m, {}).get("draught_m"))
+        for a, b in gaps.KNOWN_STALLS:
+            self.gaps.note_stall(a, b)
+        self.pending_gaps: list[dict] = []     # gap versions not yet sent to browsers
+        self.gaps_warm: str = "pending" if self.store else "off"   # pending | ready | failed: <error> | off
 
     def ingest(self, rec, now: int) -> None:
         """One normalised record from any feed: merge it across feeds, then map and store what the merger emits."""
@@ -63,6 +79,17 @@ class Hub:
             self.live.apply(rec)
             if self.store:
                 self.store.add(rec)
+            if isinstance(rec, PositionReport):
+                self._gap_events(self.gaps.observe(rec))
+
+    def _gap_events(self, events: list[dict]) -> None:
+        """Gap versions from the detector: onto the map state, to browsers with the next delta, and into Tiger."""
+        if not events:
+            return
+        self.live.apply_gaps(events)
+        self.pending_gaps.extend(events)
+        if self.store:
+            self.store.add_gaps(events)
 
     def digitraffic_sink(self, rec) -> None:
         try:
@@ -74,7 +101,8 @@ class Hub:
         return {"tracked": len(self.live.pos), "msgs_per_s": round(self.msgs_per_s, 1), "queue_depth": self.queue.qsize()}
 
     def snapshot_msg(self, now: int) -> dict:
-        return {"type": "snapshot", "now_ts": now, "vessels": self.live.snapshot(), "trails": {}, "gaps": [],
+        return {"type": "snapshot", "now_ts": now, "vessels": self.live.snapshot(), "trails": {},
+                "gaps": self.live.snapshot_gaps(now),
                 "spoofs": [], "watchlist": {"snapshot_ts": now, "entries": []}, "coverage": [], "stats": self.stats()}
 
     def sources(self) -> list[dict]:
@@ -133,10 +161,16 @@ class Hub:
             self.msgs_per_s = 0.7 * self.msgs_per_s + 0.3 * self._count   # smoothed per-second rate
             self._count = 0
             now = now_ms()
+            if n % GAP_TICK_S == 0 and self.gaps_warm != "pending":   # not mid warm start: half-loaded history
+                try:                                                    # would open gaps that close a moment later
+                    self._gap_events(self.gaps.tick(now))
+                except Exception as e:  # never let a detector bug stop the 1 Hz loop
+                    self._bad(e)
             vessels, removed = self.live.take_changes(now, config.STALE_AFTER_S)
-            if vessels or removed:
-                msg = {"type": "delta", "now_ts": now, "vessels": vessels, "removed": removed, "gaps": [], "spoofs": [],
-                       "watchlist": None, "stats": self.stats()}
+            gap_msgs, self.pending_gaps = self.pending_gaps, []
+            if vessels or removed or gap_msgs:
+                msg = {"type": "delta", "now_ts": now, "vessels": vessels, "removed": removed, "gaps": gap_msgs,
+                       "spoofs": [], "watchlist": None, "stats": self.stats()}
             elif now - last_sent >= 10_000:
                 msg = {"type": "ping", "now_ts": now}
             else:
@@ -179,6 +213,62 @@ class Hub:
             self.sources_schema = f"failed: {type(e).__name__}: {e}"
             log.warning("observations tables setup failed, data routes may 500: %s", e)
 
+    async def warm_gaps(self) -> None:
+        """Seed the gap detector from Tiger (read-only, its own connection) so a restart doesn't lose silent ships:
+        gaps that were open carry on, ships already silent get their gap, and the restart itself counts as our own
+        outage. Best-effort: on failure the detector simply starts empty."""
+        t0 = self.started_ms
+        try:
+            con = await asyncpg.connect(self.store.url, command_timeout=300,
+                                        server_settings={"default_transaction_read_only": "on"})
+        except Exception as e:  # noqa: BLE001
+            self.gaps_warm = f"failed: {type(e).__name__}: {e}"
+            log.warning("Gap warm start skipped: %s", self.gaps_warm)
+            return
+        try:
+            open_rows = await con.fetch(store_sql.WARM_OPEN_GAPS, t0 - LIVE_GAP_KEEP_MS)
+            last_rows = await con.fetch(store_sql.WARM_LAST_FIX, _dt(t0 - WARM_LAST_S * 1000), _dt(t0 - WARM_FULL_S * 1000))
+            full_rows = await con.fetch(store_sql.WARM_FIXES, _dt(t0 - WARM_FULL_S * 1000), _dt(t0))
+            last_recv = await con.fetchval(store_sql.LAST_RECV_BEFORE, _dt(t0 - WARM_LAST_S * 1000), t0)
+            ships = {r["mmsi"] for r in last_rows} | {r["mmsi"] for r in full_rows}
+            static_rows = [r for r in await con.fetch(store_sql.WARM_STATICS, _dt(t0 - WARM_LAST_S * 1000))
+                           if r["mmsi"] in ships]
+        except Exception as e:  # noqa: BLE001
+            self.gaps_warm = f"failed: {type(e).__name__}: {e}"
+            log.warning("Gap warm start skipped: %s", self.gaps_warm)
+            return
+        finally:
+            await con.close()
+        try:
+            await self._warm_from(open_rows, last_rows, full_rows, last_recv, static_rows, ships)
+        except Exception as e:  # noqa: BLE001 - a warm-start bug must not stop the backend
+            self.gaps_warm = f"failed: {type(e).__name__}: {e}"
+            log.exception("Gap warm start failed")
+
+    async def _warm_from(self, open_rows, last_rows, full_rows, last_recv, static_rows, ships) -> None:
+        t0 = self.started_ms
+        events = list(self.gaps.resume(dict(r) for r in open_rows))
+        self.live.apply_gaps(events)
+        events = []
+        if last_recv and t0 - last_recv > 0:
+            events += self.gaps.note_stall(int(last_recv), t0)   # the backend was down (a deploy or a crash) until now
+        last: dict[int, PositionReport] = {}
+        rows = list(last_rows) + list(full_rows)
+        for i in range(0, len(rows), WARM_BATCH):   # in batches, so live ingest and browsers keep being served
+            recs = [PositionReport.model_validate(dict(r)) for r in rows[i:i + WARM_BATCH]]
+            events += self.gaps.warm(recs)
+            for rec in recs:
+                if rec.mmsi not in last or rec.ts >= last[rec.mmsi].ts:
+                    last[rec.mmsi] = rec
+            await asyncio.sleep(0)
+        for r in static_rows:
+            self.live.apply(VesselStatic.model_construct(**{**dict(r), "ts": 0, "recv_ts": 0, "mid": 0, "src": "aisstream"}))
+        for rec in last.values():   # silent ships need a dot to hang their gap on; fresher live fixes win
+            self.live.apply(rec)
+        self._gap_events(events + self.gaps.tick(now_ms()))
+        self.gaps_warm = "ready"
+        log.info("Gap warm start: %d fixes, %d ships, %d open gaps now", len(rows), len(ships), len(self.gaps.open))
+
     async def _send(self, c: Client, msg: dict) -> None:
         try:
             async with c.lock:
@@ -207,6 +297,7 @@ async def lifespan(app: FastAPI):
     if hub.store:
         tasks.append(asyncio.create_task(hub.store.run()))
         tasks.append(asyncio.create_task(hub.setup_sources_schema()))
+        tasks.append(asyncio.create_task(hub.warm_gaps()))
     else:
         log.warning("TIGER_DATABASE_URL is not set: positions go to the JSONL log only")
     if not auth.ENABLED:
@@ -234,6 +325,8 @@ def health() -> dict:
                              "positions": dt.positions, "statics": dt.statics, "last_error": dt.last_error}
                             if (dt := hub.digitraffic) else {"enabled": False}),
             "merger": hub.merger.stats, "sources_schema": hub.sources_schema,
+            "gaps": {**hub.gaps.stats, "open": len(hub.gaps.open), "warm": hub.gaps_warm,
+                     "written": store.gaps_written if store else 0},
             "stats": hub.stats(), "clients": len(hub.clients),
             "db": {"enabled": bool(store), "rows_written": store.rows_written if store else 0,
                    "last_error": store.last_error if store else None}}

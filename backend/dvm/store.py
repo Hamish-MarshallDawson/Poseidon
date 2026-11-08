@@ -182,6 +182,20 @@ def append_args(table: str, row: dict) -> tuple:
     return tuple(vals)
 
 
+# Gap versions are written by the live backend, which a deploy restarts: a version it already wrote before the
+# restart is skipped, never an error (the (id, version) key is the same, and the rows are append-only).
+GAPS_INSERT = append_sql("gaps") + " ON CONFLICT (id, version) DO NOTHING"
+
+WARM_FIXES = f"SELECT {', '.join(POS_COLS)} FROM positions WHERE time > $1 AND time <= $2 AND cls = 'A' ORDER BY time"
+WARM_LAST_FIX = (f"SELECT DISTINCT ON (mmsi) {', '.join(POS_COLS)} FROM positions "
+                 "WHERE time > $1 AND time <= $2 AND cls = 'A' ORDER BY mmsi, time DESC")
+WARM_OPEN_GAPS = (f"SELECT DISTINCT ON (id) {', '.join(APPEND_COLS['gaps'])} FROM gaps "
+                  "WHERE start_ts > $1 ORDER BY id, version DESC")
+WARM_STATICS = ("SELECT DISTINCT ON (mmsi) mmsi, imo, name, callsign, ship_type, type_group, length_m, beam_m, draught_m, "
+                "destination, eta_utc, flag_iso2 FROM statics WHERE time > $1 AND src <> 'gfw' ORDER BY mmsi, time DESC")
+LAST_RECV_BEFORE = "SELECT max(recv_ts) FROM positions WHERE time > $1 AND recv_ts < $2"
+
+
 async def append(con: asyncpg.Connection, table: str, rows: list[dict]) -> None:
     """Insert rows into gaps, scores or outcomes, all or none. These tables refuse UPDATE and DELETE."""
     if rows:
@@ -197,6 +211,8 @@ class Store:
         self.url = url
         self.pool: asyncpg.Pool | None = None
         self.buf: dict[str, list[tuple]] = {"positions": [], "statics": []}
+        self.gap_buf: list[tuple] = []
+        self.gaps_written = 0
         self.rows_written = 0
         self.dropped = 0
         self.last_error: str | None = None
@@ -208,6 +224,13 @@ class Store:
         if len(buf) > MAX_BUFFER:   # database down for a long time: keep the newest, the JSONL log has the rest
             self.dropped += len(buf) - MAX_BUFFER
             del buf[: len(buf) - MAX_BUFFER]
+
+    def add_gaps(self, events: list[dict]) -> None:
+        """Gap versions from the detector, written with the next flush (idempotent, see GAPS_INSERT)."""
+        self.gap_buf.extend(append_args("gaps", g) for g in events)
+        if len(self.gap_buf) > MAX_BUFFER:
+            self.dropped += len(self.gap_buf) - MAX_BUFFER
+            del self.gap_buf[: len(self.gap_buf) - MAX_BUFFER]
 
     async def _connect(self) -> None:
         pool = await asyncpg.create_pool(self.url, min_size=1, max_size=2, command_timeout=60)
@@ -236,6 +259,16 @@ class Store:
                 self.last_error = f"{type(e).__name__}: {e}"
                 log.warning("Tiger Data write failed, will retry: %s", self.last_error)
                 return
+        if self.gap_buf:
+            rows, self.gap_buf = self.gap_buf, []
+            try:
+                async with self.pool.acquire() as con:
+                    await con.executemany(GAPS_INSERT, rows)
+                self.gaps_written += len(rows)
+            except Exception as e:  # noqa: BLE001 - keep the versions and retry, like positions
+                self.gap_buf = rows + self.gap_buf
+                self.last_error = f"{type(e).__name__}: {e}"
+                log.warning("Tiger Data gap write failed, will retry: %s", self.last_error)
 
     async def run(self) -> None:
         backoff = 2
