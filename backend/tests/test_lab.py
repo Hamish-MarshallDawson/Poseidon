@@ -88,6 +88,25 @@ def test_rule_horizon_without_interval():
                       {"check": "beats the baseline at 3 h", "passed": None, "detail": "diff +0.05"}]
 
 
+def test_hand_promotion_says_no_paired_test():
+    """route-dma90-v2 was promoted by hand over route-dma14-v3: no 'beat the baseline', a null check first."""
+    d = {"by": "human", "promote": True, "against": "route-dma14-v3", "reasons": ["not a paired test"],
+         "comparison": {"10800": {"diff": 0.037, "win": None}},
+         "calibration": [{"name": "cov80", "value": 0.8, "nominal": 0.8, "tol": 0.05, "ok": True}]}
+    rec = {"run_id": "route-dma90-v2", "metrics": {"decision": d}}
+    checks = R.rule(rec, None)
+    assert checks[0] == {"check": "no paired test was run (promoted by hand over route-dma14-v3)", "passed": None,
+                         "detail": "not a paired test"}
+    assert checks[1]["passed"] is True and len(checks) == 2
+    assert R.decision_summary(rec) == "promoted by hand over route-dma14-v3; no paired test was run"
+    assert R.run_detail(rec, [rec], [])["decision_summary"] == R.decision_summary(rec)
+    no = {"metrics": {"decision": {**d, "promote": False, "against": "global base rate"}}}
+    assert R.decision_summary(no) == "decided by hand against global base rate; no paired test was run"
+    rule = {"metrics": {"decision": {"promote": False, "against": "baseline", "reasons": ["lost at 3 h"]}}}
+    assert R.decision_summary(rule) == "rejected: did not beat the baseline (lost at 3 h)"
+    assert R.decision_summary({"metrics": {}}) is None
+
+
 def test_run_detail_confirm_rationale_parent():
     runs = _bundle_runs()
     props = [R.proposal_record({**p, "created_at": R.to_ms(p["created_at"])}, None)

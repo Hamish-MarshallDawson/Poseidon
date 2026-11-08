@@ -6,10 +6,17 @@
   mean p, hit rate, Brier and Brier skill over the observed base rate. Plus the go-dark reliability diagram (fixed p
   bins) and the top-10% lift of one model per target (the running champion, else the most graded non-baseline one).
 - `GET /lab/data?hours=168&bucket=3600`: graded outcomes per bucket, one row per mode, each with its own mode's
-  running total (counted from the start of the ledger), history depth per external source (`source_windows`) and our own AIS feed, training examples
-  per run and the frozen held-out sets (`model_runs` metrics).
-- `GET /lab/summary`: one card per model (route, godark, fishing): champion, offline skill from its run record, live
-  skill and calibration over the last 24 h, whether the backend serves it, plus totals and the improvement cycle.
+  running total (counted from `counted_from`, BEFORE_DAYS before the window, so the count stays bounded), history
+  depth per external source (`source_windows`) and our own AIS feed, training examples per run and the frozen
+  held-out sets (`model_runs` metrics). Bucket rows past MAX_ROWS drop the oldest buckets (`truncated`).
+- `GET /lab/summary`: one card per model (route, godark, fishing): champion, offline skill from its run record
+  (`offline.statistic` names it: 'log-loss skill', 'median-error skill'), live skill and calibration over the last
+  24 h of the served version's own grades (`live` is null with a note when that version has none yet, e.g. a fresh
+  `-calN`), whether the backend serves it, plus totals and the improvement cycle. `live.statistic` and
+  `live.horizon_s` name the live number; `live.offline` is the held-out number with that same statistic at that
+  horizon (go-dark: summary[h].brier_skill), or null, and only then does the note compare offline with live.
+  `champion.since` is the newest `deployed` event of the version (or its run). `totals.graded_outcomes` is exact up
+  to EXACT_COUNT_MAX rows, then the planner's estimate (`graded_outcomes_estimated`).
 
 Everything is read-only, bounded by `made_at` (indexed) or the hypertables' `time`, and grouped in SQL. Route
 outcomes join `route_predictions` and go-dark outcomes join `scores` on (id, time = made_at), which is one index
@@ -51,14 +58,14 @@ ROUTE = (f"SELECT (o.made_at / $2::bigint) * $2::bigint AS t, r.mode, o.model_ve
          "FROM outcomes o JOIN route_predictions r ON r.id = o.score_id AND r.time = to_timestamp(o.made_at / 1000.0) "
          "AND r.time >= to_timestamp($1::bigint / 1000.0) "
          "WHERE o.target = 'route' AND o.error_m IS NOT NULL AND o.made_at >= $1 "
-         f"GROUP BY 1, 2, 3, 4 ORDER BY 1, 3, 4, 2 LIMIT {MAX_ROWS}")
+         f"GROUP BY 1, 2, 3, 4 ORDER BY 1 DESC, 3, 4, 2 LIMIT {MAX_ROWS}")
 _DARK_FROM = ("FROM outcomes o JOIN scores s ON s.id = o.score_id AND s.time = to_timestamp(o.made_at / 1000.0) "
               "AND s.time >= to_timestamp($1::bigint / 1000.0) "
               "WHERE o.target LIKE 'dark\\_%' AND o.label IS NOT NULL AND o.made_at >= $1 ")
 GODARK = ("SELECT (o.made_at / $2::bigint) * $2::bigint AS t, s.mode, o.target, s.model_version, count(*) AS n, "
           "count(*) FILTER (WHERE o.label) AS positives, avg(s.p) AS mean_p, avg(o.label::int) AS hit_rate, "
           f"avg((s.p - o.label::int) ^ 2) AS brier {_DARK_FROM}"
-          f"GROUP BY 1, 2, 3, 4 ORDER BY 1, 3, 4, 2 LIMIT {MAX_ROWS}")
+          f"GROUP BY 1, 2, 3, 4 ORDER BY 1 DESC, 3, 4, 2 LIMIT {MAX_ROWS}")
 RELIABILITY = ("SELECT o.target, s.model_version, width_bucket(s.p, $2::float8[]) AS bin, count(*) AS n, "
                f"avg(s.p) AS p_mean, avg(o.label::int) AS hit_rate {_DARK_FROM}"
                f"GROUP BY 1, 2, 3 ORDER BY 1, 2, 3 LIMIT {MAX_ROWS}")
@@ -69,29 +76,35 @@ LIFT = ("SELECT target, model_version, count(*) AS n, avg(y) AS all_hit_rate, "
 # Graded outcomes per bucket and mode. One branch per ledger: each target joins only its own prediction table (a LEFT
 # JOIN on both was 2.3 s on Tiger). A reappearance grade has no prediction row of its own: the grader stamps it with
 # the earliest made_at of the gap's route predictions for that model, so it takes that row's mode (`unknown` if none).
-def _by_mode(cmp: str) -> str:
-    """(t, mode, n) of the outcomes with made_at {cmp} $1, bucketed by $2 ms."""
+# Every branch is bounded below by $1 and, with `upper`, above by $3, so the count never scans the whole ledger.
+def _by_mode(upper: bool) -> str:
+    """(t, mode, n) of the outcomes with $1 <= made_at (< $3 with `upper`), bucketed by $2 ms."""
     t = "(o.made_at / $2::bigint) * $2::bigint"
     at = "to_timestamp(o.made_at / 1000.0)"
-    bound = f"to_timestamp($1::bigint / 1000.0)"
+    lo = "to_timestamp($1::bigint / 1000.0)"
+    made = "o.made_at >= $1" + (" AND o.made_at < $3" if upper else "")
+    rng = f">= {lo}" + (" AND {c} < to_timestamp($3::bigint / 1000.0)" if upper else "")
+    r_time = f"r.time {rng.format(c='r.time')}"
+    s_time = f"s.time {rng.format(c='s.time')}"
     return (
         f"SELECT {t} AS t, r.mode, count(*) AS n FROM outcomes o JOIN route_predictions r ON r.id = o.score_id "
-        f"AND r.time = {at} AND r.time {cmp} {bound} WHERE o.target = 'route' AND o.made_at {cmp} $1 "
+        f"AND r.time = {at} AND {r_time} WHERE o.target = 'route' AND {made} "
         "GROUP BY 1, 2 UNION ALL "
         f"SELECT {t} AS t, s.mode, count(*) AS n FROM outcomes o JOIN scores s ON s.id = o.score_id "
-        f"AND s.time = {at} AND s.time {cmp} {bound} WHERE o.target LIKE 'dark\\_%' AND o.made_at {cmp} $1 "
+        f"AND s.time = {at} AND {s_time} WHERE o.target LIKE 'dark\\_%' AND {made} "
         "GROUP BY 1, 2 UNION ALL "
         f"SELECT {t} AS t, coalesce((SELECT r.mode FROM route_predictions r WHERE r.gap_id = o.event_id "
-        f"AND r.model_version = o.model_version AND r.time = {at} AND r.time {cmp} {bound} LIMIT 1), 'unknown') "
-        f"AS mode, count(*) AS n FROM outcomes o WHERE o.target = 'route_reappear' AND o.made_at {cmp} $1 "
+        f"AND r.model_version = o.model_version AND r.time = {at} AND {r_time} LIMIT 1), 'unknown') "
+        f"AS mode, count(*) AS n FROM outcomes o WHERE o.target = 'route_reappear' AND {made} "
         "GROUP BY 1, 2 UNION ALL "
         f"SELECT {t} AS t, 'unknown' AS mode, count(*) AS n FROM outcomes o WHERE o.target NOT IN "
-        f"('route', 'route_reappear') AND o.target NOT LIKE 'dark\\_%' AND o.made_at {cmp} $1 GROUP BY 1, 2")
+        f"('route', 'route_reappear') AND o.target NOT LIKE 'dark\\_%' AND {made} GROUP BY 1, 2")
 
 
-OUTCOME_COUNT = (f"SELECT t, mode, sum(n)::bigint AS n FROM ({_by_mode('>=')}) x "
-                 f"GROUP BY 1, 2 ORDER BY 1, 2 LIMIT {MAX_ROWS}")
-OUTCOMES_BEFORE = f"SELECT mode, sum(n)::bigint AS n FROM ({_by_mode('<')}) x GROUP BY 1"
+BEFORE_DAYS = 30     # /lab/data's running totals start this long before the window (bounded as the ledger grows)
+OUTCOME_COUNT = (f"SELECT t, mode, sum(n)::bigint AS n FROM ({_by_mode(False)}) x "
+                 f"GROUP BY 1, 2 ORDER BY 1 DESC, 2 LIMIT {MAX_ROWS}")
+OUTCOMES_BEFORE = f"SELECT mode, sum(n)::bigint AS n FROM ({_by_mode(True)}) x GROUP BY 1"
 SOURCES = ("SELECT src, stream, min(start_ts) AS oldest, max(end_ts) AS newest, count(*) AS windows, "
            "sum(rows)::bigint AS rows FROM source_windows WHERE status = 'ok' GROUP BY 1, 2 ORDER BY 1, 2")
 AIS_RANGE = ("SELECT (SELECT ts FROM positions ORDER BY time LIMIT 1) AS oldest, "
@@ -99,9 +112,11 @@ AIS_RANGE = ("SELECT (SELECT ts FROM positions ORDER BY time LIMIT 1) AS oldest,
 AIS_ROWS = "SELECT approximate_row_count('positions')"
 RUNS = ("SELECT DISTINCT ON (run_id) run_id, target, status, proposer, created_at, recorded_at, artifact, metrics "
         "FROM model_runs ORDER BY run_id, recorded_at DESC, (status = 'champion') DESC")
-TOTALS = ("SELECT (SELECT count(*) FROM outcomes) AS graded, "
+EXACT_COUNT_MAX = 1_000_000   # above this, graded_outcomes is the planner's row estimate (pg_class.reltuples)
+TOTALS = ("SELECT CASE WHEN c.reltuples > $2 THEN c.reltuples::bigint ELSE (SELECT count(*) FROM outcomes) END "
+          "AS graded, c.reltuples > $2 AS estimated, "
           "(SELECT count(*) FROM outcomes WHERE made_at >= $1 - 26 * 3600000::bigint AND resolved_at >= $1 - 3600000)"
-          " AS graded_last_hour")
+          " AS graded_last_hour FROM pg_class c WHERE c.oid = 'outcomes'::regclass")
 OPTIONAL_COUNT = "SELECT count(*) FROM {}"
 # lab-store's additions (dvm/lab/schema.py): model_runs.source and ml_events; both optional here.
 RUN_SOURCES = "SELECT run_id, max(source) AS source FROM model_runs WHERE source IS NOT NULL GROUP BY 1"
@@ -128,6 +143,11 @@ def _row(r) -> dict:
 
 def _json(v):
     return json.loads(v) if isinstance(v, str) else (v or {})
+
+
+def _oldest_first(rows: list[dict], key: str) -> list[dict]:
+    """The bucket queries return newest first (so MAX_ROWS drops the oldest buckets); the API is oldest first."""
+    return sorted(rows, key=lambda x: (x["t"], x["model_version"], x[key], x["mode"]))
 
 
 def route_row(r) -> dict:
@@ -206,6 +226,16 @@ def holdout_text(h: dict) -> Optional[str]:
     return ", ".join(x for x in (h.get("label") or h.get("name"), f"{n:,} cases" if n is not None else None) if x)
 
 
+STATISTICS = {"log_loss": "log-loss skill", "error_m": "median-error skill", "brier": "Brier skill"}
+
+
+def statistic_label(metrics: dict) -> Optional[str]:
+    """What a run's `skill` block measures, in words: 'log-loss skill' (go-dark, fishing), 'median-error skill'
+    (route, over dead reckoning)."""
+    loss = metrics.get("loss_name")
+    return STATISTICS.get(loss) or (f"{loss.replace('_', '-')} skill" if loss else None)
+
+
 def offline_skill(metrics: dict, primary_h: int) -> dict:
     skill = metrics.get("skill") or {}
     s = skill.get(str(primary_h)) or skill.get(primary_h)
@@ -213,8 +243,29 @@ def offline_skill(metrics: dict, primary_h: int) -> dict:
         k = next(iter(skill))
         primary_h, s = int(k) if str(k).isdigit() else primary_h, skill[k]
     s = s or {}
-    return {"primary_h": primary_h, "skill": s.get("skill"), "skill_lo": s.get("skill_lo"),
-            "skill_hi": s.get("skill_hi"), "holdout": holdout_text(metrics.get("holdout") or {})}
+    return {"primary_h": primary_h, "statistic": statistic_label(metrics), "skill": s.get("skill"),
+            "skill_lo": s.get("skill_lo"), "skill_hi": s.get("skill_hi"),
+            "holdout": holdout_text(metrics.get("holdout") or {})}
+
+
+def offline_match(metrics: dict, statistic: str, horizon_s: int) -> Optional[dict]:
+    """The held-out number with the live card's statistic at the live card's horizon, or None when the run has none
+    (then the card makes no offline-vs-live comparison). Brier skill comes from summary[h].brier_skill (go-dark runs
+    store it beside their log-loss skill); median-error skill from the run's own skill block."""
+    h = str(horizon_s)
+    if statistic == "Brier skill":
+        x = (metrics.get("summary") or {}).get(h) or {}
+        if x.get("brier_skill") is None:
+            return None
+        ci = x.get("brier_skill_ci") or [None, None]
+        return {"statistic": statistic, "horizon_s": horizon_s, "skill": x["brier_skill"], "skill_lo": ci[0],
+                "skill_hi": ci[1]}
+    if statistic_label(metrics) == statistic:
+        x = (metrics.get("skill") or {}).get(h) or {}
+        if x.get("skill") is not None:
+            return {"statistic": statistic, "horizon_s": horizon_s, "skill": x["skill"], "skill_lo": x.get("skill_lo"),
+                    "skill_hi": x.get("skill_hi")}
+    return None
 
 
 def find_run(runs: list[dict], key: str, version: Optional[str]) -> Optional[dict]:
@@ -233,10 +284,11 @@ def find_run(runs: list[dict], key: str, version: Optional[str]) -> Optional[dic
 
 
 def champion_since(events: list[dict], key: str, version: Optional[str], run: Optional[dict]) -> Optional[int]:
-    """When the served champion took over: the newest promoted, deployed or recalibrated event of exactly this
-    version, else of its run (or the version it was recalibrated from), else the run's champion row."""
+    """When the served champion went live: the newest deployed event of exactly this version, else of its run (or the
+    version it was recalibrated from), else the run's champion row. Promoted and recalibrated events don't count: a
+    promotion or a `-calN` build is not the moment it was installed."""
     targets = REG_TARGETS[key]
-    mine = [e for e in events if e["target"] in targets and e["kind"] in ("promoted", "deployed", "recalibrated")]
+    mine = [e for e in events if e["target"] in targets and e["kind"] == "deployed"]
     base = re.sub(r"-cal\d+$", "", version) if version else None
     for match in (lambda e: version and e["version"] == version,
                   lambda e: run and e["run_id"] == run["run_id"] or base and e["version"] == base):
@@ -246,40 +298,48 @@ def champion_since(events: list[dict], key: str, version: Optional[str], run: Op
     return run["recorded_at"] if run and run["status"] == "champion" else None
 
 
-def route_live(rows: list[dict], version: Optional[str]) -> Optional[dict]:
-    v = pick_version({r["model_version"]: r["n"] for r in rows}, version)
-    r = next((r for r in rows if r["model_version"] == v), None)
+def route_live(rows: list[dict], version: Optional[str], metrics: Optional[dict] = None) -> Optional[dict]:
+    """The served version's own live grades at 3 h, or None when it has none yet (an earlier version's grades are
+    never shown under its name)."""
+    r = next((r for r in rows if version and r["model_version"] == version), None)
     if r is None:
         return None
     skill = 1 - r["med"] / r["base"] if r["base"] else None
     cov = _num(r["cov80"])
-    return {"hours": LIVE_HOURS, "n": r["n"], "model_version": v,
+    return {"hours": LIVE_HOURS, "n": r["n"], "model_version": version, "statistic": "median-error skill",
+            "horizon_s": ROUTE_PRIMARY_H, "offline": offline_match(metrics or {}, "median-error skill", ROUTE_PRIMARY_H),
             "primary": {"name": "skill over dead reckoning at 3 h", "value": skill, "ref_label": "dead reckoning"},
             "calibration": {"name": "80% circle coverage", "value": cov, "nominal": 0.8,
                             "ok": abs(cov - 0.8) <= COV_TOL + 1e-9}}
 
 
-def dark_live(rows: list[dict], version: Optional[str], target: str = GODARK_PRIMARY) -> Optional[dict]:
-    v = pick_version({r["model_version"]: r["n"] for r in rows}, version)
-    r = next((r for r in rows if r["model_version"] == v), None)
+def dark_live(rows: list[dict], version: Optional[str], target: str = GODARK_PRIMARY,
+              metrics: Optional[dict] = None) -> Optional[dict]:
+    r = next((r for r in rows if version and r["model_version"] == version), None)
     if r is None:
         return None
     mean_p, hit = _num(r["mean_p"]), _num(r["hit_rate"])
     h = target.removeprefix("dark_").replace("h", " h")
-    return {"hours": LIVE_HOURS, "n": r["n"], "model_version": v, "target": target,
+    hs = int(target.removeprefix("dark_").removesuffix("h")) * 3600
+    return {"hours": LIVE_HOURS, "n": r["n"], "model_version": version, "target": target, "statistic": "Brier skill",
+            "horizon_s": hs, "offline": offline_match(metrics or {}, "Brier skill", hs),
             "primary": {"name": f"Brier skill over the base rate, {h}", "value": brier_skill(_num(r["brier"]), hit),
                         "ref_label": "base rate"},
             "calibration": {"name": f"mean p vs hit rate, {h}", "value": mean_p, "nominal": hit,
                             "ok": abs(mean_p - hit) <= max(0.01, 0.25 * hit)}}
 
 
-def note(offline: dict, live: Optional[dict], deployed: bool) -> str:
+def note(live: Optional[dict], deployed: bool, graded_other: Optional[str] = None) -> str:
+    """The card's one-line verdict. Offline and live are compared only through live.offline, the held-out number
+    with the same statistic at the same horizon; without it there is no comparison."""
     if not deployed:
         return "not served live yet"
     if live is None:
+        if graded_other:
+            return f"no live grades for this version yet (the last 24 h graded {graded_other})"
         return "no live grades in the last 24 h yet"
     parts = []
-    off, on = offline.get("skill"), live["primary"]["value"]
+    off, on = (live.get("offline") or {}).get("skill"), live["primary"]["value"]
     if off is not None and on is not None:
         parts.append("live skill below offline" if on < off else "live skill at or above offline")
     if on is not None and on < 0:
@@ -328,11 +388,12 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
         since -= since % b
         dark_champion = _champions()["godark"]
         async with _pool().acquire() as con:
-            route = [route_row(x) for x in await _fetch(con, ROUTE, since, b)]
-            godark = [godark_row(x) for x in await _fetch(con, GODARK, since, b)]
+            route = _oldest_first([route_row(x) for x in await _fetch(con, ROUTE, since, b)], "horizon_s")
+            godark = _oldest_first([godark_row(x) for x in await _fetch(con, GODARK, since, b)], "target")
             rel = await _fetch(con, RELIABILITY, since, P_EDGES)
             lf = await _fetch(con, LIFT, since, TOP_SHARE)
         return {"bucket": b, "hours": hours, "route": route, "godark": godark,
+                "truncated": len(route) >= MAX_ROWS or len(godark) >= MAX_ROWS,
                 "reliability": reliability(rel, dark_champion), "lift": lift(lf, dark_champion)}
 
     @r.get("/lab/data")
@@ -341,8 +402,9 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
         since, b = int(now - hours * H_MS), bucket * 1000
         since -= since % b
         async with _pool().acquire() as con:
-            counts = await _fetch(con, OUTCOME_COUNT, since, b)
-            before = {x["mode"]: x["n"] for x in await _fetch(con, OUTCOMES_BEFORE, since, b)}
+            counts = sorted(await _fetch(con, OUTCOME_COUNT, since, b), key=lambda x: (x["t"], x["mode"]))
+            counted_from = since - BEFORE_DAYS * 24 * H_MS
+            before = {x["mode"]: x["n"] for x in await _fetch(con, OUTCOMES_BEFORE, counted_from, b, since)}
             sources = await _fetch(con, SOURCES)
             ais = await con.fetchrow(AIS_RANGE)
             ais_rows = await _optional(con, AIS_ROWS)
@@ -364,8 +426,8 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                 seen.add(key)
                 holdouts.append({"target": x["target"], "name": h.get("name"), "n": h.get("n"),
                                  "start": h.get("start"), "end": h.get("end"), "hash": h.get("hash")})
-        return {"bucket": b, "outcomes": cumulative(counts, before), "sources": src, "training": training,
-                "holdouts": holdouts}
+        return {"bucket": b, "outcomes": cumulative(counts, before), "counted_from": counted_from,
+                "truncated": len(counts) >= MAX_ROWS, "sources": src, "training": training, "holdouts": holdouts}
 
     @r.get("/lab/summary")
     async def summary() -> dict:
@@ -377,10 +439,13 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
             live_route = await _fetch(con, LIVE_ROUTE, since, ROUTE_PRIMARY_H)
             dark_target = GODARK_PRIMARY
             live_dark = await _fetch(con, LIVE_DARK, since, dark_target)
-            if not live_dark:   # 6 h grades lag the feed by 6.5 h: show the 1 h ones until they arrive
-                dark_target = "dark_1h"
-                live_dark = await _fetch(con, LIVE_DARK, since, dark_target)
-            totals = await con.fetchrow(TOTALS, now)
+            dark_v = champs.get("godark")
+            if not any(x["model_version"] == dark_v for x in live_dark):
+                # 6 h grades lag the feed by 6.5 h: show the champion's 1 h ones until they arrive
+                one = await _fetch(con, LIVE_DARK, since, "dark_1h")
+                if any(x["model_version"] == dark_v for x in one) or not live_dark:
+                    dark_target, live_dark = "dark_1h", one
+            totals = await con.fetchrow(TOTALS, now, EXACT_COUNT_MAX)
             proposals = await _optional(con, OPTIONAL_COUNT.format("ml_proposals"), default=0)
             sources = {x["run_id"]: x["source"] for x in await _optional(con, RUN_SOURCES, default=[], rows=True)}
             events = await _optional(con, EVENTS, default=[], rows=True)
@@ -397,17 +462,21 @@ def make_router(pool_of: Callable[[], Optional[asyncpg.Pool]], running: Callable
                         "since": champion_since(events, key, version, run),
                         "proposer": run.get("proposer") if run else None,
                         "source": (sources.get(run["run_id"]) or run["metrics"].get("source")) if run else None}
-            offline = offline_skill(run["metrics"] if run else {}, PRIMARY_H[key])
-            live = None
-            if deployed:
-                live = route_live(live_route, version) if key == "route" else dark_live(live_dark, version, dark_target) \
-                    if key == "godark" else None
+            m = run["metrics"] if run else {}
+            offline = offline_skill(m, PRIMARY_H[key])
+            live, other = None, None
+            if deployed and key in ("route", "godark"):
+                rows = live_route if key == "route" else live_dark
+                live = route_live(rows, version, m) if key == "route" else dark_live(rows, version, dark_target, m)
+                if live is None and rows:
+                    other = pick_version({x["model_version"]: x["n"] for x in rows}, version)
             models.append({"target": key, "label": LABELS[key], "champion": champion, "offline": offline,
-                           "live": live, "deployed": deployed, "note": note(offline, live, deployed)})
+                           "live": live, "deployed": deployed, "note": note(live, deployed, other)})
         last = max([x["created_at"] for x in runs] + [e["ts"] for e in events
                                                        if e["kind"] in ("trained", "recalibrated")], default=None)
         return {"generated_at": now, "models": models, "cycle": {"state": "manual", "last": last, "next": None},
                 "totals": {"runs": len(runs), "proposals": proposals or 0, "graded_outcomes": totals["graded"],
+                           "graded_outcomes_estimated": bool(totals["estimated"]),
                            "graded_last_hour": totals["graded_last_hour"]}}
 
     return r

@@ -56,7 +56,8 @@ def test_offline_skill_and_find_run():
                        "holdout": {"name": "v1", "n": 509061}}}
     old = {**run, "run_id": "route-old", "recorded_at": 1}
     off = M.offline_skill(run["metrics"], 10800)
-    assert off == {"primary_h": 10800, "skill": 0.6, "skill_lo": 0.5, "skill_hi": 0.7, "holdout": "v1, 509,061 cases"}
+    assert off == {"primary_h": 10800, "statistic": None, "skill": 0.6, "skill_lo": 0.5, "skill_hi": 0.7,
+                   "holdout": "v1, 509,061 cases"}
     assert M.offline_skill({"skill": {"3600": {"skill": 0.1}}}, 10800)["primary_h"] == 3600   # falls back
     assert M.offline_skill({}, 10800)["skill"] is None
     assert M.find_run([old, run], "route", "route-x-cal1")["run_id"] == "route-x"
@@ -64,14 +65,47 @@ def test_offline_skill_and_find_run():
     assert M.find_run([old, run], "fishing", None) is None
 
 
+ROUTE_M = {"loss_name": "error_m", "skill": {"10800": {"skill": 0.62, "skill_lo": 0.6, "skill_hi": 0.64}}}
+# a converted go-dark run: log-loss skill in `skill`, Brier skill beside it in `summary`
+DARK_M = {"loss_name": "log_loss", "skill": {"21600": {"skill": 0.026}, "3600": {"skill": -0.033}},
+          "summary": {"21600": {"brier_skill": 0.012, "brier_skill_ci": [-0.018, 0.039]},
+                      "3600": {"brier_skill": 0.0001, "brier_skill_ci": [-0.024, 0.027]}}}
+
+
 def test_live_cards_and_note():
-    live = M.route_live([{"model_version": "r", "n": 4, "cov80": 0.6, "med": 300.0, "base": 600.0}], "r-cal1")
+    rows = [{"model_version": "r", "n": 4, "cov80": 0.6, "med": 300.0, "base": 600.0}]
+    live = M.route_live(rows, "r", ROUTE_M)
     assert live["primary"]["value"] == pytest.approx(0.5) and live["calibration"]["ok"] is False
-    assert M.note({"skill": 0.62}, live, True) == "live skill below offline; 80% circle coverage off target (60.0% vs 80.0%)"
+    assert live["offline"] == {"statistic": "median-error skill", "horizon_s": 10800, "skill": 0.62, "skill_lo": 0.6,
+                               "skill_hi": 0.64}
+    assert M.note(live, True) == "live skill below offline; 80% circle coverage off target (60.0% vs 80.0%)"
+    # the recalibrated champion has no grades of its own yet: no card under its name from the older model's grades
+    assert M.route_live(rows, "r-cal1", ROUTE_M) is None
+    assert M.note(None, True, "r") == "no live grades for this version yet (the last 24 h graded r)"
     dark = M.dark_live([{"model_version": "g", "n": 10, "mean_p": 0.05, "hit_rate": 0.046, "brier": 0.05}], "g",
-                       "dark_1h")
+                       "dark_1h", DARK_M)
     assert dark["primary"]["name"] == "Brier skill over the base rate, 1 h" and dark["calibration"]["ok"]
-    assert M.note({}, None, False) == "not served live yet"
+    assert (dark["statistic"], dark["horizon_s"]) == ("Brier skill", 3600)
+    # compared with the held-out Brier skill at 1 h, never with the log-loss skill at 6 h
+    assert dark["offline"] == {"statistic": "Brier skill", "horizon_s": 3600, "skill": 0.0001, "skill_lo": -0.024,
+                               "skill_hi": 0.027}
+    assert M.note(dark, True).startswith("live skill below offline")
+    assert M.offline_skill(DARK_M, 21600)["statistic"] == "log-loss skill"
+    no_match = M.dark_live([{"model_version": "g", "n": 10, "mean_p": 0.05, "hit_rate": 0.046, "brier": 0.05}], "g",
+                           "dark_1h", {"loss_name": "log_loss", "skill": {"3600": {"skill": 0.5}}})
+    assert no_match["offline"] is None and "offline" not in M.note(no_match, True)
+    assert M.note(None, False) == "not served live yet"
+
+
+def test_champion_since_counts_only_deployed_events():
+    run = {"run_id": "r", "status": "champion", "recorded_at": 1}
+    ev = [{"ts": 5, "target": "route", "kind": "promoted", "run_id": "r", "version": "r"},
+          {"ts": 7, "target": "route", "kind": "deployed", "run_id": "r", "version": "r"},
+          {"ts": 9, "target": "route", "kind": "recalibrated", "run_id": "r", "version": "r-cal1"}]
+    assert M.champion_since(ev, "route", "r-cal1", run) == 7        # the cal1 build is not when it went live
+    ev.append({"ts": 11, "target": "route", "kind": "deployed", "run_id": "r", "version": "r-cal1"})
+    assert M.champion_since(ev, "route", "r-cal1", run) == 11
+    assert M.champion_since(ev[:1], "route", "r", run) == 1        # no deploy recorded: the champion row
 
 
 def test_reliability_and_lift_pick_one_model_per_target():
@@ -129,7 +163,7 @@ async def _seed(con):
     await con.executemany(schema.ROUTE_INSERT, routes)
     await con.executemany(schema.SCORE_INSERT, scores)
     await con.executemany(schema.OUTCOME_INSERT, outs)
-    metrics = {"skill": {"10800": {"skill": 0.6, "skill_lo": 0.55, "skill_hi": 0.65}},
+    metrics = {"loss_name": "error_m", "skill": {"10800": {"skill": 0.6, "skill_lo": 0.55, "skill_hi": 0.65}},
                "holdout": {"name": "v1", "n": 1000, "start": 1, "end": 2, "hash": "h1"},
                "split": {"n_train": 5000}}
     runs = [("route-x", "route", "dma", "{}", "d", 0, 1, json.dumps(metrics), None, "human", None, "candidate", T - H,
@@ -150,7 +184,7 @@ async def _db_flow():
     finally:
         await con.close()
     pool = await asyncpg.create_pool(URL, min_size=1, max_size=1)
-    running = {"route_model": "route-x-cal1", "godark_model": "godark-x"}
+    running = {"route_model": "route-x", "godark_model": "godark-x"}
     app = FastAPI()
     app.include_router(M.make_router(lambda: pool, lambda: running, lambda: None, clock=lambda: NOW))
     try:
@@ -194,7 +228,7 @@ async def _db_flow():
     assert d["holdouts"] == [{"target": "route", "name": "v1", "n": 1000, "start": 1, "end": 2, "hash": "h1"}]
 
     route, godark, fishing = s["models"]
-    assert route["champion"] == {"run_id": "route-x", "version": "route-x-cal1", "since": T - H + 1,
+    assert route["champion"] == {"run_id": "route-x", "version": "route-x", "since": T - H + 1,
                                  "proposer": "human", "source": None}
     assert route["offline"]["skill"] == 0.6 and route["offline"]["holdout"] == "v1, 1,000 cases"
     assert route["live"]["n"] == 4 and route["live"]["primary"]["value"] == pytest.approx(0.5)
@@ -203,7 +237,9 @@ async def _db_flow():
     assert godark["live"]["target"] == "dark_1h"   # no 6 h grades yet: the 1 h card
     assert godark["live"]["n"] == 10 and godark["champion"]["run_id"] is None
     assert fishing["deployed"] is False and fishing["live"] is None
-    assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 17, "graded_last_hour": 0}
+    assert s["totals"] == {"runs": 2, "proposals": 0, "graded_outcomes": 17, "graded_outcomes_estimated": False,
+                           "graded_last_hour": 0}
+    assert d["counted_from"] == T - 4 * H - 30 * 24 * H and d["truncated"] is False and m["truncated"] is False
     assert s["cycle"] == {"state": "manual", "last": T - H / 2, "next": None}
 
     # lab-store's columns and tables (dvm/lab/schema.py) arrive: source, since and the cycle come from them.
@@ -216,11 +252,13 @@ async def _db_flow():
         await con.executemany("INSERT INTO ml_events VALUES ($1, $2, $3, $4, $5, $6, NULL, '{}', 0)", [
             ("e1", T - H + 5, "route", "promoted", "route-x", "route-x"),
             ("e2", T + 2 * H, "route", "recalibrated", "route-x", "route-x-cal1"),
+            ("e5", T + H, "route", "deployed", "route-x", "route-x"),
             ("e3", T + 3 * H, "route", "trained", "route-z", "route-z"),
             ("e4", T + 4 * H, "godark", "deployed", None, "godark-x")])
         await con.execute("INSERT INTO ml_proposals (id) VALUES ('p1'), ('p2')")
     finally:
         await con.close()
+    running["route_model"] = "route-x-cal1"     # cal1 installed, no grades of its own yet
     pool = await asyncpg.create_pool(URL, min_size=1, max_size=1)
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as http:
@@ -228,7 +266,10 @@ async def _db_flow():
     finally:
         await pool.close()
     route, godark, _ = s["models"]
-    assert route["champion"]["source"] == "desktop-hamish" and route["champion"]["since"] == T + 2 * H
+    # since: route-x's deploy, not the cal1 build (a recalibrated event) nor the promotion
+    assert route["champion"]["source"] == "desktop-hamish" and route["champion"]["since"] == T + H
+    assert route["champion"]["version"] == "route-x-cal1" and route["live"] is None
+    assert route["note"] == "no live grades for this version yet (the last 24 h graded route-x)"
     assert godark["champion"]["since"] == T + 4 * H
     assert s["cycle"]["last"] == T + 3 * H and s["totals"]["proposals"] == 2
 
@@ -243,3 +284,12 @@ CREATE TABLE IF NOT EXISTS ml_proposals (id text PRIMARY KEY);
 @needs_db
 def test_routes_on_local_db():
     asyncio.run(_db_flow())
+
+
+def test_truncation_keeps_the_newest_buckets():
+    for sql in (M.ROUTE, M.GODARK, M.OUTCOME_COUNT):
+        assert f"ORDER BY 1 DESC" in sql and f"LIMIT {M.MAX_ROWS}" in sql
+    rows = [{"t": 2, "model_version": "a", "horizon_s": 1, "mode": "live"},
+            {"t": 1, "model_version": "a", "horizon_s": 1, "mode": "live"}]
+    assert [x["t"] for x in M._oldest_first(rows, "horizon_s")] == [1, 2]
+    assert "o.made_at < $3" in M.OUTCOMES_BEFORE   # bounded on both sides

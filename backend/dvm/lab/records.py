@@ -138,6 +138,9 @@ def rule(rec: dict, confirm: Optional[dict]) -> list[dict]:
     if not d:
         return []
     out, vs = [], _against(d)
+    if d.get("by") == "human":
+        out.append({"check": f"no paired test was run ({_by_hand(d)})", "passed": None,
+                    "detail": "; ".join(d.get("reasons") or []) or None})
     for h, x in sorted((d.get("horizons") or {}).items(), key=lambda kv: int(kv[0]) if str(kv[0]).isdigit() else 0):
         detail = None
         if isinstance(x.get("diff"), (int, float)):
@@ -166,6 +169,28 @@ def rule(rec: dict, confirm: Optional[dict]) -> list[dict]:
     return out
 
 
+def _by_hand(d: dict) -> str:
+    a = (d.get("against") or "").strip()
+    if d.get("promote") is False:
+        return "decided by hand" + (f" against {a}" if a else "")
+    return "promoted by hand" + (f" over {a}" if a else "")
+
+
+def decision_summary(rec: dict) -> Optional[str]:
+    """One line for the run's decision: a hand promotion says so (no paired test), a rule decision names what it was
+    compared with. None for runs without a decision."""
+    d = (rec.get("metrics") or {}).get("decision") or {}
+    if not d:
+        return None
+    if d.get("by") == "human":
+        return f"{_by_hand(d)}; no paired test was run"
+    vs = _against(d)
+    if d.get("promote"):
+        return f"promoted by the rule: beat {vs}"
+    why = next((x for x in d.get("reasons") or [] if x), None)
+    return f"rejected: did not beat {vs}" + (f" ({why})" if why else "")
+
+
 def run_detail(rec: dict, runs: list[dict], proposals: list[dict]) -> dict:
     """GET /lab/runs/{id}: the full record plus its parent, config diff, rationale, rule checklist and confirm."""
     by = {r["run_id"]: r for r in runs}
@@ -177,7 +202,7 @@ def run_detail(rec: dict, runs: list[dict], proposals: list[dict]) -> dict:
     why = rationale_of.get(rec["run_id"])
     confirm = None if is_confirmation(rec, why) else find_confirm(rec, runs, rationale_of)
     return {**rec, "parent": parent, "config_diff": config_diff(rec.get("config"), (parent or {}).get("config")),
-            "rationale": why, "rule": rule(rec, confirm), "confirm": confirm}
+            "rationale": why, "rule": rule(rec, confirm), "confirm": confirm, "decision_summary": decision_summary(rec)}
 
 
 # ---------------------------------------------------------------- proposals
