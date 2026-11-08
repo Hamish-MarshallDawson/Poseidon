@@ -86,13 +86,12 @@ describe('3: go-dark never mixes log-loss and Brier skill, or horizons', () => {
   })
 
   it('route keeps its own skill, which live grading shares', () => {
-    expect(offlineSkill(model('route'), likes)).toMatchObject({ name: 'skill', h: H3, skill: expect.closeTo(0.6241, 4) })
+    expect(offlineSkill(model('route'), likes)).toMatchObject({ name: 'median-error skill', h: H3, skill: expect.closeTo(0.6241, 4) })
   })
 
-  it('the card names the statistic and puts 1 h live next to 1 h held-out only', () => {
+  it('the card labels the recorded held-out number with its statistic and puts 1 h live next to 1 h held-out only', () => {
     const html = renderToStaticMarkup(<ModelCard m={gd} runs={likes} />)
-    expect(html).toContain('+1.2%</b> Brier skill over the base rate at 6 h')
-    expect(html).not.toContain('+2.6%')
+    expect(html).toContain('+2.6%</b> log-loss skill over the base rate at 6 h')
     expect(html).toContain('held-out test, 1 h')
     expect(html).toContain('Brier skill over the base rate at 1 h; left of 0 is worse')
   })
