@@ -60,6 +60,17 @@ a fresh 3-day run), 1.8 GB output, 15 GB peak while converting; `ml.route.train`
 roughly linearly; for `--days 90` that extrapolates (not measured) to about 20 min and 60 GB RAM in the examples step (use `ROUTE_WORKERS=4` if short
 on memory).
 
+## Recalibrating the radii on our own feed
+
+The Danish-trained model keeps its point skill on our worldwide feed, but its radii are too narrow there (8 Nov
+backtest on our feed: the 80% circle held about 0.6). `python -m ml.route.recalibrate --artifact DIR --data
+TIGER_EXPORT --out NEW_DIR` keeps the LightGBM heads and refits the conformal radii on our feed: the older 60% of
+the export calibrates, the newer 40% checks. On 8 Nov (export 7 Nov 16:51 to 8 Nov 08:17, 110,481 cases, check
+window from 02:07) for `route-dma90-v2`: 80% coverage at 1 to 3 h went from 0.61 to 0.64 up to 0.84 to 0.85, 95%
+from 0.88 to 0.89 up to 0.96; on 972 real gaps from 0.60 / 0.88 to 0.85 / 0.95. Radii grow about 1.9x. The feed was
+too short to calibrate 12 and 24 h, so those take the 6 h inflation (1.62x), never shrunk; the 6 h check had only
+274 cases. The result is version `route-dma90-v2-cal202611080819`, a drop-in artifact for the backend.
+
 ## The artifact (what the backend runs)
 
 `ml.core.registry.save_artifact` writes `model.json` plus `h<h>_east.txt` / `h<h>_north.txt` LightGBM text dumps.

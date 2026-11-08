@@ -234,3 +234,21 @@ def test_schema_accepts_default_and_dry_runs():
     jsonschema.validate(SPEC.default_config, SPEC.config_schema)
     for p in SPEC.dry_run_proposals:
         jsonschema.validate(p["config"], SPEC.config_schema)
+
+
+def test_recalibrate_widens_radii_to_the_new_feed(trained):
+    """Radii refitted on a noisier feed: points unchanged, coverage back near nominal on a later check window."""
+    from ml.route.recalibrate import recalibrate
+    model, _, test, ex = trained
+    noisy = ex.copy()
+    rng = np.random.default_rng(1)
+    for h in HS:                                            # move the truth ~3x further than the model's errors
+        noisy[f"truth_lat_{h}"] = noisy[f"truth_lat_{h}"] + rng.normal(0, 0.01, len(noisy))
+    before = model.predict(test)[["pred_lat", "pred_lon"]].to_numpy()
+    old80 = {h: list(model.radius[h]["r80"]) for h in model.horizons}
+    info, check = recalibrate(model, noisy, 0.6)
+    np.testing.assert_allclose(model.predict(test)[["pred_lat", "pred_lon"]].to_numpy(), before)
+    for h in model.horizons:
+        assert min(model.radius[h]["r80"]) > max(old80[h]), (h, model.radius[h]["r80"], old80[h])
+        a = check["after"]["fixed"][str(h)]
+        assert 0.7 <= a["cover80"] <= 0.9 and a["cover95"] >= 0.88, (h, a)
