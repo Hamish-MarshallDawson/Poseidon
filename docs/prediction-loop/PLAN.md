@@ -106,3 +106,53 @@ Briefs are in `docs/handoffs/`. Research reports land in `docs/prediction-loop/r
 4. Whether to ingest the Danish AIS archive (size and access to be confirmed by research).
 5. Overlap with Jake's planned `score.py` (go-dark risk): coordinate on the board through Hamish.
 6. Frontend for predictions (path cones, graded predictions, leaderboard): Hamish's FrontEndLead owns `frontend/`.
+
+## Status and decisions, 8 Nov 06:30 UTC
+
+### Decided (Aiden)
+- Targets: **route** (#1) and **go-dark risk** (#2), with **zone incursion** (#3) as the stretch (04:55).
+- The training workflow itself is part of the presentation (04:55).
+- Go fully off mock data on the site (05:15). Frontend asks posted to Hamish's FrontEndLead.
+- Route training on Hamish's desktop (RTX 5080) by a Hamish-side agent from a posted command; go-dark on Aiden's
+  desktop (05:20). First Hamish job: route on 90 days of the Danish archive (option b), started 05:29.
+- GFW backfill: 7-day blocks and 2 workers (05:16), then **30-day blocks with 2 workers** after the server upgrade
+  (06:27). History depth and cap unchanged (2017, 60 GB).
+- Hold the training batch (#141) until Hamish's FrontEndLead finishes its UI pass (05:45).
+- Delegated Claude agents start in auto mode; integrator approves trust prompts itself (04:00).
+
+### Data (Tiger, read-only checks)
+- Main GFW backfill: about 20 days of history an hour before the speed-ups, about 45 with 7-day blocks on one worker,
+  about 80 with two workers; reached 3 May 2026 at 06:21. GFW gap events: 40,502 by 06:07, back to Aug 2024 at 06:21,
+  heading for 2017. Sentinel-1 footprints complete back to July 2017. Database 3.18 GB at 06:07.
+- Danish AIS archive: 14 days on Aiden's desktop (137 M clean positions, 8,458 ships, 1.48 GB tracks, 227 s); 90 days on
+  Hamish's desktop for the route run.
+- Server upgraded to 6 vCPU, 16 GB, 320 GB at 06:15 (snapshot kept); about 3 min of live-data gap 06:13 to 06:16.
+
+### First results
+- **Route `dma14-v1`** (train 23 Oct to 2 Nov, test 3 to 5 Nov, about 70k to 108k cases per horizon), skill over
+  dead reckoning: +0.17 at 30 min, +0.35 at 1 h, +0.52 at 2 h, +0.58 at 3 h, +0.68 at 6 h, +0.75 at 12 h, all with tight
+  95% intervals; 80% and 95% radii cover 79 to 80% and 94 to 95%. Synthetic Danish dead zones; real gaps are the next test.
+- **Go-dark on our detector's labels** (11 h): open-sea silence (`unknown`) predictable (Brier skill +0.13 at 1 h, +0.12
+  at 6 h); `deliberate_candidate` not yet beyond the base rate. Improves as labels accumulate.
+- **Go-dark from GFW history:** 1.05 M ship-days from 42k ships; only 47 gap events in 7 days and 139 in 30 days
+  (mostly Gulf of Oman, since GFW gaps start 50 nm or more offshore). Plan: 30-day label, ship-week rows, September as
+  the fixed test month, learning curve over 1, 2, 4 and all months; meaningful from a rerun at about 08:30.
+- **Training loop** (toy target): propose, train, evaluate, promote end to end; one real Gemini round promoted a
+  winner after a second-seed check. The shared Gemini key is capped by the free tier (20 a day on flash), so the
+  proposer uses flash-lite and at most 6 calls a day.
+
+### PRs
+| PR | What | State |
+|---|---|---|
+| 115, 122, 124 | GFW gap events; parallel workers; block fetch | merged and live |
+| 129, 132, 133, 134, 140 | archive data, loop, go-dark, live predictor, route | combined in draft **141** (integration branch, 228 backend and 61 ml tests passing together) |
+| 144 | replay with gaps, risk and predictions as of the scrub time | open, base the integration branch |
+| 146 | `GET /observations?mmsi=` and `GET /observations/heat` for FrontEndLead | reviewed, CI green, waiting for Aiden to merge |
+| backtest (pending) | prediction ledger for the past, `mode = backtest` | agent running |
+
+### Still to do before the freeze
+1. Merge 146; merge the 141 batch (with 144 and the backtest) after the UI pass; Hamish's combined release; model
+   files on the server; `PREDICT=1`; frontend wiring of scores, outcomes, timeline and pred fields.
+2. Hamish's 90-day route results: compare with `dma14-v1`; promote through the loop if better.
+3. GFW-history go-dark rerun at about 08:30 for the learning curve.
+4. Presentation: the training report, the learning curve, and live graded predictions.
