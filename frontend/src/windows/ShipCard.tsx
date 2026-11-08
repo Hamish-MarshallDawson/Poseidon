@@ -9,6 +9,7 @@ import type { VesselView } from '../types'
 import { runBriefing } from '../briefing/store'
 import { fmtEta, matchDestination, usePortInfo } from '../ports'
 import type { Departure, PortIndex } from '../ports'
+import { yachts } from '../yachts/store'
 import { YachtSection } from '../yachts/Yachts'
 import { toggleReview, useInReview } from '../review/store'
 import { ShipHistory } from './ShipHistory'
@@ -22,21 +23,6 @@ const WEEK = 7 * 24 * 3600 * 1000
 // shortcut: confidence is guessed from message age until the backend sends one; replace with the server's value.
 function confidence(ageMs: number): { label: 'High' | 'Medium' | 'Low'; pips: number } {
   return ageMs < 10 * 60e3 ? { label: 'High', pips: 3 } : ageMs < 60 * 60e3 ? { label: 'Medium', pips: 2 } : { label: 'Low', pips: 1 }
-}
-
-export function EvidenceStrip({ ts, now, src = 'AISSTREAM' }: { ts: number; now: number; src?: string }) {
-  const c = confidence(now - ts)
-  return (
-    <span className="ev">
-      <span className="ev-src">{src}</span>
-      <span className="ev-div" />
-      <span className="ev-pips" aria-hidden>
-        {[0, 1, 2].map((i) => <i key={i} className={i < c.pips ? 'on' : ''} />)}
-      </span>
-      <span className="ev-conf">{c.label}</span>
-      <span className="ev-ts">{utcTime(ts, false)}</span>
-    </span>
-  )
 }
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -55,25 +41,18 @@ function subline(v: VesselView, flag: string | null | undefined, length: number 
 
 const portName = (p: { name: string; cc: string }) => `${p.name}, ${p.cc}`
 
-// "From <port> → To <port>": the destination is what the ship reports; the departure is inferred from its 24 h track.
+// One line: "From <port> (left 14:00Z) → To <port> (reported) · ETA …". The departure is inferred from the 24 h track and
+// the destination is what the ship reports; a half that is unknown is left out, and so is the whole line when both are.
 export function Route({ v, destination, eta, ports, departure }: {
   v: VesselView; destination?: string; eta?: string; ports: PortIndex | null; departure: Departure
 }) {
   const raw = destination?.trim()
   const hit = raw && ports ? matchDestination(raw, ports, [v.lat, v.lon]) : null
   const etaText = eta ? fmtEta(eta) : null
-  const to = !raw ? <><b>To:</b> not reported</>
-    : <><b>To</b> {hit ? portName(hit.port) : `"${raw}"`} (reported){etaText && ` · ETA ${etaText}`}</>
-  const from = departure === 'loading' ? <><b>From:</b> checking track…</>
-    : departure === 'error' ? <><b>Departure:</b> track unavailable</>
-    : departure ? <><b>From</b> {portName(departure.port)} (left {utcTime(departure.leftTs, false)}) <small>inferred from track</small></>
-    : <><b>Departure</b> not seen in the last 24 h</>
-  return (
-    <p className="sc-route">
-      <span className="sc-leg">{from}</span>
-      <span className="sc-leg"><span className="sc-arrow" aria-hidden>→ </span>{to}</span>
-    </p>
-  )
+  const from = departure && departure !== 'loading' && departure !== 'error' ? <><b>From</b> {portName(departure.port)} (left {utcTime(departure.leftTs, false)})</> : null
+  const to = raw ? <><b>To</b> {hit ? portName(hit.port) : `"${raw}"`} (reported){etaText && ` · ETA ${etaText}`}</> : null
+  if (!from && !to) return null
+  return <p className="sc-route">{from}{from && to && <span aria-hidden> → </span>}{to}</p>
 }
 
 export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
@@ -84,6 +63,7 @@ export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
   const detail = details.use((s) => s.byMmsi[mmsi])
   const entry = useWatchlist()?.entries.find((e) => e.mmsi === mmsi)
   const inReview = useInReview(mmsi)
+  const yachtSanctioned = yachts.use((s) => !!s.byMmsi.get(mmsi)?.sanctioned)
   const { ports, departure } = usePortInfo(mmsi)
   if (!v) return <div className="sc"><p className="sc-sub">This ship is no longer in the feed.</p></div>
 
@@ -104,34 +84,24 @@ export const ShipCard = memo(function ShipCard({ mmsi }: { mmsi: number }) {
       <ShipHistory mmsi={mmsi} now={now} />
       <div className="sc-timer">
         <span className="sc-clock">{hms(now - v.last_ts)}</span>
-        <span className="sc-caption">since last AIS ({utcTime(v.last_ts)}){replay && ` · shown time ${utcTime(now)}`}</span>
+        <span className="sc-caption">since last AIS {utcTime(v.last_ts, false)} · AISStream, {confidence(now - v.last_ts).label.toLowerCase()}{replay && ` · shown time ${utcTime(now, false)}`}</span>
       </div>
       <div className="sc-grid">
         <Field label="Last speed" value={v.sog_kn !== null ? `${v.sog_kn.toFixed(1)} kn` : '—'} />
         <Field label={noAis ? 'Last heading' : 'Heading'} value={(v.heading_deg ?? v.cog_deg) !== null ? `${String(Math.round((v.heading_deg ?? v.cog_deg)!)).padStart(3, '0')}°` : 'Not known'} />
-        <Field label="Ships heard nearby" value={gap ? `${gap.neighbours_heard} within 20 km` : '—'} />
-        <Field label="Could be within" value={gap?.radius_m ? `${(gap.radius_m / 1000).toFixed(1)} km` : noAis ? '—' : 'Position current'} />
-        <Field label="Sanctions" value={v.sanctioned ? 'List match' : 'No match'} />
-        <Field label="Past silent gaps" value={pastGaps === null ? '—' : `${pastGaps} in 7 days`} />
+        {gap && <Field label="Ships heard nearby" value={`${gap.neighbours_heard} within 20 km`} />}
+        {gap?.radius_m ? <Field label="Could be within" value={`${(gap.radius_m / 1000).toFixed(1)} km`} /> : null}
+        {v.sanctioned && !yachtSanctioned && <Field label="Sanctions" value="List match" />}
+        {pastGaps ? <Field label="Past silent gaps" value={`${pastGaps} in 7 days`} /> : null}
       </div>
       <YachtSection mmsi={mmsi} />
-      <div className="sc-forecast">
-        {noAis ? (
-          <>
-            <b>Forecast before the silence</b>
-            <span>
-              {p ? `${p}${rank ? ` · rank ${rank}` : ''}${score ? ` · made ${utcTime(score.made_at, false)}` : ''}. ` : 'No forecast was made before this silence. '}
-             
-            </span>
-          </>
-        ) : (
-          <>
-            <b>Forecast · next 6 h</b>
-            <span>{p ? `${p} chance of a silence with reception normal nearby${rank ? ` · rank ${rank}` : ''}${decision ? ` · ${decision}` : ''}` : 'Not ranked: no forecast for this ship yet.'}</span>
-          </>
-        )}
-      </div>
-      <EvidenceStrip ts={v.last_ts} now={now} />
+      {p && (
+        <p className="sc-note">
+          <b>{noAis ? 'Forecast before the silence' : 'Forecast · next 6 h'}</b>{' '}
+          {p}{noAis ? '' : ' chance of a silence with reception normal nearby'}{rank ? ` · rank ${rank}` : ''}
+          {noAis ? (score ? ` · made ${utcTime(score.made_at, false)}` : '') : decision ? ` · ${decision}` : ''}
+        </p>
+      )}
       <div className="sc-actions">
         <Button onClick={() => runBriefing([mmsi])}>Brief me</Button>
         <Button variant={inReview ? 'outline' : 'filled'} aria-pressed={inReview} onClick={() => toggleReview(mmsi)}>

@@ -112,7 +112,7 @@ function ReviewPanel({ onCompare }: { onCompare: () => void }) {
       {inSession && <SessionActivity />}
       {items.length > 0 && (
         <div className="wl-brief">
-          <span>{picked.length > 0 ? `${picked.length} selected${picked.length >= MAX_SHIPS ? ' (most)' : ''}` : 'Tick ships to compare or brief'}</span>
+          <span>{picked.length > 0 ? `${picked.length} selected${picked.length >= MAX_SHIPS ? ' (most)' : ''}` : 'Tick ships to compare or brief · System % is the chance of a silence in 6 h'}</span>
           <span className="wl-brief-actions">
             {picked.length > 0 && <Button className="btn-small" onClick={clearSelected}>Clear</Button>}
             <Button className="btn-small" disabled={picked.length < 2} onClick={onCompare}>Compare</Button>

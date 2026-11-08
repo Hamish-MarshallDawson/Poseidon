@@ -6,7 +6,7 @@ import './theme.css'
 
 // Display menu, top-right: theme, signal colours, text size and motion, as lamp rows like the layers panel.
 const groups = [
-  { key: 'theme', label: 'Theme', options: [['light', 'Light (chart)'], ['dark', 'Dark (dusk)'], ['light-hc', 'Light · high contrast'], ['dark-hc', 'Dark · high contrast']] },
+  { key: 'theme', label: '', options: [['light', 'Light (chart)'], ['dark', 'Dark (dusk)'], ['light-hc', 'Light · high contrast'], ['dark-hc', 'Dark · high contrast']] },
   { key: 'signals', label: 'Signal colours', options: [['standard', 'Standard'], ['cvd', 'Colour-blind safe']] },
   { key: 'text', label: 'Text size', options: [['default', 'Default'], ['large', 'Large'], ['largest', 'Largest']] },
 ] as const
@@ -19,7 +19,7 @@ export function ThemeSettings() {
     <>
       {groups.map((g) => (
         <fieldset key={g.key} className="dvm-theme-menu__group">
-          <legend className="dvm-section-label">{g.label}</legend>
+          {g.label && <legend className="dvm-section-label">{g.label}</legend>}
           {g.options.map(([value, text]) => {
             const on = state[g.key] === value
             return (
@@ -28,7 +28,6 @@ export function ThemeSettings() {
                   onChange={() => setTheme({ [g.key]: value } as Partial<ThemeState>)} />
                 <Lamp state={on ? 'on' : 'off'} text={false} />
                 <span className="dvm-row__text"><span className="dvm-row__label">{text}</span></span>
-                <span className="dvm-row__state" aria-hidden="true">{on ? 'on' : ''}</span>
               </label>
             )
           })}

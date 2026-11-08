@@ -60,7 +60,7 @@ type SwitchProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> & {
   unavailable?: boolean
 }
 
-/** A layers-panel row: lamp, label with an optional mono hint, and the state written at the right. */
+/** A layers-panel row: lamp (filled = on), label with an optional mono hint; n/a is written out. */
 export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(function Switch({ checked, onChange, label, hint, unavailable, className, ...rest }, ref) {
   const state: LampState = unavailable ? 'na' : checked ? 'on' : 'off'
   return (
@@ -80,7 +80,7 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(function Switch
         <span className="dvm-row__label">{label}</span>
         {hint && <span className="dvm-row__hint">{hint}</span>}
       </span>
-      <span className="dvm-row__state" aria-hidden="true">{lampText[state]}</span>
+      {state === 'na' && <span className="dvm-row__state" aria-hidden="true">{lampText[state]}</span>}   {/* the lamp already shows on and off */}
     </button>
   )
 })
