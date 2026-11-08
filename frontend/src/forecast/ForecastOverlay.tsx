@@ -150,6 +150,7 @@ function setup(map: MapLibreMap): () => void {
     const related = new Set(s.focusRelated.map((r) => r.mmsi))
     const picked = new Set(s.windows.map((w) => w.mmsi))
     const shown = (g: GapEvent) => {
+      if (s.follow && !picked.has(g.mmsi)) return false
       const dark = g.coverage_flag === 'deliberate_candidate'
       return s.focusMmsi != null ? g.mmsi === s.focusMmsi || (dark && related.has(g.mmsi)) : dark || picked.has(g.mmsi)
     }

@@ -39,6 +39,8 @@ export interface UIState {
     replay: { from_ts: number; to_ts: number } | null
     sources: SourceStatus[]; stats: Stats; isMock: boolean
   }
+  // follow selected (map/follow.ts writes; replay only): only the open windows' ships and their tracks are shown
+  follow: boolean
   // scrub bar (timeline/ writes)
   time: { range: TimeRange; dragging: boolean; dragT: number | null }
 }
@@ -59,6 +61,7 @@ export const ui = createStore<UIState>({
     connected: false, mode: 'live', speed: 1, paused: false, now_ts: Date.now(), replay: null,
     sources: [], stats: { tracked: 0, msgs_per_s: 0, queue_depth: 0 }, isMock: false,
   },
+  follow: false,
   time: { range: '6h', dragging: false, dragT: null },
 })
 

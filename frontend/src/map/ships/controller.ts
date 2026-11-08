@@ -239,6 +239,7 @@ export class ShipController {
       if (s.focusMmsi == null) this.clearFocusGeometry()
       this.focusPass(true)
     }
+    if (s.follow !== p.follow) { this.applyLayerVisibility(s.layers); this.selectionChanged = true; this.gpu.invalidate() }
     if (s.windows !== p.windows || s.focusRelated !== p.focusRelated || s.focusMmsi !== p.focusMmsi) { this.selectionChanged = true; this.slotPass() }
     else if (s.hoverMmsi !== p.hoverMmsi) this.gpu.invalidate()
     if (s.layers !== p.layers) this.applyLayerVisibility(s.layers)
@@ -248,7 +249,9 @@ export class ShipController {
     const map = this.map
     if (!map) return
     const vis = (ids: string[], on: boolean) => { for (const id of ids) if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none') }
-    vis([L.cells, L.cellLabels], layers.density)
+    const following = ui.get().follow
+    vis([L.cells, L.cellLabels], layers.density && !following)
+    vis([L.chips], !following)
     vis([L.dead, L.deadEdge], layers.coverage)
   }
 
@@ -338,6 +341,7 @@ export class ShipController {
     const reduce = st.reducedMotion
     const windows = new Map(s.windows.map((w) => [w.mmsi, w]))
     const focusing = s.focusMmsi != null
+    const following = s.follow
     const related = new Set(s.focusRelated.map((r) => r.mmsi))
     const nowMs = vessels.now_ts || Date.now()
     const fanned = this.fan ? new Set(this.fan.mmsis) : null
@@ -360,7 +364,7 @@ export class ShipController {
       const rank = this.ranks.get(mmsi)
       const zt = zTier(v, related.has(mmsi), rank)
       let target: number
-      if (!holds) target = 0
+      if (!holds || (following && !windows.has(mmsi))) target = 0
       else if (top) target = mmsi === s.focusMmsi && v.status === 'gap_open' ? 0.35 : 1
       else if (focusing) target = related.has(mmsi) ? OPACITY.full : this.colourCache.dim
       else target = isFull(zt) ? OPACITY.full : OPACITY.routine

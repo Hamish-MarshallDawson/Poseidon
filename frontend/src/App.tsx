@@ -7,6 +7,7 @@ import { adapter, onDetail, useFeed } from './data/index'
 import { ScrubBar } from './timeline/ScrubBar'
 import { ReplayChrome } from './timeline/ReplayChrome'
 import { ForecastOverlay } from './forecast/ForecastOverlay'
+import { FollowTracks } from './map/follow'
 import { WindowsRoot } from './windows/WindowsRoot'
 import { bindDetailSender, receiveDetail } from './windows/detail'
 import { BriefingPanel } from './briefing/BriefingPanel'
@@ -59,6 +60,7 @@ function Monitor({ getToken, onLogout }: { getToken: () => Promise<string | unde
     <>
       <MapView />
       <ForecastOverlay />
+      <FollowTracks />
       <WindowsRoot onLogout={onLogout} />
       <BriefingPanel />
       <ReplayChrome />

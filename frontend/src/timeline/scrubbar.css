@@ -123,3 +123,6 @@
   .tl-bar, .tl-edge, .tl-tab, .tl-head, .tl-tip { transition: none; }
   .tl-pop { animation: none; }
 }
+
+.tl-follow { white-space: nowrap; font-family: inherit; font-weight: 600; min-width: 0; }
+.tl-follow[aria-pressed='true'] { border-color: var(--dvm-accent-default); background: var(--dvm-accent-subtle); }
